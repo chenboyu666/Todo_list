@@ -44,6 +44,9 @@ def main() -> int:
 
     window = MainWindow(store, settings, settings_path)
     icon = QIcon(str(app_icon_path()))
-    window.tray_controller = TrayController(window, icon)
+    try:
+        window.tray_controller = TrayController(window, icon)
+    except Exception:
+        window.tray_controller = None
     window.show()
     return app.exec()

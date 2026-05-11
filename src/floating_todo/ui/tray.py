@@ -46,6 +46,9 @@ class TrayController:
         self.window.raise_()
         self.window.activateWindow()
 
+    def is_available(self) -> bool:
+        return bool(self.tray.isSystemTrayAvailable())
+
     def _quit_application(self) -> None:
         app = self._app_provider()
         if app is not None:

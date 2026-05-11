@@ -47,6 +47,7 @@ class MainWindow(QMainWindow):
         self.store = store
         self.settings = settings or AppSettings()
         self.settings_path = Path(settings_path) if settings_path is not None else Path("settings.json")
+        self.tray_controller = None
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle("FloatingTodo")
@@ -197,8 +198,16 @@ class MainWindow(QMainWindow):
         self.apply_window_behavior_settings()
         self.show()
 
+    def can_close_to_tray(self) -> bool:
+        tray_controller = self.tray_controller
+        return bool(
+            self.settings.close_to_tray
+            and tray_controller is not None
+            and tray_controller.is_available()
+        )
+
     def closeEvent(self, event) -> None:
-        if self.settings.close_to_tray:
+        if self.can_close_to_tray():
             event.ignore()
             self.hide()
             return

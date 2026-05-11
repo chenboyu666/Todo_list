@@ -131,3 +131,52 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
     assert isinstance(captured["tray_before_show"], FakeTrayController)
     assert captured["tray_before_show"] is captured["window"].tray_controller
     assert captured["icon"].path == str(app_module.app_icon_path())
+
+
+def test_main_continues_without_tray_controller_when_tray_creation_fails(monkeypatch, tmp_path):
+    import floating_todo.app as app_module
+    import floating_todo.ui.main_window as main_window_module
+
+    captured = {}
+
+    class FakeApplication:
+        def __init__(self, argv):
+            pass
+
+        def setApplicationName(self, name):
+            pass
+
+        def setStyleSheet(self, qss):
+            pass
+
+        def exec(self):
+            return 0
+
+    class FakeMainWindow:
+        def __init__(self, store, settings, path):
+            self.tray_controller = "unset"
+
+        def show(self):
+            captured["tray_before_show"] = self.tray_controller
+            captured["shown"] = True
+
+    def failing_tray_controller(window, icon):
+        raise RuntimeError("system tray unavailable")
+
+    monkeypatch.setattr(app_module, "QApplication", FakeApplication)
+    monkeypatch.setattr(app_module, "QIcon", lambda path: path)
+    monkeypatch.setattr(app_module, "TrayController", failing_tray_controller)
+    monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
+    monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
+
+    assert app_module.main() == 0
+
+    assert captured["shown"] is True
+    assert captured["tray_before_show"] is None
+
+
+def test_package_data_includes_app_icon_svg():
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+
+    assert "[tool.setuptools.package-data]" in pyproject
+    assert 'floating_todo = ["assets/app_icon.svg"]' in pyproject
