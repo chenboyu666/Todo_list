@@ -95,6 +95,17 @@ def test_load_json_object_non_object_or_corrupt_json_returns_default_copy(tmp_pa
     assert corrupt is not default
 
 
+def test_load_json_object_invalid_utf8_returns_shallow_default_copy(tmp_path):
+    default = {"opacity": 0.96}
+    path = tmp_path / "settings.json"
+    path.write_bytes(b'{"opacity": "\xff"}')
+
+    loaded = load_json_object(path, default)
+
+    assert loaded == default
+    assert loaded is not default
+
+
 def test_save_json_object_writes_json_object(tmp_path):
     path = tmp_path / "settings.json"
 

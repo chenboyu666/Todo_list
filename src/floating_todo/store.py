@@ -55,7 +55,7 @@ def load_json_object(path: Path, default: dict[str, object]) -> dict[str, object
         return dict(default)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return dict(default)
     if not isinstance(raw, dict):
         return dict(default)
