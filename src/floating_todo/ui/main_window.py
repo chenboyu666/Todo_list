@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from floating_todo.domain import Task, select_focus_task
-from floating_todo.platform_windows import current_executable_path, set_launch_on_startup
+from floating_todo.platform_windows import current_startup_command, set_launch_on_startup
 from floating_todo.reminders import mark_event_sent, reminder_events
 from floating_todo.settings import AppSettings, settings_to_dict
 from floating_todo.store import save_json_object
@@ -110,16 +110,18 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.settings_button)
         root_layout.addLayout(header_layout)
 
-        summary_layout = QHBoxLayout()
+        self.summary_widget = QWidget()
+        summary_layout = QHBoxLayout(self.summary_widget)
+        summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(8)
         summary_layout.addWidget(self._summary_card("今日完成", self.today_completion_label))
         summary_layout.addWidget(self._summary_card("进行中", self.active_count_label))
-        root_layout.addLayout(summary_layout)
+        root_layout.addWidget(self.summary_widget)
 
-        focus_card = QFrame()
-        focus_card.setObjectName("focusCard")
-        focus_card.setStyleSheet(_card_style())
-        focus_layout = QVBoxLayout(focus_card)
+        self.focus_card = QFrame()
+        self.focus_card.setObjectName("focusCard")
+        self.focus_card.setStyleSheet(_card_style())
+        focus_layout = QVBoxLayout(self.focus_card)
         focus_layout.setContentsMargins(12, 10, 12, 12)
         focus_layout.setSpacing(8)
 
@@ -137,16 +139,18 @@ class MainWindow(QMainWindow):
         focus_layout.addWidget(self.focus_meta_label)
         self.focus_progress.setRange(0, 100)
         focus_layout.addWidget(self.focus_progress)
-        root_layout.addWidget(focus_card)
+        root_layout.addWidget(self.focus_card)
 
-        actions_layout = QHBoxLayout()
+        self.task_section_widget = QWidget()
+        actions_layout = QHBoxLayout(self.task_section_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
         section_label = QLabel("任务")
         section_label.setStyleSheet("font-weight: 700;")
         actions_layout.addWidget(section_label)
         actions_layout.addStretch(1)
         self.add_button.setToolTip("新增任务")
         actions_layout.addWidget(self.add_button)
-        root_layout.addLayout(actions_layout)
+        root_layout.addWidget(self.task_section_widget)
 
         empty_box = QWidget()
         empty_layout = QVBoxLayout(empty_box)
@@ -162,13 +166,13 @@ class MainWindow(QMainWindow):
 
         self.task_list_layout.setContentsMargins(0, 0, 0, 0)
         self.task_list_layout.setSpacing(8)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setWidget(self.task_rows_container)
-        scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        root_layout.addWidget(scroll_area, 1)
+        self.task_scroll_area = QScrollArea()
+        self.task_scroll_area.setWidgetResizable(True)
+        self.task_scroll_area.setFrameShape(QFrame.NoFrame)
+        self.task_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.task_scroll_area.setWidget(self.task_rows_container)
+        self.task_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root_layout.addWidget(self.task_scroll_area, 1)
 
     def _summary_card(self, caption: str, value_label: QLabel) -> QFrame:
         card = QFrame()
@@ -281,7 +285,7 @@ class MainWindow(QMainWindow):
             try:
                 set_launch_on_startup(
                     "FloatingTodo",
-                    current_executable_path(),
+                    current_startup_command(),
                     updated_settings.launch_on_startup,
                 )
             except OSError as exc:
@@ -293,6 +297,7 @@ class MainWindow(QMainWindow):
         self._restoring_geometry = True
         try:
             self.apply_window_behavior_settings()
+            self.apply_low_distraction_settings()
             if self.settings.lock_position:
                 self.apply_saved_geometry()
             self.show()
@@ -402,6 +407,21 @@ class MainWindow(QMainWindow):
             self.empty_state_widget.hide()
 
         self._render_task_rows(task_rows(self.tasks, now))
+        self.apply_low_distraction_settings()
+
+    def apply_low_distraction_settings(self) -> None:
+        low_distraction = self.settings.low_distraction_mode
+        self.summary_widget.setHidden(low_distraction)
+        self.task_section_widget.setHidden(low_distraction)
+        self.task_scroll_area.setHidden(low_distraction)
+        if low_distraction:
+            self.empty_state_widget.hide()
+            return
+
+        if select_focus_task(self.tasks) is None:
+            self.empty_state_widget.show()
+        else:
+            self.empty_state_widget.hide()
 
     def _render_task_rows(self, rows: list[dict[str, object]]) -> None:
         while self.task_list_layout.count():

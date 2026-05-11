@@ -1,5 +1,9 @@
+import sys
+from pathlib import Path
+
 import pytest
 
+from floating_todo import platform_windows
 from floating_todo.platform_windows import set_launch_on_startup
 from floating_todo.settings import AppSettings, settings_from_dict, settings_to_dict
 
@@ -96,6 +100,37 @@ def test_launch_on_startup_writes_registry_value():
     set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", True, winreg_module=fake)
 
     assert fake.values["FloatingTodo"] == r'"C:\Apps\FloatingTodo.exe"'
+
+
+def test_launch_on_startup_preserves_quoted_command_with_args():
+    fake = FakeWinreg()
+
+    set_launch_on_startup(
+        "FloatingTodo",
+        r'"C:\Python312\python.exe" -m floating_todo',
+        True,
+        winreg_module=fake,
+    )
+
+    assert fake.values["FloatingTodo"] == r'"C:\Python312\python.exe" -m floating_todo'
+
+
+def test_current_startup_command_uses_packaged_executable_when_frozen(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", r"C:\Apps\FloatingTodo.exe")
+
+    command = platform_windows.current_startup_command()
+
+    assert command == f'"{Path(sys.executable).resolve()}"'
+
+
+def test_current_startup_command_uses_python_module_when_unfrozen(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "executable", r"C:\Python312\python.exe")
+
+    command = platform_windows.current_startup_command()
+
+    assert command == f'"{Path(sys.executable).resolve()}" -m floating_todo'
 
 
 def test_launch_on_startup_deletes_registry_value():
