@@ -59,18 +59,23 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
             return 0
 
     class FakeMainWindow:
-        def __init__(self, store, settings, path):
+        def __init__(self, store, settings, path, notification_sender):
             captured["store_path"] = store.path
             captured["settings"] = settings
             captured["settings_path"] = path
+            captured["notification_sender"] = notification_sender
             self.shown = False
 
         def show(self):
             captured["shown"] = True
 
+    class FakeNotificationSender:
+        pass
+
     monkeypatch.setattr(app_module, "QApplication", FakeApplication)
     monkeypatch.setattr(app_module, "QIcon", lambda path: path)
     monkeypatch.setattr(app_module, "TrayController", lambda window, icon: object())
+    monkeypatch.setattr(app_module, "NotificationSender", FakeNotificationSender)
     monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
     monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
 
@@ -80,6 +85,7 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
     assert captured["settings_path"] == settings_path
     assert settings_to_dict(captured["settings"])["always_on_top"] is False
     assert settings_to_dict(captured["settings"])["opacity"] == 0.7
+    assert isinstance(captured["notification_sender"], FakeNotificationSender)
     assert captured["shown"] is True
 
 
@@ -103,7 +109,7 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
             return 0
 
     class FakeMainWindow:
-        def __init__(self, store, settings, path):
+        def __init__(self, store, settings, path, notification_sender):
             self.tray_controller = None
 
         def show(self):
@@ -122,6 +128,7 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
     monkeypatch.setattr(app_module, "QApplication", FakeApplication)
     monkeypatch.setattr(app_module, "QIcon", FakeIcon)
     monkeypatch.setattr(app_module, "TrayController", FakeTrayController)
+    monkeypatch.setattr(app_module, "NotificationSender", lambda: object())
     monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
     monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
 
@@ -153,7 +160,7 @@ def test_main_continues_without_tray_controller_when_tray_creation_fails(monkeyp
             return 0
 
     class FakeMainWindow:
-        def __init__(self, store, settings, path):
+        def __init__(self, store, settings, path, notification_sender):
             self.tray_controller = "unset"
 
         def show(self):
@@ -166,6 +173,7 @@ def test_main_continues_without_tray_controller_when_tray_creation_fails(monkeyp
     monkeypatch.setattr(app_module, "QApplication", FakeApplication)
     monkeypatch.setattr(app_module, "QIcon", lambda path: path)
     monkeypatch.setattr(app_module, "TrayController", failing_tray_controller)
+    monkeypatch.setattr(app_module, "NotificationSender", lambda: object())
     monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
     monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
 
