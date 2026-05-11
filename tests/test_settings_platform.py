@@ -1,3 +1,5 @@
+import pytest
+
 from floating_todo.platform_windows import set_launch_on_startup
 from floating_todo.settings import AppSettings, settings_from_dict, settings_to_dict
 
@@ -10,17 +12,25 @@ class FakeWinreg:
     def __init__(self):
         self.values = {}
         self.deleted = []
+        self.closed = []
+        self.raise_on_set = False
+        self.missing_on_delete = False
 
     def OpenKey(self, root, path, reserved, access):
         return (root, path, access)
 
     def SetValueEx(self, key, name, reserved, value_type, value):
+        if self.raise_on_set:
+            raise RuntimeError("registry write failed")
         self.values[name] = value
 
     def DeleteValue(self, key, name):
         self.deleted.append(name)
+        if self.missing_on_delete:
+            raise FileNotFoundError(name)
 
     def CloseKey(self, key):
+        self.closed.append(key)
         return None
 
 
@@ -38,6 +48,48 @@ def test_opacity_is_clamped():
     assert settings_from_dict({"opacity": 0.1}).opacity == 0.3
 
 
+def test_window_geometry_cannot_be_mutated_directly():
+    settings = settings_from_dict({"window_geometry": {"x": 10}})
+
+    with pytest.raises(TypeError):
+        settings.window_geometry["x"] = 99
+
+    assert settings.window_geometry["x"] == 10
+
+
+def test_malformed_settings_fall_back_without_raising():
+    settings = settings_from_dict(
+        {
+            "opacity": "bad",
+            "notification_lead_minutes": {},
+            "window_geometry": {"x": "bad", "y": "30", "width": None, "height": []},
+        }
+    )
+
+    assert settings.opacity == 0.96
+    assert settings.notification_lead_minutes == 15
+    assert dict(settings.window_geometry) == {"x": 1200, "y": 30, "width": 410, "height": 620}
+    assert settings_from_dict({"opacity": None}).opacity == 0.96
+
+
+def test_boolean_strings_parse_predictably():
+    settings = settings_from_dict(
+        {
+            "always_on_top": "false",
+            "lock_position": "0",
+            "close_to_tray": "true",
+            "launch_on_startup": "1",
+            "low_distraction_mode": "false",
+        }
+    )
+
+    assert settings.always_on_top is False
+    assert settings.lock_position is False
+    assert settings.close_to_tray is True
+    assert settings.launch_on_startup is True
+    assert settings.low_distraction_mode is False
+
+
 def test_launch_on_startup_writes_registry_value():
     fake = FakeWinreg()
 
@@ -52,3 +104,23 @@ def test_launch_on_startup_deletes_registry_value():
     set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", False, winreg_module=fake)
 
     assert fake.deleted == ["FloatingTodo"]
+
+
+def test_launch_on_startup_closes_registry_key_when_write_fails():
+    fake = FakeWinreg()
+    fake.raise_on_set = True
+
+    with pytest.raises(RuntimeError):
+        set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", True, winreg_module=fake)
+
+    assert len(fake.closed) == 1
+
+
+def test_launch_on_startup_ignores_missing_value_and_closes_key():
+    fake = FakeWinreg()
+    fake.missing_on_delete = True
+
+    set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", False, winreg_module=fake)
+
+    assert fake.deleted == ["FloatingTodo"]
+    assert len(fake.closed) == 1
