@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol
 
 from PySide6.QtCore import QTimer, Qt
@@ -19,7 +20,10 @@ from PySide6.QtWidgets import (
 )
 
 from floating_todo.domain import Task, select_focus_task
+from floating_todo.settings import AppSettings, settings_to_dict
+from floating_todo.store import save_json_object
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
 from floating_todo.view_models import countdown_label, task_rows, today_completion_percent
 
@@ -33,13 +37,20 @@ class TaskStore(Protocol):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, store: TaskStore) -> None:
+    def __init__(
+        self,
+        store: TaskStore,
+        settings: AppSettings | None = None,
+        settings_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self.store = store
+        self.settings = settings or AppSettings()
+        self.settings_path = Path(settings_path) if settings_path is not None else Path("settings.json")
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle("FloatingTodo")
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.apply_window_behavior_settings()
         self.setMinimumWidth(410)
 
         self.clock_label = QLabel()
@@ -58,6 +69,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self.add_button.clicked.connect(self.add_task)
+        self.settings_button.clicked.connect(self.open_settings)
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self.refresh)
         self._clock_timer.start(1000)
@@ -170,6 +182,20 @@ class MainWindow(QMainWindow):
         self.tasks = [*self.tasks, task]
         self.store.save_tasks(self.tasks)
         self.refresh()
+
+    def apply_window_behavior_settings(self) -> None:
+        self.setWindowOpacity(self.settings.opacity)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.settings.always_on_top)
+
+    def open_settings(self) -> None:
+        dialog = SettingsWindow(self.settings, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.settings = dialog.build_settings()
+        save_json_object(self.settings_path, settings_to_dict(self.settings))
+        self.apply_window_behavior_settings()
+        self.show()
 
     def refresh(self) -> None:
         self.update_clock()
