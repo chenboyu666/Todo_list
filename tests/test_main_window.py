@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
 from floating_todo.domain import Task
 
@@ -16,10 +16,15 @@ class MemoryStore:
     def __init__(self, tasks: list[Task]) -> None:
         self._tasks = tasks
         self.load_count = 0
+        self.saved_tasks: list[Task] | None = None
 
     def load_tasks(self) -> list[Task]:
         self.load_count += 1
         return list(self._tasks)
+
+    def save_tasks(self, tasks: list[Task]) -> None:
+        self.saved_tasks = list(tasks)
+        self._tasks = list(tasks)
 
 
 @pytest.fixture(scope="module")
@@ -113,5 +118,64 @@ def test_timer_timeout_refreshes_window_from_store(qapp: QApplication) -> None:
     assert store.load_count == initial_loads + 1
     assert window.active_count_label.text() == "1"
     assert window.focus_title_label.text() == "定时刷新任务"
+
+    window.close()
+
+
+def test_add_button_opens_dialog_and_persists_non_empty_task(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    task = make_task("新增任务", task_id="new-task")
+
+    class AcceptedDialog:
+        def __init__(self, parent: object) -> None:
+            self.parent = parent
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_task(self) -> Task:
+            return task
+
+    store = MemoryStore([])
+    window = main_window.MainWindow(store)
+    monkeypatch.setattr(main_window, "TaskDialog", AcceptedDialog)
+
+    window.add_button.click()
+
+    assert store.saved_tasks == [task]
+    assert window.tasks == [task]
+    assert window.focus_title_label.text() == "新增任务"
+    assert window.task_list_layout.count() == 1
+
+    window.close()
+
+
+def test_add_task_ignores_blank_title(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    task = make_task("   ", task_id="blank-task")
+
+    class AcceptedDialog:
+        def __init__(self, parent: object) -> None:
+            self.parent = parent
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_task(self) -> Task:
+            return task
+
+    store = MemoryStore([])
+    window = main_window.MainWindow(store)
+    monkeypatch.setattr(main_window, "TaskDialog", AcceptedDialog)
+
+    window.add_task()
+
+    assert store.saved_tasks is None
+    assert window.tasks == []
+    assert window.task_list_layout.count() == 0
 
     window.close()

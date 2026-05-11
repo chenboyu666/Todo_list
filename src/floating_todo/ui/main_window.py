@@ -5,6 +5,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
+    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -19,12 +20,16 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import Task, select_focus_task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.task_dialog import TaskDialog
 from floating_todo.view_models import countdown_label, task_rows, today_completion_percent
 
 
 class TaskStore(Protocol):
     def load_tasks(self) -> list[Task]:
         """Return persisted tasks."""
+
+    def save_tasks(self, tasks: list[Task]) -> None:
+        """Persist tasks."""
 
 
 class MainWindow(QMainWindow):
@@ -52,6 +57,7 @@ class MainWindow(QMainWindow):
         self.settings_button = QPushButton("设置")
 
         self._build_ui()
+        self.add_button.clicked.connect(self.add_task)
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self.refresh)
         self._clock_timer.start(1000)
@@ -151,6 +157,19 @@ class MainWindow(QMainWindow):
 
     def update_clock(self) -> None:
         self.clock_label.setText(datetime.now().strftime("%H:%M:%S"))
+
+    def add_task(self) -> None:
+        dialog = TaskDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        task = dialog.build_task()
+        if not task.title.strip():
+            return
+
+        self.tasks = [*self.tasks, task]
+        self.store.save_tasks(self.tasks)
+        self.refresh()
 
     def refresh(self) -> None:
         self.update_clock()
