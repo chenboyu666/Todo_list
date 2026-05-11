@@ -1,0 +1,51 @@
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BUILD_SCRIPT = PROJECT_ROOT / "scripts" / "build.ps1"
+README = PROJECT_ROOT / "README.md"
+
+
+def test_build_script_uses_repeatable_pyinstaller_onedir_contract():
+    script = BUILD_SCRIPT.read_text(encoding="utf-8")
+
+    assert '$ErrorActionPreference = "Stop"' in script
+    assert 'python -m venv ".venv"' in script
+    assert '.venv\\Scripts\\python.exe" -m pip install --upgrade pip' in script
+    assert '.venv\\Scripts\\python.exe" -m pip install -r "requirements.txt"' in script
+    assert '"--noconfirm"' in script
+    assert '"--onedir"' in script
+    assert '"--windowed"' in script
+    assert '"--name"' in script
+    assert '"FloatingTodo"' in script
+    assert '"--add-data"' in script
+    assert '"src/floating_todo/assets;floating_todo/assets"' in script
+    assert '"--collect-all"' in script
+    assert '"PySide6"' in script
+    assert '"src/floating_todo/__main__.py"' in script
+    assert "dist/FloatingTodo/data" in script
+    assert "Build complete: dist/FloatingTodo/FloatingTodo.exe" in script
+
+
+def test_build_script_safely_cleans_only_project_directories():
+    script = BUILD_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function Remove-ProjectDirectory" in script
+    assert "Resolve-Path -LiteralPath $ProjectRoot" in script
+    assert "StartsWith($rootPath" in script
+    assert "Remove-Item -LiteralPath $resolvedTarget" in script
+    assert "-Recurse" in script
+    assert "-Force" in script
+    assert "Remove-ProjectDirectory -RelativePath \"build\"" in script
+    assert "Remove-ProjectDirectory -RelativePath \"dist\"" in script
+
+
+def test_readme_documents_current_build_flow():
+    readme = README.read_text(encoding="utf-8")
+
+    assert "```powershell\n.\\scripts\\build.ps1\n```" in readme
+    assert "dist/FloatingTodo/FloatingTodo.exe" in readme
+    assert "data/" in readme
+    assert "scaffold stage" not in readme
+    assert "later packaging task" not in readme
+    assert "later app bootstrap task" not in readme
