@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from floating_todo.notifications import NotificationSender
 from floating_todo.settings import settings_from_dict
 from floating_todo.store import JsonTaskStore, load_json_object
 from floating_todo.theme import CALM_TECH_QSS
@@ -40,9 +41,10 @@ def main() -> int:
     store = JsonTaskStore(data_dir / "tasks.json")
     settings_path = data_dir / "settings.json"
     settings = settings_from_dict(load_json_object(settings_path, {}))
+    notification_sender = NotificationSender()
     from floating_todo.ui.main_window import MainWindow
 
-    window = MainWindow(store, settings, settings_path)
+    window = MainWindow(store, settings, settings_path, notification_sender)
     icon = QIcon(str(app_icon_path()))
     try:
         window.tray_controller = TrayController(window, icon)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -20,6 +22,8 @@ from PySide6.QtWidgets import (
 )
 
 from floating_todo.domain import Task, select_focus_task
+from floating_todo.platform_windows import current_executable_path, set_launch_on_startup
+from floating_todo.reminders import mark_event_sent, reminder_events
 from floating_todo.settings import AppSettings, settings_to_dict
 from floating_todo.store import save_json_object
 from floating_todo.theme import THEME_COLORS
@@ -36,23 +40,33 @@ class TaskStore(Protocol):
         """Persist tasks."""
 
 
+class NotificationSenderProtocol(Protocol):
+    def send(self, title: str, message: str) -> None:
+        """Send a user-visible notification."""
+
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
         store: TaskStore,
         settings: AppSettings | None = None,
         settings_path: Path | None = None,
+        notification_sender: NotificationSenderProtocol | None = None,
     ) -> None:
         super().__init__()
         self.store = store
         self.settings = settings or AppSettings()
         self.settings_path = Path(settings_path) if settings_path is not None else Path("settings.json")
+        self.notification_sender = notification_sender
         self.tray_controller = None
+        self._geometry_initialized = False
+        self._restoring_geometry = False
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle("FloatingTodo")
         self.apply_window_behavior_settings()
         self.setMinimumWidth(410)
+        self.apply_saved_geometry()
 
         self.clock_label = QLabel()
         self.today_completion_label = QLabel("0%")
@@ -75,6 +89,7 @@ class MainWindow(QMainWindow):
         self._clock_timer.timeout.connect(self.refresh)
         self._clock_timer.start(1000)
         self.refresh()
+        self._geometry_initialized = True
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -184,9 +199,77 @@ class MainWindow(QMainWindow):
         self.store.save_tasks(self.tasks)
         self.refresh()
 
+    def edit_task(self, task_id: str) -> None:
+        index = self._task_index(task_id)
+        if index is None:
+            return
+
+        dialog = TaskDialog(self, self.tasks[index])
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        updated = dialog.build_task()
+        if not updated.title.strip():
+            return
+
+        self.tasks = [*self.tasks[:index], updated, *self.tasks[index + 1 :]]
+        self.store.save_tasks(self.tasks)
+        self.refresh()
+
+    def complete_task(self, task_id: str) -> None:
+        index = self._task_index(task_id)
+        if index is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        completed = replace(
+            self.tasks[index],
+            status="done",
+            progress=100,
+            completed_at=now,
+            updated_at=now,
+        )
+        self.tasks = [*self.tasks[:index], completed, *self.tasks[index + 1 :]]
+        self.store.save_tasks(self.tasks)
+        self.refresh()
+
+    def delete_task(self, task_id: str) -> None:
+        index = self._task_index(task_id)
+        if index is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "删除任务",
+            "确定要删除这个任务吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        self.tasks = [*self.tasks[:index], *self.tasks[index + 1 :]]
+        self.store.save_tasks(self.tasks)
+        self.refresh()
+
+    def _task_index(self, task_id: str) -> int | None:
+        for index, task in enumerate(self.tasks):
+            if task.id == task_id:
+                return index
+        return None
+
     def apply_window_behavior_settings(self) -> None:
         self.setWindowOpacity(self.settings.opacity)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.settings.always_on_top)
+
+    def apply_saved_geometry(self) -> None:
+        geometry = self.settings.window_geometry
+        self.setGeometry(
+            int(geometry["x"]),
+            int(geometry["y"]),
+            int(geometry["width"]),
+            int(geometry["height"]),
+        )
 
     def open_settings(self) -> None:
         dialog = SettingsWindow(self.settings, self)
@@ -195,8 +278,22 @@ class MainWindow(QMainWindow):
 
         self.settings = dialog.build_settings()
         save_json_object(self.settings_path, settings_to_dict(self.settings))
-        self.apply_window_behavior_settings()
-        self.show()
+        try:
+            set_launch_on_startup(
+                "FloatingTodo",
+                current_executable_path(),
+                self.settings.launch_on_startup,
+            )
+        except OSError as exc:
+            QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
+        self._restoring_geometry = True
+        try:
+            self.apply_window_behavior_settings()
+            if self.settings.lock_position:
+                self.apply_saved_geometry()
+            self.show()
+        finally:
+            self._restoring_geometry = False
 
     def can_close_to_tray(self) -> bool:
         tray_controller = self.tray_controller
@@ -214,10 +311,74 @@ class MainWindow(QMainWindow):
 
         event.accept()
 
+    def setGeometry(self, *args) -> None:
+        super().setGeometry(*args)
+        self._handle_geometry_change()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self._handle_geometry_change()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._handle_geometry_change()
+
+    def _handle_geometry_change(self) -> None:
+        if not self._geometry_initialized or self._restoring_geometry:
+            return
+        if self.settings.lock_position:
+            self._restore_locked_geometry()
+            return
+
+        geometry = self._current_geometry()
+        if geometry == dict(self.settings.window_geometry):
+            return
+        self.settings = replace(self.settings, window_geometry=geometry)
+        save_json_object(self.settings_path, settings_to_dict(self.settings))
+
+    def _restore_locked_geometry(self) -> None:
+        self._restoring_geometry = True
+        try:
+            self.apply_saved_geometry()
+        finally:
+            self._restoring_geometry = False
+
+    def _current_geometry(self) -> dict[str, int]:
+        geometry = self.geometry()
+        return {
+            "x": geometry.x(),
+            "y": geometry.y(),
+            "width": geometry.width(),
+            "height": geometry.height(),
+        }
+
+    def process_reminders(self, now: datetime) -> None:
+        if self.notification_sender is None:
+            return
+
+        event_titles = {
+            "deadline_warning": "任务临近截止",
+            "deadline_due": "任务已到期",
+        }
+        updated_tasks: list[Task] = []
+        changed = False
+        for task in self.tasks:
+            updated_task = task
+            for event in reminder_events(updated_task, now, self.settings.notification_lead_minutes):
+                self.notification_sender.send(event_titles[event], updated_task.title)
+                updated_task = mark_event_sent(updated_task, event)
+                changed = True
+            updated_tasks.append(updated_task)
+
+        if changed:
+            self.tasks = updated_tasks
+            self.store.save_tasks(self.tasks)
+
     def refresh(self) -> None:
         self.update_clock()
         self.tasks = self.store.load_tasks()
         now = datetime.now(timezone.utc)
+        self.process_reminders(now)
         active_count = sum(1 for task in self.tasks if task.status == "active")
         self.active_count_label.setText(str(active_count))
         self.today_completion_label.setText(f"{today_completion_percent(self.tasks)}%")
@@ -267,6 +428,23 @@ class MainWindow(QMainWindow):
         progress_label = QLabel(str(row["progress_label"]))
         top.addWidget(progress_label)
         layout.addLayout(top)
+
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        task_id = str(row["id"])
+        edit_button = QPushButton("编辑")
+        edit_button.setToolTip("编辑任务")
+        edit_button.clicked.connect(lambda checked=False, task_id=task_id: self.edit_task(task_id))
+        actions.addWidget(edit_button)
+        complete_button = QPushButton("完成")
+        complete_button.setToolTip("标记任务完成")
+        complete_button.clicked.connect(lambda checked=False, task_id=task_id: self.complete_task(task_id))
+        actions.addWidget(complete_button)
+        delete_button = QPushButton("删除")
+        delete_button.setToolTip("删除任务")
+        delete_button.clicked.connect(lambda checked=False, task_id=task_id: self.delete_task(task_id))
+        actions.addWidget(delete_button)
+        layout.addLayout(actions)
 
         meta = QHBoxLayout()
         meta.addWidget(QLabel(f"工作量 {row['effort_label']}"))
