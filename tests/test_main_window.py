@@ -230,3 +230,43 @@ def test_settings_button_acceptance_saves_and_applies_runtime_settings(
     assert settings_to_dict(updated).items() <= saved_settings.items()
 
     window.close()
+
+
+class CloseEventProbe:
+    def __init__(self) -> None:
+        self.ignored = False
+        self.accepted = False
+
+    def ignore(self) -> None:
+        self.ignored = True
+
+    def accept(self) -> None:
+        self.accepted = True
+
+
+def test_close_event_hides_window_when_close_to_tray_enabled(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(close_to_tray=True))
+    window.show()
+    event = CloseEventProbe()
+
+    window.closeEvent(event)
+
+    assert event.ignored is True
+    assert event.accepted is False
+    assert window.isHidden()
+
+    window.close()
+
+
+def test_close_event_accepts_when_close_to_tray_disabled(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(close_to_tray=False))
+    event = CloseEventProbe()
+
+    window.closeEvent(event)
+
+    assert event.accepted is True
+    assert event.ignored is False

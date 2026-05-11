@@ -197,6 +197,14 @@ class MainWindow(QMainWindow):
         self.apply_window_behavior_settings()
         self.show()
 
+    def closeEvent(self, event) -> None:
+        if self.settings.close_to_tray:
+            event.ignore()
+            self.hide()
+            return
+
+        event.accept()
+
     def refresh(self) -> None:
         self.update_clock()
         self.tasks = self.store.load_tasks()

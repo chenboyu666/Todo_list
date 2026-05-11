@@ -3,11 +3,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from floating_todo.settings import settings_from_dict
 from floating_todo.store import JsonTaskStore, load_json_object
 from floating_todo.theme import CALM_TECH_QSS
+from floating_todo.ui.tray import TrayController
 
 
 def app_base_dir() -> Path:
@@ -26,6 +28,10 @@ def ensure_data_files(base_path: Path | None = None) -> Path:
     return data_dir
 
 
+def app_icon_path() -> Path:
+    return Path(__file__).resolve().parent / "assets" / "app_icon.svg"
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("FloatingTodo")
@@ -37,5 +43,7 @@ def main() -> int:
     from floating_todo.ui.main_window import MainWindow
 
     window = MainWindow(store, settings, settings_path)
+    icon = QIcon(str(app_icon_path()))
+    window.tray_controller = TrayController(window, icon)
     window.show()
     return app.exec()
