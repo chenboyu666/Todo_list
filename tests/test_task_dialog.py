@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -67,6 +68,8 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
     assert task.updated_at.tzinfo == timezone.utc
     assert dict(task.notification_state) == DEFAULT_NOTIFICATION_STATE
 
+    dialog.close()
+
 
 def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
@@ -89,6 +92,8 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     if default_deadline.tzinfo is None:
         default_deadline = default_deadline.replace(tzinfo=timezone.utc)
     assert before + timedelta(minutes=55) <= default_deadline <= after + timedelta(minutes=65)
+
+    dialog.close()
 
 
 def test_dialog_accepts_parent_as_first_argument_for_new_task(qapp: QApplication) -> None:
@@ -133,6 +138,21 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.progress == 70
     assert updated.notes == "新备注"
     assert updated.updated_at > existing.updated_at
+
+    dialog.close()
+    parent.close()
+
+
+def test_edit_dialog_preserves_empty_deadline_when_unchanged(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    existing = replace(make_task(), deadline=None)
+    parent = QMainWindow()
+    dialog = TaskDialog(parent, existing)
+
+    updated = dialog.build_task()
+
+    assert updated.deadline is None
 
     dialog.close()
     parent.close()
