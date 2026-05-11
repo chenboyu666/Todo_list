@@ -32,10 +32,16 @@ class FakeMenu:
 
 
 class FakeTrayIcon:
+    available = True
+
     def __init__(self, icon) -> None:
         self.icon = icon
         self.menu = None
         self.shown = False
+
+    @classmethod
+    def isSystemTrayAvailable(cls) -> bool:
+        return cls.available
 
     def setContextMenu(self, menu: FakeMenu) -> None:
         self.menu = menu
@@ -143,3 +149,15 @@ def test_tray_quit_action_is_safe_without_application_instance() -> None:
     controller = make_controller(FakeWindow(), app=None)
 
     controller.menu.actions[3].trigger()
+
+
+def test_tray_controller_reports_system_tray_availability() -> None:
+    controller = make_controller(FakeWindow())
+
+    FakeTrayIcon.available = True
+    assert controller.is_available() is True
+
+    FakeTrayIcon.available = False
+    assert controller.is_available() is False
+
+    FakeTrayIcon.available = True

@@ -248,6 +248,7 @@ def test_close_event_hides_window_when_close_to_tray_enabled(qapp: QApplication)
     from floating_todo.ui.main_window import MainWindow
 
     window = MainWindow(MemoryStore([]), AppSettings(close_to_tray=True))
+    window.tray_controller = type("AvailableTray", (), {"is_available": lambda self: True})()
     window.show()
     event = CloseEventProbe()
 
@@ -258,6 +259,33 @@ def test_close_event_hides_window_when_close_to_tray_enabled(qapp: QApplication)
     assert window.isHidden()
 
     window.close()
+
+
+def test_close_event_accepts_when_close_to_tray_enabled_without_tray_controller(
+    qapp: QApplication,
+) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(close_to_tray=True))
+    event = CloseEventProbe()
+
+    window.closeEvent(event)
+
+    assert event.accepted is True
+    assert event.ignored is False
+
+
+def test_close_event_accepts_when_tray_controller_is_unavailable(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(close_to_tray=True))
+    window.tray_controller = type("UnavailableTray", (), {"is_available": lambda self: False})()
+    event = CloseEventProbe()
+
+    window.closeEvent(event)
+
+    assert event.accepted is True
+    assert event.ignored is False
 
 
 def test_close_event_accepts_when_close_to_tray_disabled(qapp: QApplication) -> None:
