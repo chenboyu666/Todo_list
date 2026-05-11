@@ -15,13 +15,14 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 
 
 class TaskDialog(QDialog):
-    def __init__(self, task: Task | None = None, parent: object | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, task: Task | None = None) -> None:
         super().__init__(parent)
         self.task = task
 

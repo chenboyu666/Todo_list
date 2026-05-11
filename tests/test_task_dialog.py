@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from PySide6.QtCore import QDateTime, QTimeZone
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMainWindow
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 
@@ -91,12 +91,27 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert before + timedelta(minutes=55) <= default_deadline <= after + timedelta(minutes=65)
 
 
+def test_dialog_accepts_parent_as_first_argument_for_new_task(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    parent = QMainWindow()
+    dialog = TaskDialog(parent)
+
+    assert dialog.parent() is parent
+    assert dialog.task is None
+    assert dialog.windowTitle() == "新增任务"
+
+    dialog.close()
+    parent.close()
+
+
 def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 
     existing = make_task()
     new_deadline = datetime(2026, 5, 13, 9, 15, tzinfo=timezone.utc)
-    dialog = TaskDialog(existing)
+    parent = QMainWindow()
+    dialog = TaskDialog(parent, existing)
     dialog.title_edit.setText("  更新任务  ")
     dialog.priority_combo.setCurrentText("P3")
     dialog.effort_spin.setValue(120)
@@ -118,3 +133,6 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.progress == 70
     assert updated.notes == "新备注"
     assert updated.updated_at > existing.updated_at
+
+    dialog.close()
+    parent.close()
