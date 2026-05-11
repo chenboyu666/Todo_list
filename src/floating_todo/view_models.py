@@ -8,6 +8,7 @@ from floating_todo.domain import Task, normalize_datetime, sort_tasks
 def countdown_label(deadline: datetime | None, now: datetime) -> str:
     if deadline is None:
         return "--:--:--"
+    deadline = normalize_datetime(deadline)
     now = normalize_datetime(now)
     delta = deadline - now
     past = delta.total_seconds() < 0
