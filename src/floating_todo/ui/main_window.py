@@ -276,16 +276,20 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
 
-        self.settings = dialog.build_settings()
+        updated_settings = dialog.build_settings()
+        if updated_settings.launch_on_startup != self.settings.launch_on_startup:
+            try:
+                set_launch_on_startup(
+                    "FloatingTodo",
+                    current_executable_path(),
+                    updated_settings.launch_on_startup,
+                )
+            except OSError as exc:
+                QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
+                return
+
+        self.settings = updated_settings
         save_json_object(self.settings_path, settings_to_dict(self.settings))
-        try:
-            set_launch_on_startup(
-                "FloatingTodo",
-                current_executable_path(),
-                self.settings.launch_on_startup,
-            )
-        except OSError as exc:
-            QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
         self._restoring_geometry = True
         try:
             self.apply_window_behavior_settings()

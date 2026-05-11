@@ -479,6 +479,50 @@ def test_settings_startup_oserror_shows_warning(
     window.close()
 
 
+def test_settings_startup_failure_preserves_previous_startup_setting(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    settings_path = tmp_path / "settings.json"
+    previous = AppSettings(launch_on_startup=False, opacity=0.81)
+    settings_path.write_text(json.dumps(settings_to_dict(previous)), encoding="utf-8")
+    updated = AppSettings(launch_on_startup=True, opacity=0.62)
+    warnings: list[tuple[str, str]] = []
+
+    class AcceptedSettingsWindow:
+        def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
+            pass
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_settings(self) -> AppSettings:
+            return updated
+
+    def failing_set_launch_on_startup(app_name: str, exe_path: str, enabled: bool) -> None:
+        raise OSError("registry denied")
+
+    monkeypatch.setattr(main_window, "SettingsWindow", AcceptedSettingsWindow)
+    monkeypatch.setattr(main_window, "current_executable_path", lambda: "E:/app/FloatingTodo.exe")
+    monkeypatch.setattr(main_window, "set_launch_on_startup", failing_set_launch_on_startup)
+    monkeypatch.setattr(
+        main_window.QMessageBox,
+        "warning",
+        lambda parent, title, text: warnings.append((title, text)),
+    )
+    window = main_window.MainWindow(MemoryStore([]), previous, settings_path)
+
+    window.open_settings()
+
+    saved_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert warnings
+    assert window.settings.launch_on_startup is False
+    assert saved_settings["launch_on_startup"] is False
+
+    window.close()
+
+
 def test_refresh_sends_due_reminders_once_and_persists_flags(qapp: QApplication) -> None:
     from floating_todo.ui.main_window import MainWindow
 
