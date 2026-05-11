@@ -8,6 +8,7 @@ Windows floating task console built with Python and PySide6.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+pip install -e .
 python -m floating_todo
 ```
 

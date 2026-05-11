@@ -49,3 +49,13 @@ def test_readme_documents_current_build_flow():
     assert "scaffold stage" not in readme
     assert "later packaging task" not in readme
     assert "later app bootstrap task" not in readme
+
+
+def test_readme_installs_project_before_local_run_command():
+    readme = README.read_text(encoding="utf-8")
+    run_section = readme.split("## Run Locally", 1)[1].split("## Test", 1)[0]
+
+    editable_install = run_section.index("pip install -e .")
+    launch_command = run_section.index("python -m floating_todo")
+
+    assert editable_install < launch_command
