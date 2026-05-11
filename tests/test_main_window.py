@@ -15,8 +15,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 class MemoryStore:
     def __init__(self, tasks: list[Task]) -> None:
         self._tasks = tasks
+        self.load_count = 0
 
     def load_tasks(self) -> list[Task]:
+        self.load_count += 1
         return list(self._tasks)
 
 
@@ -94,5 +96,22 @@ def test_refresh_renders_focus_summary_and_task_rows(qapp: QApplication) -> None
     assert "低优先任务" in row_text
     assert "截止" in row_text
     assert "60%" in row_text
+
+    window.close()
+
+
+def test_timer_timeout_refreshes_window_from_store(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    store = MemoryStore([])
+    window = MainWindow(store)
+    initial_loads = store.load_count
+
+    store._tasks = [make_task("定时刷新任务")]
+    window._clock_timer.timeout.emit()
+
+    assert store.load_count == initial_loads + 1
+    assert window.active_count_label.text() == "1"
+    assert window.focus_title_label.text() == "定时刷新任务"
 
     window.close()

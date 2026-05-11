@@ -53,9 +53,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._clock_timer = QTimer(self)
-        self._clock_timer.timeout.connect(self.update_clock)
+        self._clock_timer.timeout.connect(self.refresh)
         self._clock_timer.start(1000)
-        self.update_clock()
         self.refresh()
 
     def _build_ui(self) -> None:
@@ -154,6 +153,7 @@ class MainWindow(QMainWindow):
         self.clock_label.setText(datetime.now().strftime("%H:%M:%S"))
 
     def refresh(self) -> None:
+        self.update_clock()
         self.tasks = self.store.load_tasks()
         now = datetime.now(timezone.utc)
         active_count = sum(1 for task in self.tasks if task.status == "active")
