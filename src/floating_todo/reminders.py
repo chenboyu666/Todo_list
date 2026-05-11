@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from floating_todo.domain import Task
 
@@ -12,8 +12,12 @@ EVENT_TO_FLAG = {
 
 
 def reminder_events(task: Task, now: datetime, lead_minutes: int) -> list[str]:
+    if lead_minutes < 0:
+        raise ValueError("lead_minutes must be non-negative")
     if task.status != "active" or task.deadline is None:
         return []
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
 
     events: list[str] = []
     warning_at = task.deadline - timedelta(minutes=lead_minutes)
@@ -25,7 +29,10 @@ def reminder_events(task: Task, now: datetime, lead_minutes: int) -> list[str]:
 
 
 def mark_event_sent(task: Task, event: str) -> Task:
-    flag = EVENT_TO_FLAG[event]
+    try:
+        flag = EVENT_TO_FLAG[event]
+    except KeyError as exc:
+        raise ValueError(f"Unknown reminder event: {event}") from exc
     state = dict(task.notification_state)
     state[flag] = True
     return replace(task, notification_state=state)

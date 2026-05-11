@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from floating_todo.domain import Task
 from floating_todo.reminders import mark_event_sent, reminder_events
 
@@ -54,6 +56,28 @@ def test_completed_task_has_no_events():
     assert reminder_events(task, now, lead_minutes=15) == []
 
 
+def test_active_task_without_deadline_has_no_events():
+    now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    task = task_with_deadline(None)
+
+    assert reminder_events(task, now, lead_minutes=15) == []
+
+
+def test_naive_now_is_treated_as_utc():
+    now = datetime(2026, 5, 12, 8, 0)
+    task = task_with_deadline(datetime(2026, 5, 12, 8, 10, tzinfo=timezone.utc))
+
+    assert reminder_events(task, now, lead_minutes=15) == ["deadline_warning"]
+
+
+def test_negative_lead_minutes_raises_value_error():
+    now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    task = task_with_deadline(now)
+
+    with pytest.raises(ValueError):
+        reminder_events(task, now, lead_minutes=-1)
+
+
 def test_mark_event_sent_sets_matching_flag():
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     task = task_with_deadline(now)
@@ -62,3 +86,11 @@ def test_mark_event_sent_sets_matching_flag():
 
     assert updated.notification_state["deadline_warning_sent"] is True
     assert updated.notification_state["deadline_due_sent"] is False
+
+
+def test_mark_event_sent_unknown_event_raises_value_error():
+    now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    task = task_with_deadline(now)
+
+    with pytest.raises(ValueError, match="Unknown reminder event: snooze"):
+        mark_event_sent(task, "snooze")
