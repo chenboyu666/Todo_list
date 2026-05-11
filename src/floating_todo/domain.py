@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any, Literal
 
 Priority = Literal["P1", "P2", "P3"]
@@ -27,20 +29,35 @@ class Task:
     updated_at: datetime
     completed_at: datetime | None
     notes: str = ""
-    notification_state: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
+    notification_state: Mapping[str, bool] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "deadline", normalize_datetime(self.deadline))
+        object.__setattr__(self, "created_at", normalize_datetime(self.created_at))
+        object.__setattr__(self, "updated_at", normalize_datetime(self.updated_at))
+        object.__setattr__(self, "completed_at", normalize_datetime(self.completed_at))
+
+        notification_state = dict(DEFAULT_NOTIFICATION_STATE)
+        notification_state.update(self.notification_state)
+        object.__setattr__(self, "notification_state", MappingProxyType(notification_state))
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    return normalize_datetime(datetime.fromisoformat(value))
 
 
 def format_datetime(value: datetime | None) -> str | None:
@@ -50,6 +67,7 @@ def format_datetime(value: datetime | None) -> str | None:
 
 
 def task_from_dict(data: dict[str, Any]) -> Task:
+    now = utc_now()
     notification_state = dict(DEFAULT_NOTIFICATION_STATE)
     notification_state.update(data.get("notification_state") or {})
     return Task(
@@ -60,8 +78,8 @@ def task_from_dict(data: dict[str, Any]) -> Task:
         deadline=parse_datetime(data.get("deadline")),
         progress=max(0, min(100, int(data.get("progress", 0)))),
         status=data.get("status", "active"),
-        created_at=parse_datetime(data.get("created_at")) or utc_now(),
-        updated_at=parse_datetime(data.get("updated_at")) or utc_now(),
+        created_at=parse_datetime(data.get("created_at")) or now,
+        updated_at=parse_datetime(data.get("updated_at")) or now,
         completed_at=parse_datetime(data.get("completed_at")),
         notes=str(data.get("notes", "")),
         notification_state=notification_state,

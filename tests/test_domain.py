@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from floating_todo.domain import Task, select_focus_task, sort_tasks, task_from_dict, task_to_dict
 
 
@@ -51,9 +53,71 @@ def test_select_focus_task_returns_first_sorted_active_task():
     assert select_focus_task(tasks).title == "p1"
 
 
+def test_select_focus_task_returns_none_for_empty_list():
+    assert select_focus_task([]) is None
+
+
 def test_task_json_round_trip_preserves_datetime_and_notification_state():
     task = make_task("spec", "P1", 2, 90, 0)
 
     restored = task_from_dict(task_to_dict(task))
 
     assert restored == task
+
+
+def test_sort_tasks_normalizes_mixed_naive_and_aware_datetimes():
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=UTC)
+    naive_near = Task(
+        id="naive-near",
+        title="naive-near",
+        priority="P1",
+        effort_minutes=30,
+        deadline=datetime(2026, 5, 12, 9, 0),
+        progress=0,
+        status="active",
+        created_at=datetime(2026, 5, 12, 8, 0),
+        updated_at=datetime(2026, 5, 12, 8, 0),
+        completed_at=None,
+        notes="",
+        notification_state={"deadline_warning_sent": False, "deadline_due_sent": False},
+    )
+    aware_far = make_task("aware-far", "P1", 3, 30, 1)
+
+    assert [task.title for task in sort_tasks([aware_far, naive_near])] == [
+        "naive-near",
+        "aware-far",
+    ]
+    assert naive_near.deadline == base + timedelta(hours=1)
+    assert naive_near.created_at == base
+
+
+def test_task_from_dict_backfills_notification_state_without_mutating_input():
+    data = {
+        "id": "partial",
+        "title": "partial",
+        "notification_state": {"deadline_warning_sent": True},
+    }
+
+    task = task_from_dict(data)
+
+    assert task.notification_state == {
+        "deadline_warning_sent": True,
+        "deadline_due_sent": False,
+    }
+    assert data["notification_state"] == {"deadline_warning_sent": True}
+
+
+def test_same_priority_no_deadline_tasks_sort_after_dated_tasks():
+    tasks = [
+        make_task("no-deadline", "P1", None, 120, 0),
+        make_task("dated", "P1", 24, 20, 1),
+    ]
+
+    assert [task.title for task in sort_tasks(tasks)] == ["dated", "no-deadline"]
+
+
+def test_task_notification_state_cannot_be_mutated_directly():
+    task = make_task("immutable", "P1", 1, 30, 0)
+
+    with pytest.raises(TypeError):
+        task.notification_state["deadline_warning_sent"] = True
