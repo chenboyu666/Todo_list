@@ -25,6 +25,7 @@ class TaskDialog(QDialog):
     def __init__(self, parent: QWidget | None = None, task: Task | None = None) -> None:
         super().__init__(parent)
         self.task = task
+        self._deadline_changed = False
 
         self.title_edit = QLineEdit()
         self.priority_combo = QComboBox()
@@ -35,6 +36,7 @@ class TaskDialog(QDialog):
 
         self._build_ui()
         self._populate_fields()
+        self.deadline_edit.dateTimeChanged.connect(self._mark_deadline_changed)
 
     def _build_ui(self) -> None:
         self.setWindowTitle("编辑任务" if self.task is not None else "新增任务")
@@ -105,7 +107,7 @@ class TaskDialog(QDialog):
         title = self.title_edit.text().strip()
         priority = self.priority_combo.currentText()
         effort = self.effort_spin.value()
-        deadline = _datetime_from_qdatetime(self.deadline_edit.dateTime())
+        deadline = self._build_deadline()
         progress = self.progress_spin.value()
         notes = self.notes_edit.toPlainText()
 
@@ -135,6 +137,14 @@ class TaskDialog(QDialog):
             notes=notes,
             notification_state=dict(DEFAULT_NOTIFICATION_STATE),
         )
+
+    def _build_deadline(self) -> datetime | None:
+        if self.task is not None and self.task.deadline is None and not self._deadline_changed:
+            return None
+        return _datetime_from_qdatetime(self.deadline_edit.dateTime())
+
+    def _mark_deadline_changed(self) -> None:
+        self._deadline_changed = True
 
 
 def _qdatetime_from_utc(value: datetime) -> QDateTime:
