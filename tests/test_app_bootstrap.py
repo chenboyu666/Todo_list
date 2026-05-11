@@ -69,6 +69,8 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
             captured["shown"] = True
 
     monkeypatch.setattr(app_module, "QApplication", FakeApplication)
+    monkeypatch.setattr(app_module, "QIcon", lambda path: path)
+    monkeypatch.setattr(app_module, "TrayController", lambda window, icon: object())
     monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
     monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
 
@@ -79,3 +81,53 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
     assert settings_to_dict(captured["settings"])["always_on_top"] is False
     assert settings_to_dict(captured["settings"])["opacity"] == 0.7
     assert captured["shown"] is True
+
+
+def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path):
+    import floating_todo.app as app_module
+    import floating_todo.ui.main_window as main_window_module
+
+    captured = {}
+
+    class FakeApplication:
+        def __init__(self, argv):
+            self.argv = argv
+
+        def setApplicationName(self, name):
+            pass
+
+        def setStyleSheet(self, qss):
+            pass
+
+        def exec(self):
+            return 0
+
+    class FakeMainWindow:
+        def __init__(self, store, settings, path):
+            self.tray_controller = None
+
+        def show(self):
+            captured["tray_before_show"] = self.tray_controller
+            captured["shown"] = True
+
+    class FakeIcon:
+        def __init__(self, path):
+            self.path = path
+
+    class FakeTrayController:
+        def __init__(self, window, icon):
+            captured["window"] = window
+            captured["icon"] = icon
+
+    monkeypatch.setattr(app_module, "QApplication", FakeApplication)
+    monkeypatch.setattr(app_module, "QIcon", FakeIcon)
+    monkeypatch.setattr(app_module, "TrayController", FakeTrayController)
+    monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
+    monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
+
+    assert app_module.main() == 0
+
+    assert captured["shown"] is True
+    assert isinstance(captured["tray_before_show"], FakeTrayController)
+    assert captured["tray_before_show"] is captured["window"].tray_controller
+    assert captured["icon"].path == str(app_module.app_icon_path())
