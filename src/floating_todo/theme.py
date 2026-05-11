@@ -1,39 +1,67 @@
-CALM_TECH_QSS = """
-QWidget {
-  background: #0E1223;
-  color: #F8FAFC;
-  font-family: "Segoe UI";
-  font-size: 13px;
+THEME_COLORS = {
+    "background": "#0E1223",
+    "surface": "#111827",
+    "surface_hover": "#172033",
+    "surface_pressed": "#1A1E2F",
+    "field": "#020617",
+    "border": "#334155",
+    "text": "#F8FAFC",
+    "accent": "#22D3EE",
 }
-QPushButton {
-  background: #111827;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  min-height: 32px;
-  padding: 4px 10px;
+
+THEME_RADIUS = {
+    "control": "8px",
+    "progress": "4px",
 }
-QPushButton:hover {
-  border-color: #22D3EE;
-  background: #172033;
+
+THEME_SPACING = {
+    "button_min_height": "32px",
+    "control_min_height": "32px",
+    "control_padding": "4px 10px",
+    "field_padding": "4px 8px",
 }
-QPushButton:pressed {
-  background: #1A1E2F;
+
+THEME_FONT = {
+    "family": '"Segoe UI"',
+    "size": "13px",
 }
-QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QComboBox {
-  background: #020617;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  min-height: 32px;
-  padding: 4px 8px;
-}
-QProgressBar {
-  background: #334155;
+
+CALM_TECH_QSS = f"""
+QWidget {{
+  background: {THEME_COLORS["background"]};
+  color: {THEME_COLORS["text"]};
+  font-family: {THEME_FONT["family"]};
+  font-size: {THEME_FONT["size"]};
+}}
+QPushButton {{
+  background: {THEME_COLORS["surface"]};
+  border: 1px solid {THEME_COLORS["border"]};
+  border-radius: {THEME_RADIUS["control"]};
+  min-height: {THEME_SPACING["button_min_height"]};
+  padding: {THEME_SPACING["control_padding"]};
+}}
+QPushButton:hover {{
+  border-color: {THEME_COLORS["accent"]};
+  background: {THEME_COLORS["surface_hover"]};
+}}
+QPushButton:pressed {{
+  background: {THEME_COLORS["surface_pressed"]};
+}}
+QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QComboBox {{
+  background: {THEME_COLORS["field"]};
+  border: 1px solid {THEME_COLORS["border"]};
+  border-radius: {THEME_RADIUS["control"]};
+  min-height: {THEME_SPACING["control_min_height"]};
+  padding: {THEME_SPACING["field_padding"]};
+}}
+QProgressBar {{
+  background: {THEME_COLORS["border"]};
   border: 0;
-  border-radius: 4px;
+  border-radius: {THEME_RADIUS["progress"]};
   height: 8px;
-}
-QProgressBar::chunk {
-  background: #22D3EE;
-  border-radius: 4px;
-}
+}}
+QProgressBar::chunk {{
+  background: {THEME_COLORS["accent"]};
+  border-radius: {THEME_RADIUS["progress"]};
+}}
 """
