@@ -5,7 +5,8 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from floating_todo.store import JsonTaskStore
+from floating_todo.settings import settings_from_dict
+from floating_todo.store import JsonTaskStore, load_json_object
 from floating_todo.theme import CALM_TECH_QSS
 
 
@@ -31,8 +32,10 @@ def main() -> int:
     app.setStyleSheet(CALM_TECH_QSS)
     data_dir = ensure_data_files()
     store = JsonTaskStore(data_dir / "tasks.json")
+    settings_path = data_dir / "settings.json"
+    settings = settings_from_dict(load_json_object(settings_path, {}))
     from floating_todo.ui.main_window import MainWindow
 
-    window = MainWindow(store)
+    window = MainWindow(store, settings, settings_path)
     window.show()
     return app.exec()

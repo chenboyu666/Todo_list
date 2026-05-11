@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -8,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
 from floating_todo.domain import Task
+from floating_todo.settings import AppSettings, settings_to_dict
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -177,5 +179,54 @@ def test_add_task_ignores_blank_title(qapp: QApplication, monkeypatch: pytest.Mo
     assert store.saved_tasks is None
     assert window.tasks == []
     assert window.task_list_layout.count() == 0
+
+    window.close()
+
+
+def test_main_window_applies_initial_window_behavior_settings(
+    qapp: QApplication, tmp_path
+) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    settings = AppSettings(always_on_top=False, opacity=0.58)
+    window = MainWindow(MemoryStore([]), settings, tmp_path / "settings.json")
+
+    assert not window.windowFlags() & Qt.WindowStaysOnTopHint
+    assert window.windowOpacity() == pytest.approx(0.58, abs=0.01)
+
+    window.close()
+
+
+def test_settings_button_acceptance_saves_and_applies_runtime_settings(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    settings_path = tmp_path / "settings.json"
+    updated = AppSettings(always_on_top=False, opacity=0.67, notification_lead_minutes=22)
+
+    class AcceptedSettingsWindow:
+        def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
+            self.settings = settings
+            self.parent = parent
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_settings(self) -> AppSettings:
+            return updated
+
+    monkeypatch.setattr(main_window, "SettingsWindow", AcceptedSettingsWindow)
+    window = main_window.MainWindow(MemoryStore([]), AppSettings(), settings_path)
+
+    window.settings_button.click()
+
+    assert window.settings == updated
+    assert window.windowOpacity() == pytest.approx(0.67, abs=0.01)
+    assert not window.windowFlags() & Qt.WindowStaysOnTopHint
+    assert settings_path.exists()
+    assert settings_path.read_text(encoding="utf-8")
+    saved_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert settings_to_dict(updated).items() <= saved_settings.items()
 
     window.close()

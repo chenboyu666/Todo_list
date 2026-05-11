@@ -47,3 +47,20 @@ def atomic_write_json(path: Path, payload: Any) -> None:
         encoding="utf-8",
     )
     os.replace(temp_path, path)
+
+
+def load_json_object(path: Path, default: dict[str, object]) -> dict[str, object]:
+    path = Path(path)
+    if not path.exists():
+        return dict(default)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return dict(default)
+    if not isinstance(raw, dict):
+        return dict(default)
+    return raw
+
+
+def save_json_object(path: Path, payload: dict[str, object]) -> None:
+    atomic_write_json(path, payload)

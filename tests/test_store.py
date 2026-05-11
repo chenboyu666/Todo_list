@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from floating_todo.domain import Task
-from floating_todo.store import JsonTaskStore
+from floating_todo.store import JsonTaskStore, load_json_object, save_json_object
 
 
 def sample_task():
@@ -57,3 +57,47 @@ def test_save_writes_valid_json_array(tmp_path):
     raw = json.loads((tmp_path / "tasks.json").read_text(encoding="utf-8"))
     assert isinstance(raw, list)
     assert raw[0]["title"] == "Write spec"
+
+
+def test_load_json_object_missing_file_returns_shallow_default_copy(tmp_path):
+    default = {"opacity": 0.96, "nested": {"kept": True}}
+
+    loaded = load_json_object(tmp_path / "settings.json", default)
+
+    assert loaded == default
+    assert loaded is not default
+    assert loaded["nested"] is default["nested"]
+
+
+def test_load_json_object_returns_valid_json_object(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"always_on_top": false, "opacity": 0.75}', encoding="utf-8")
+
+    assert load_json_object(path, {"always_on_top": True}) == {
+        "always_on_top": False,
+        "opacity": 0.75,
+    }
+
+
+def test_load_json_object_non_object_or_corrupt_json_returns_default_copy(tmp_path):
+    default = {"close_to_tray": True}
+    path = tmp_path / "settings.json"
+
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    non_object = load_json_object(path, default)
+
+    path.write_text("{bad-json", encoding="utf-8")
+    corrupt = load_json_object(path, default)
+
+    assert non_object == default
+    assert non_object is not default
+    assert corrupt == default
+    assert corrupt is not default
+
+
+def test_save_json_object_writes_json_object(tmp_path):
+    path = tmp_path / "settings.json"
+
+    save_json_object(path, {"low_distraction_mode": True})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"low_distraction_mode": True}
