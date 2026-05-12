@@ -7,8 +7,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
-    QLabel,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
     QSlider,
     QSpinBox,
     QVBoxLayout,
@@ -20,74 +23,92 @@ from floating_todo.settings import AppSettings
 class SettingsWindow(QDialog):
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
-        self.settings = settings
         self.setWindowTitle("设置")
-        self.setMinimumWidth(320)
+        self.settings = settings
+        self.setMinimumWidth(460)
 
-        self.always_on_top_checkbox = QCheckBox("窗口始终置顶")
-        self.lock_position_checkbox = QCheckBox("锁定位置")
-        self.close_to_tray_checkbox = QCheckBox("关闭时进入托盘")
-        self.launch_on_startup_checkbox = QCheckBox("Windows 开机启动")
-        self.low_distraction_checkbox = QCheckBox("低干扰模式")
-        for checkbox in (
-            self.always_on_top_checkbox,
-            self.lock_position_checkbox,
-            self.close_to_tray_checkbox,
-            self.launch_on_startup_checkbox,
-            self.low_distraction_checkbox,
-        ):
-            checkbox.setToolTip(checkbox.text())
+        self.always_on_top = QCheckBox()
+        self.always_on_top.setChecked(settings.always_on_top)
+        self.always_on_top_checkbox = self.always_on_top
+        self.lock_position = QCheckBox()
+        self.lock_position.setChecked(settings.lock_position)
+        self.lock_position_checkbox = self.lock_position
+        self.close_to_tray = QCheckBox()
+        self.close_to_tray.setChecked(settings.close_to_tray)
+        self.close_to_tray_checkbox = self.close_to_tray
+        self.launch_on_startup = QCheckBox()
+        self.launch_on_startup.setChecked(settings.launch_on_startup)
+        self.launch_on_startup_checkbox = self.launch_on_startup
+        self.low_distraction = QCheckBox()
+        self.low_distraction.setChecked(settings.low_distraction_mode)
+        self.low_distraction_checkbox = self.low_distraction
+        self.opacity = QSlider(Qt.Horizontal)
+        self.opacity.setRange(30, 100)
+        self.opacity.setValue(round(settings.opacity * 100))
+        self.opacity_slider = self.opacity
+        self.lead_minutes = QSpinBox()
+        self.lead_minutes.setRange(1, 240)
+        self.lead_minutes.setValue(settings.notification_lead_minutes)
+        self.lead_minutes_spin = self.lead_minutes
+        self.lead_minutes_spinbox = self.lead_minutes
 
-        self.opacity_slider = QSlider(Qt.Horizontal)
-        self.opacity_slider.setRange(30, 100)
-        self.opacity_slider.setToolTip("透明度")
-
-        self.lead_minutes_spinbox = QSpinBox()
-        self.lead_minutes_spinbox.setRange(1, 240)
-        self.lead_minutes_spinbox.setToolTip("提前提醒分钟")
-
-        self._load_settings()
-        self._build_ui()
-
-    def _load_settings(self) -> None:
-        self.always_on_top_checkbox.setChecked(self.settings.always_on_top)
-        self.lock_position_checkbox.setChecked(self.settings.lock_position)
-        self.close_to_tray_checkbox.setChecked(self.settings.close_to_tray)
-        self.launch_on_startup_checkbox.setChecked(self.settings.launch_on_startup)
-        self.low_distraction_checkbox.setChecked(self.settings.low_distraction_mode)
-        self.opacity_slider.setValue(round(self.settings.opacity * 100))
-        self.lead_minutes_spinbox.setValue(self.settings.notification_lead_minutes)
-
-    def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 16)
-        layout.setSpacing(10)
+        self.background_enabled = QCheckBox()
+        self.background_enabled.setChecked(settings.background_enabled)
+        self.background_path = QLineEdit(settings.background_image_path)
+        self.background_path.setPlaceholderText("选择背景图片")
+        browse_button = QPushButton("选择")
+        browse_button.clicked.connect(self.choose_background)
+        self.background_overlay = QSlider(Qt.Horizontal)
+        self.background_overlay.setRange(25, 95)
+        self.background_overlay.setValue(round(settings.background_overlay * 100))
 
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft)
-        form.setFormAlignment(Qt.AlignTop)
-        form.addRow(self.always_on_top_checkbox)
-        form.addRow(self.lock_position_checkbox)
-        form.addRow(self.close_to_tray_checkbox)
-        form.addRow(self.launch_on_startup_checkbox)
-        form.addRow(self.low_distraction_checkbox)
-        form.addRow(QLabel("透明度"), self.opacity_slider)
-        form.addRow(QLabel("提前提醒分钟"), self.lead_minutes_spinbox)
-        layout.addLayout(form)
+        form.addRow("窗口始终置顶", self.always_on_top)
+        form.addRow("锁定位置", self.lock_position)
+        form.addRow("关闭时进入托盘", self.close_to_tray)
+        form.addRow("Windows 开机启动", self.launch_on_startup)
+        form.addRow("低干扰模式", self.low_distraction)
+        form.addRow("透明度", self.opacity)
+        form.addRow("提前提醒分钟", self.lead_minutes)
+        form.addRow("启用背景图片", self.background_enabled)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        background_layout = QHBoxLayout()
+        background_layout.addWidget(self.background_path, 1)
+        background_layout.addWidget(browse_button)
+        form.addRow("背景图片", background_layout)
+        form.addRow("背景遮罩", self.background_overlay)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def choose_background(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            self.background_path.text(),
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All Files (*)",
+        )
+        if path:
+            self.background_path.setText(path)
+            self.background_enabled.setChecked(True)
 
     def build_settings(self) -> AppSettings:
         return replace(
             self.settings,
-            always_on_top=self.always_on_top_checkbox.isChecked(),
-            lock_position=self.lock_position_checkbox.isChecked(),
-            close_to_tray=self.close_to_tray_checkbox.isChecked(),
-            launch_on_startup=self.launch_on_startup_checkbox.isChecked(),
-            opacity=self.opacity_slider.value() / 100,
-            low_distraction_mode=self.low_distraction_checkbox.isChecked(),
-            notification_lead_minutes=self.lead_minutes_spinbox.value(),
+            always_on_top=self.always_on_top.isChecked(),
+            lock_position=self.lock_position.isChecked(),
+            close_to_tray=self.close_to_tray.isChecked(),
+            launch_on_startup=self.launch_on_startup.isChecked(),
+            low_distraction_mode=self.low_distraction.isChecked(),
+            opacity=self.opacity.value() / 100,
+            notification_lead_minutes=self.lead_minutes.value(),
+            background_enabled=self.background_enabled.isChecked(),
+            background_image_path=self.background_path.text().strip(),
+            background_overlay=self.background_overlay.value() / 100,
         )

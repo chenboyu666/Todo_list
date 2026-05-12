@@ -29,6 +29,7 @@ class Task:
     updated_at: datetime
     completed_at: datetime | None
     notes: str = ""
+    reflection: str = ""
     notification_state: Mapping[str, bool] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
 
     def __post_init__(self) -> None:
@@ -82,6 +83,7 @@ def task_from_dict(data: dict[str, Any]) -> Task:
         updated_at=parse_datetime(data.get("updated_at")) or now,
         completed_at=parse_datetime(data.get("completed_at")),
         notes=str(data.get("notes", "")),
+        reflection=str(data.get("reflection", "")),
         notification_state=notification_state,
     )
 
@@ -99,6 +101,7 @@ def task_to_dict(task: Task) -> dict[str, Any]:
         "updated_at": format_datetime(task.updated_at),
         "completed_at": format_datetime(task.completed_at),
         "notes": task.notes,
+        "reflection": task.reflection,
         "notification_state": dict(task.notification_state),
     }
 

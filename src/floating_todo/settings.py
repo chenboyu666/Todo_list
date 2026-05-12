@@ -20,6 +20,10 @@ class AppSettings:
     notification_lead_minutes: int = 15
     window_geometry: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(DEFAULT_GEOMETRY)))
     theme: str = "calm-tech-dark"
+    focus_task_id: str | None = None
+    background_image_path: str = ""
+    background_enabled: bool = False
+    background_overlay: float = 0.68
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "window_geometry", MappingProxyType(dict(self.window_geometry)))
@@ -68,6 +72,10 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
                 geometry[key] = _coerce_int(raw_geometry[key], DEFAULT_GEOMETRY[key])
     opacity = _coerce_float(data.get("opacity", 0.96), 0.96)
     opacity = max(0.3, min(1.0, opacity))
+    background_overlay = _coerce_float(data.get("background_overlay", 0.68), 0.68)
+    background_overlay = max(0.25, min(0.95, background_overlay))
+    raw_focus_task_id = data.get("focus_task_id")
+    raw_background_path = data.get("background_image_path", "")
     return AppSettings(
         always_on_top=_coerce_bool(data.get("always_on_top", True), True),
         lock_position=_coerce_bool(data.get("lock_position", False), False),
@@ -78,6 +86,10 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         notification_lead_minutes=max(1, _coerce_int(data.get("notification_lead_minutes", 15), 15)),
         window_geometry=geometry,
         theme=str(data.get("theme", "calm-tech-dark")),
+        focus_task_id=str(raw_focus_task_id) if raw_focus_task_id else None,
+        background_image_path=str(raw_background_path) if raw_background_path else "",
+        background_enabled=_coerce_bool(data.get("background_enabled", False), False),
+        background_overlay=background_overlay,
     )
 
 
@@ -92,4 +104,8 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "notification_lead_minutes": settings.notification_lead_minutes,
         "window_geometry": dict(settings.window_geometry),
         "theme": settings.theme,
+        "focus_task_id": settings.focus_task_id,
+        "background_image_path": settings.background_image_path,
+        "background_enabled": settings.background_enabled,
+        "background_overlay": settings.background_overlay,
     }

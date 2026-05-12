@@ -1,161 +1,194 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timezone
 from uuid import uuid4
 
-from PySide6.QtCore import QDateTime, QTimeZone
+from PySide6.QtCore import QDate, QDateTime, QTime, QTimeZone, Qt
 from PySide6.QtWidgets import (
     QComboBox,
-    QDateTimeEdit,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
+    QSlider,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
+from floating_todo.theme import THEME_COLORS
+
+
+class DeadlineInputAdapter:
+    def __init__(self, dialog: "TaskDialog") -> None:
+        self.dialog = dialog
+
+    def setDateTime(self, value: QDateTime) -> None:
+        parsed = value.toPython()
+        self.dialog.deadline_date_input.setDate(QDate(parsed.year, parsed.month, parsed.day))
+        self.dialog.deadline_hour_input.setCurrentText(f"{parsed.hour:02d}")
+        self.dialog.deadline_minute_input.setCurrentText(f"{parsed.minute:02d}")
+
+    def dateTime(self) -> QDateTime:
+        deadline = self.dialog._deadline()
+        if deadline is None:
+            return QDateTime.currentDateTime()
+        return QDateTime.fromSecsSinceEpoch(int(deadline.timestamp()), QTimeZone.utc())
+
+    def calendarPopup(self) -> bool:
+        return self.dialog.deadline_date_input.calendarPopup()
 
 
 class TaskDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None, task: Task | None = None) -> None:
+    def __init__(self, parent=None, task: Task | None = None) -> None:
         super().__init__(parent)
         self.task = task
         self._deadline_changed = False
+        self.setWindowTitle("编辑任务" if task else "新增任务")
+        self.setMinimumWidth(460)
 
-        self.title_edit = QLineEdit()
-        self.priority_combo = QComboBox()
-        self.effort_spin = QSpinBox()
-        self.deadline_edit = QDateTimeEdit()
-        self.progress_spin = QSpinBox()
-        self.notes_edit = QTextEdit()
+        self.title_input = QLineEdit()
+        self.title_input.setPlaceholderText("任务名称")
+        self.title_edit = self.title_input
+        self.priority_input = QComboBox()
+        self.priority_input.addItems(["P1", "P2", "P3"])
+        self.priority_combo = self.priority_input
+        self.effort_input = QSpinBox()
+        self.effort_input.setRange(0, 24 * 60)
+        self.effort_input.setSingleStep(15)
+        self.effort_input.setSuffix(" min")
+        self.effort_spin = self.effort_input
+
+        self.deadline_date_input = QDateEdit()
+        self.deadline_date_input.setCalendarPopup(True)
+        self.deadline_hour_input = QComboBox()
+        self.deadline_hour_input.addItems([f"{hour:02d}" for hour in range(24)])
+        self.deadline_minute_input = QComboBox()
+        self.deadline_minute_input.addItems([f"{minute:02d}" for minute in range(60)])
+
+        self.progress_slider = QSlider(Qt.Horizontal)
+        self.progress_slider.setRange(0, 100)
+        self.progress_input = self.progress_slider
+        self.progress_spin = self.progress_slider
+        self.deadline_input = DeadlineInputAdapter(self)
+        self.deadline_edit = self.deadline_input
+        self.progress_label = QLabel("0%")
+        self.notes_input = QTextEdit()
+        self.notes_input.setPlaceholderText("备注")
+        self.notes_edit = self.notes_input
 
         self._build_ui()
-        self._populate_fields()
-        self.deadline_edit.dateTimeChanged.connect(self._mark_deadline_changed)
+        self._populate_fields(task)
+        self.deadline_date_input.dateChanged.connect(self._mark_deadline_changed)
+        self.deadline_hour_input.currentTextChanged.connect(self._mark_deadline_changed)
+        self.deadline_minute_input.currentTextChanged.connect(self._mark_deadline_changed)
+        self.progress_slider.valueChanged.connect(lambda value: self.progress_label.setText(f"{value}%"))
 
     def _build_ui(self) -> None:
-        self.setWindowTitle("编辑任务" if self.task is not None else "新增任务")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
 
-        self.title_edit.setPlaceholderText("任务名称")
-        self.title_edit.setToolTip("任务名称")
+        panel = QFrame()
+        panel.setObjectName("taskDialogPanel")
+        panel.setStyleSheet(
+            "QFrame#taskDialogPanel {"
+            f"background: {THEME_COLORS['surface']};"
+            f"border: 1px solid {THEME_COLORS['border']};"
+            "border-radius: 8px;"
+            "}"
+        )
+        form = QFormLayout(panel)
+        form.setContentsMargins(16, 14, 16, 14)
+        form.setSpacing(12)
+        form.addRow("任务名称", self.title_input)
+        form.addRow("优先级", self.priority_input)
+        form.addRow("预计工作量", self.effort_input)
 
-        self.priority_combo.addItems(["P1", "P2", "P3"])
-        self.priority_combo.setToolTip("优先级")
+        deadline_layout = QHBoxLayout()
+        deadline_layout.setSpacing(8)
+        deadline_layout.addWidget(self.deadline_date_input, 1)
+        deadline_layout.addWidget(QLabel("时"))
+        deadline_layout.addWidget(self.deadline_hour_input)
+        deadline_layout.addWidget(QLabel("分"))
+        deadline_layout.addWidget(self.deadline_minute_input)
+        form.addRow("截止时间", deadline_layout)
 
-        self.effort_spin.setRange(0, 1440)
-        self.effort_spin.setSingleStep(15)
-        self.effort_spin.setSuffix(" min")
-        self.effort_spin.setToolTip("预计工作量")
+        progress_layout = QHBoxLayout()
+        progress_layout.setSpacing(10)
+        progress_layout.addWidget(self.progress_slider, 1)
+        progress_layout.addWidget(self.progress_label)
+        form.addRow("手动进度", progress_layout)
+        form.addRow("备注", self.notes_input)
+        layout.addWidget(panel)
 
-        self.deadline_edit.setCalendarPopup(True)
-        self.deadline_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.deadline_edit.setToolTip("截止时间")
-
-        self.progress_spin.setRange(0, 100)
-        self.progress_spin.setSuffix("%")
-        self.progress_spin.setToolTip("手动进度")
-
-        self.notes_edit.setPlaceholderText("备注")
-        self.notes_edit.setToolTip("备注")
-
-        form = QFormLayout()
-        form.addRow("任务名称", self.title_edit)
-        form.addRow("优先级", self.priority_combo)
-        form.addRow("预计工作量", self.effort_spin)
-        form.addRow("截止时间", self.deadline_edit)
-        form.addRow("手动进度", self.progress_spin)
-        form.addRow("备注", self.notes_edit)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        ok_button = buttons.button(QDialogButtonBox.Ok)
-        cancel_button = buttons.button(QDialogButtonBox.Cancel)
-        if ok_button is not None:
-            ok_button.setText("新增" if self.task is None else "保存")
-        if cancel_button is not None:
-            cancel_button.setText("取消")
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-
-        layout = QVBoxLayout(self)
-        layout.addLayout(form)
         layout.addWidget(buttons)
 
-    def _populate_fields(self) -> None:
-        task = self.task
-        if task is None:
-            self.priority_combo.setCurrentText("P2")
-            self.effort_spin.setValue(60)
-            self.deadline_edit.setDateTime(_qdatetime_from_utc(datetime.now(timezone.utc) + timedelta(hours=1)))
-            self.progress_spin.setValue(0)
-            return
+    def _populate_fields(self, task: Task | None) -> None:
+        default_deadline = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        default_deadline = default_deadline.replace(hour=(default_deadline.hour + 1) % 24)
+        deadline = task.deadline if task and task.deadline else default_deadline
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
 
-        self.title_edit.setText(task.title)
-        self.priority_combo.setCurrentText(task.priority)
-        self.effort_spin.setValue(task.effort_minutes)
-        deadline = task.deadline or datetime.now(timezone.utc) + timedelta(hours=1)
-        self.deadline_edit.setDateTime(_qdatetime_from_utc(deadline))
-        self.progress_spin.setValue(task.progress)
-        self.notes_edit.setPlainText(task.notes)
+        self.title_input.setText(task.title if task else "")
+        self.priority_input.setCurrentText(task.priority if task else "P2")
+        self.effort_input.setValue(task.effort_minutes if task else 60)
+        self.deadline_date_input.setDate(QDate(deadline.year, deadline.month, deadline.day))
+        self.deadline_hour_input.setCurrentText(f"{deadline.hour:02d}")
+        self.deadline_minute_input.setCurrentText(f"{deadline.minute:02d}")
+        self.progress_slider.setValue(task.progress if task else 0)
+        self.progress_label.setText(f"{self.progress_slider.value()}%")
+        self.notes_input.setPlainText(task.notes if task else "")
+
+    def _mark_deadline_changed(self, *args) -> None:
+        self._deadline_changed = True
+
+    def _deadline(self) -> datetime | None:
+        if self.task and self.task.deadline is None and not self._deadline_changed:
+            return None
+        selected_date = self.deadline_date_input.date().toPython()
+        selected_time = time(
+            hour=int(self.deadline_hour_input.currentText()),
+            minute=int(self.deadline_minute_input.currentText()),
+            tzinfo=timezone.utc,
+        )
+        return datetime.combine(selected_date, selected_time)
 
     def build_task(self) -> Task:
         now = datetime.now(timezone.utc)
-        title = self.title_edit.text().strip()
-        priority = self.priority_combo.currentText()
-        effort = self.effort_spin.value()
-        deadline = self._build_deadline()
-        progress = self.progress_spin.value()
-        notes = self.notes_edit.toPlainText()
-
-        if self.task is not None:
+        title = self.title_input.text().strip()
+        if self.task:
             return replace(
                 self.task,
                 title=title,
-                priority=priority,  # type: ignore[arg-type]
-                effort_minutes=effort,
-                deadline=deadline,
-                progress=progress,
+                priority=self.priority_input.currentText(),
+                effort_minutes=self.effort_input.value(),
+                deadline=self._deadline(),
+                progress=self.progress_slider.value(),
                 updated_at=now,
-                notes=notes,
+                notes=self.notes_input.toPlainText(),
             )
-
         return Task(
             id=str(uuid4()),
             title=title,
-            priority=priority,  # type: ignore[arg-type]
-            effort_minutes=effort,
-            deadline=deadline,
-            progress=progress,
+            priority=self.priority_input.currentText(),
+            effort_minutes=self.effort_input.value(),
+            deadline=self._deadline(),
+            progress=self.progress_slider.value(),
             status="active",
             created_at=now,
             updated_at=now,
             completed_at=None,
-            notes=notes,
+            notes=self.notes_input.toPlainText(),
             notification_state=dict(DEFAULT_NOTIFICATION_STATE),
         )
-
-    def _build_deadline(self) -> datetime | None:
-        if self.task is not None and self.task.deadline is None and not self._deadline_changed:
-            return None
-        return _datetime_from_qdatetime(self.deadline_edit.dateTime())
-
-    def _mark_deadline_changed(self) -> None:
-        self._deadline_changed = True
-
-
-def _qdatetime_from_utc(value: datetime) -> QDateTime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    timestamp_ms = int(value.astimezone(timezone.utc).timestamp() * 1000)
-    return QDateTime.fromMSecsSinceEpoch(timestamp_ms, QTimeZone.utc())
-
-
-def _datetime_from_qdatetime(value: QDateTime) -> datetime:
-    result = value.toUTC().toPython()
-    if result.tzinfo is None:
-        result = result.replace(tzinfo=timezone.utc)
-    return result.astimezone(timezone.utc)
