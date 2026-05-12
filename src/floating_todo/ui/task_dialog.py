@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, time, timezone
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, QTime, QTimeZone, Qt
+from PySide6.QtCore import QDate, QDateTime, QPoint, QTimeZone, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSlider,
     QSpinBox,
     QTextEdit,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.effects import apply_soft_shadow
 
 
 class DeadlineInputAdapter:
@@ -45,12 +47,51 @@ class DeadlineInputAdapter:
         return self.dialog.deadline_date_input.calendarPopup()
 
 
+class DialogTitleBar(QFrame):
+    def __init__(self, dialog: QDialog, title: str) -> None:
+        super().__init__(dialog)
+        self.dialog = dialog
+        self._drag_start: QPoint | None = None
+        self.setStyleSheet("QFrame { background: transparent; border: none; }")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        title_label = QLabel(title)
+        title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
+        layout.addWidget(title_label)
+        layout.addStretch(1)
+        close_button = QPushButton("X")
+        close_button.setFixedWidth(38)
+        close_button.setToolTip("关闭")
+        close_button.clicked.connect(dialog.reject)
+        layout.addWidget(close_button)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_start = event.globalPosition().toPoint() - self.dialog.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is not None and event.buttons() & Qt.LeftButton:
+            self.dialog.move(event.globalPosition().toPoint() - self._drag_start)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_start = None
+        super().mouseReleaseEvent(event)
+
+
 class TaskDialog(QDialog):
     def __init__(self, parent=None, task: Task | None = None) -> None:
         super().__init__(parent)
         self.task = task
         self._deadline_changed = False
         self.setWindowTitle("编辑任务" if task else "新增任务")
+        self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setMinimumWidth(460)
 
         self.title_input = QLineEdit()
@@ -94,16 +135,18 @@ class TaskDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(14)
+        layout.addWidget(DialogTitleBar(self, self.windowTitle()))
 
         panel = QFrame()
         panel.setObjectName("taskDialogPanel")
         panel.setStyleSheet(
             "QFrame#taskDialogPanel {"
             f"background: {THEME_COLORS['surface']};"
-            f"border: 1px solid {THEME_COLORS['border']};"
+            "border: none;"
             "border-radius: 8px;"
             "}"
         )
+        apply_soft_shadow(panel, blur=34, y_offset=12, alpha=120)
         form = QFormLayout(panel)
         form.setContentsMargins(16, 14, 16, 14)
         form.setSpacing(12)
@@ -114,21 +157,26 @@ class TaskDialog(QDialog):
         deadline_layout = QHBoxLayout()
         deadline_layout.setSpacing(8)
         deadline_layout.addWidget(self.deadline_date_input, 1)
-        deadline_layout.addWidget(QLabel("时"))
         deadline_layout.addWidget(self.deadline_hour_input)
-        deadline_layout.addWidget(QLabel("分"))
+        deadline_layout.addWidget(QLabel("时"))
         deadline_layout.addWidget(self.deadline_minute_input)
+        deadline_layout.addWidget(QLabel("分"))
         form.addRow("截止时间", deadline_layout)
 
         progress_layout = QHBoxLayout()
         progress_layout.setSpacing(10)
         progress_layout.addWidget(self.progress_slider, 1)
+        self.progress_label.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
         progress_layout.addWidget(self.progress_label)
         form.addRow("手动进度", progress_layout)
         form.addRow("备注", self.notes_input)
         layout.addWidget(panel)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        if buttons.button(QDialogButtonBox.Save):
+            buttons.button(QDialogButtonBox.Save).setText("保存")
+        if buttons.button(QDialogButtonBox.Cancel):
+            buttons.button(QDialogButtonBox.Cancel).setText("取消")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

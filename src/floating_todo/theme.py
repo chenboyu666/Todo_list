@@ -1,12 +1,17 @@
 THEME_COLORS = {
-    "background": "#0E1223",
-    "surface": "#111827",
-    "surface_hover": "#172033",
-    "surface_pressed": "#1A1E2F",
-    "field": "#020617",
-    "border": "#334155",
-    "text": "#F8FAFC",
-    "accent": "#22D3EE",
+    "background": "#080A0F",
+    "surface": "#121722",
+    "surface_alt": "#171D2A",
+    "surface_hover": "#1D2634",
+    "surface_pressed": "#252D3B",
+    "field": "#090D15",
+    "border": "#8B95AC",
+    "text": "#F6F8FC",
+    "muted": "#9AA4B8",
+    "accent": "#7DD3FC",
+    "accent_secondary": "#A7F3D0",
+    "warning": "#F6C177",
+    "danger": "#FCA5A5",
 }
 
 THEME_RADIUS = {
@@ -15,53 +20,135 @@ THEME_RADIUS = {
 }
 
 THEME_SPACING = {
-    "button_min_height": "32px",
-    "control_min_height": "32px",
-    "control_padding": "4px 10px",
-    "field_padding": "4px 8px",
+    "button_min_height": "34px",
+    "control_min_height": "34px",
+    "control_padding": "5px 12px",
+    "field_padding": "5px 10px",
 }
 
 THEME_FONT = {
-    "family": '"Segoe UI"',
+    "family": '"Microsoft YaHei UI", "Segoe UI"',
     "size": "13px",
 }
 
 CALM_TECH_QSS = f"""
 QWidget {{
-  background: {THEME_COLORS["background"]};
   color: {THEME_COLORS["text"]};
   font-family: {THEME_FONT["family"]};
   font-size: {THEME_FONT["size"]};
 }}
+QMainWindow, QDialog {{
+  background: {THEME_COLORS["background"]};
+}}
+QLabel {{
+  background: transparent;
+}}
+QFrame {{
+  border: none;
+}}
 QPushButton {{
-  background: {THEME_COLORS["surface"]};
-  border: 1px solid {THEME_COLORS["border"]};
+  background: {THEME_COLORS["surface_alt"]};
+  border: none;
   border-radius: {THEME_RADIUS["control"]};
   min-height: {THEME_SPACING["button_min_height"]};
   padding: {THEME_SPACING["control_padding"]};
 }}
 QPushButton:hover {{
-  border-color: {THEME_COLORS["accent"]};
-  background: {THEME_COLORS["surface_hover"]};
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 {THEME_COLORS["surface_hover"]},
+    stop:1 #203242);
 }}
 QPushButton:pressed {{
   background: {THEME_COLORS["surface_pressed"]};
 }}
-QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QComboBox {{
+QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QDateEdit, QComboBox {{
   background: {THEME_COLORS["field"]};
-  border: 1px solid {THEME_COLORS["border"]};
+  border: none;
   border-radius: {THEME_RADIUS["control"]};
   min-height: {THEME_SPACING["control_min_height"]};
   padding: {THEME_SPACING["field_padding"]};
+  selection-background-color: {THEME_COLORS["accent"]};
+  selection-color: {THEME_COLORS["background"]};
+}}
+QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QDateEdit:focus, QComboBox:focus {{
+  background: #0D1420;
+}}
+QComboBox::drop-down, QDateTimeEdit::drop-down, QDateEdit::drop-down {{
+  border: none;
+  width: 28px;
+  background: {THEME_COLORS["surface_alt"]};
+  border-top-right-radius: {THEME_RADIUS["control"]};
+  border-bottom-right-radius: {THEME_RADIUS["control"]};
+}}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+  border: none;
+  background: {THEME_COLORS["surface_alt"]};
+  width: 24px;
 }}
 QProgressBar {{
-  background: {THEME_COLORS["border"]};
-  border: 0;
+  background: #0A0E15;
+  border: none;
   border-radius: {THEME_RADIUS["progress"]};
   height: 8px;
 }}
 QProgressBar::chunk {{
-  background: {THEME_COLORS["accent"]};
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 {THEME_COLORS["accent_secondary"]},
+    stop:0.55 {THEME_COLORS["accent"]},
+    stop:1 {THEME_COLORS["warning"]});
   border-radius: {THEME_RADIUS["progress"]};
+}}
+QSlider {{
+  background: transparent;
+  min-height: 24px;
+}}
+QSlider::groove:horizontal {{
+  background: #0A0E15;
+  border: none;
+  height: 8px;
+  border-radius: {THEME_RADIUS["progress"]};
+}}
+QSlider::sub-page:horizontal {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 {THEME_COLORS["accent_secondary"]},
+    stop:0.55 {THEME_COLORS["accent"]},
+    stop:1 {THEME_COLORS["warning"]});
+  border-radius: {THEME_RADIUS["progress"]};
+}}
+QSlider::add-page:horizontal {{
+  background: #0A0E15;
+  border-radius: {THEME_RADIUS["progress"]};
+}}
+QSlider::handle:horizontal {{
+  background: {THEME_COLORS["text"]};
+  border: none;
+  width: 16px;
+  height: 16px;
+  margin: -4px 0;
+  border-radius: 8px;
+}}
+QSlider::handle:horizontal:hover {{
+  background: {THEME_COLORS["accent"]};
+}}
+QScrollArea, QAbstractScrollArea {{
+  background: transparent;
+  border: none;
+}}
+QScrollBar:vertical {{
+  background: transparent;
+  width: 8px;
+  margin: 0;
+}}
+QScrollBar::handle:vertical {{
+  background: #273142;
+  border-radius: 4px;
+  min-height: 28px;
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+  height: 0;
+}}
+QCheckBox {{
+  background: transparent;
+  spacing: 8px;
 }}
 """

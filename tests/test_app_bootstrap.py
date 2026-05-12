@@ -23,15 +23,16 @@ def test_ensure_data_files_creates_data_folder(tmp_path):
 
 
 def test_theme_exposes_reusable_tokens_used_by_qss():
-    assert THEME_COLORS["background"] == "#0E1223"
-    assert THEME_COLORS["accent"] == "#22D3EE"
+    assert THEME_COLORS["background"] == "#080A0F"
+    assert THEME_COLORS["accent"] == "#7DD3FC"
     assert THEME_RADIUS["control"] == "8px"
-    assert THEME_SPACING["control_padding"] == "4px 10px"
-    assert THEME_FONT["family"] == '"Segoe UI"'
+    assert THEME_SPACING["control_padding"] == "5px 12px"
+    assert THEME_FONT["family"] == '"Microsoft YaHei UI", "Segoe UI"'
 
     assert f"background: {THEME_COLORS['background']};" in CALM_TECH_QSS
     assert f"border-radius: {THEME_RADIUS['control']};" in CALM_TECH_QSS
     assert f"font-family: {THEME_FONT['family']};" in CALM_TECH_QSS
+    assert "border: 1px" not in CALM_TECH_QSS
 
 
 def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path):
