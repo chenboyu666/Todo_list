@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import Task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.effects import apply_soft_shadow
 
 
 class HistoryWindow(QDialog):
@@ -33,12 +34,17 @@ class HistoryWindow(QDialog):
         root.addWidget(title)
 
         self.container = QWidget()
+        self.container.setStyleSheet("background: transparent;")
         self.list_layout = QVBoxLayout(self.container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(10)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
         root.addWidget(scroll, 1)
         self._render()
@@ -58,8 +64,9 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setStyleSheet(
             f"QFrame {{ background: {THEME_COLORS['surface']}; "
-            f"border: 1px solid {THEME_COLORS['border']}; border-radius: 8px; }}"
+            "border: none; border-radius: 8px; }}"
         )
+        apply_soft_shadow(card, blur=22, y_offset=8, alpha=85)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 10, 12, 12)
         title = QLabel(f"{task.priority} · {task.title} · {task.progress}%")

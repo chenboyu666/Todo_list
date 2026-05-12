@@ -96,6 +96,27 @@ def test_focus_progress_slider_updates_auto_selected_task(qapp: QApplication, tm
     window.close()
 
 
+def test_progress_slider_drag_defers_save_until_release(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    task = make_task("连续拖动进度", "task-1")
+    store = MemoryStore([task])
+    window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
+
+    window.focus_progress.setSliderDown(True)
+    window.focus_progress.setValue(43)
+
+    assert store.saved_tasks is None
+
+    window.focus_progress.setSliderDown(False)
+    window.commit_focus_progress()
+
+    assert store.saved_tasks is not None
+    assert store.saved_tasks[0].progress == 43
+
+    window.close()
+
+
 def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 
@@ -118,8 +139,9 @@ def test_background_settings_are_applied(qapp: QApplication, tmp_path) -> None:
     settings = AppSettings(background_enabled=True, background_image_path=str(image_path), background_overlay=0.55)
     window = MainWindow(MemoryStore([]), settings, tmp_path / "settings.json")
 
-    assert "border-image" in window.root_widget.styleSheet()
-    assert image_path.as_posix() in window.root_widget.styleSheet()
+    assert window.root_widget.background_enabled is True
+    assert window.root_widget.background_image_path == str(image_path)
+    assert window.root_widget.background_overlay == 0.55
 
     window.close()
 

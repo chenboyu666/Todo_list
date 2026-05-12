@@ -28,6 +28,8 @@ from floating_todo.reminders import mark_event_sent, reminder_events
 from floating_todo.settings import AppSettings, settings_to_dict
 from floating_todo.store import save_json_object
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.backdrop import AnimatedBackdrop
+from floating_todo.ui.effects import apply_soft_shadow
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
@@ -138,7 +140,10 @@ class TaskRowCard(QFrame):
         mime.setData(TASK_MIME_TYPE, self.task_id.encode("utf-8"))
         drag = QDrag(self)
         drag.setMimeData(mime)
-        drag.exec(Qt.MoveAction)
+        try:
+            drag.exec(Qt.MoveAction)
+        finally:
+            self._drag_start = None
 
 
 class MainWindow(QMainWindow):
@@ -174,9 +179,12 @@ class MainWindow(QMainWindow):
         self.focus_progress = QSlider(Qt.Horizontal)
         self.focus_progress.setRange(0, 100)
         self.focus_progress.valueChanged.connect(self.update_focus_progress)
+        self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
         self.empty_state_label = QLabel("没有进行中的任务")
         self.empty_state_hint_label = QLabel("点击新增任务开始")
         self.task_rows_container = QWidget()
+        self.task_rows_container.setObjectName("taskRowsContainer")
+        self.task_rows_container.setStyleSheet("QWidget#taskRowsContainer { background: transparent; }")
         self.task_list_layout = QVBoxLayout(self.task_rows_container)
         self.add_button = QPushButton("+")
         self.settings_button = QPushButton("设置")
@@ -195,7 +203,7 @@ class MainWindow(QMainWindow):
         self._geometry_initialized = True
 
     def _build_ui(self) -> None:
-        root = QWidget()
+        root = AnimatedBackdrop()
         root.setObjectName("mainRoot")
         self.root_widget = root
         root_layout = QVBoxLayout(root)
@@ -216,6 +224,7 @@ class MainWindow(QMainWindow):
         self.focus_card = FocusDropCard(self)
         self.focus_card.setObjectName("focusCard")
         self.focus_card.setStyleSheet(_card_style())
+        apply_soft_shadow(self.focus_card, blur=34, y_offset=12, alpha=120)
         focus_layout = QVBoxLayout(self.focus_card)
         focus_layout.setContentsMargins(12, 10, 12, 12)
         focus_layout.setSpacing(8)
@@ -261,10 +270,14 @@ class MainWindow(QMainWindow):
 
         self.task_list_layout.setContentsMargins(0, 0, 0, 0)
         self.task_list_layout.setSpacing(8)
+        self.task_list_layout.setAlignment(Qt.AlignTop)
         self.task_scroll_area = QScrollArea()
         self.task_scroll_area.setWidgetResizable(True)
         self.task_scroll_area.setFrameShape(QFrame.NoFrame)
         self.task_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.task_scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.task_scroll_area.viewport().setAutoFillBackground(False)
+        self.task_scroll_area.viewport().setStyleSheet("background: transparent;")
         self.task_scroll_area.setWidget(self.task_rows_container)
         self.task_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root_layout.addWidget(self.task_scroll_area, 1)
@@ -273,11 +286,12 @@ class MainWindow(QMainWindow):
     def _summary_card(self, caption: str, value_label: QLabel) -> QFrame:
         card = QFrame()
         card.setStyleSheet(_card_style())
+        apply_soft_shadow(card, blur=24, y_offset=8, alpha=85)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(2)
         caption_label = QLabel(caption)
-        caption_label.setStyleSheet(f"color: {THEME_COLORS['accent']};")
+        caption_label.setStyleSheet(f"color: {THEME_COLORS['muted']};")
         value_label.setStyleSheet("font-size: 20px; font-weight: 700;")
         layout.addWidget(caption_label)
         layout.addWidget(value_label)
@@ -306,6 +320,14 @@ class MainWindow(QMainWindow):
         self.refresh()
 
     def update_focus_progress(self, value: int) -> None:
+        if self.focus_progress.isSliderDown():
+            return
+        self._commit_focus_progress(value)
+
+    def commit_focus_progress(self) -> None:
+        self._commit_focus_progress(self.focus_progress.value())
+
+    def _commit_focus_progress(self, value: int) -> None:
         focused = self.focus_task()
         if focused is None:
             return
@@ -391,19 +413,11 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.settings.always_on_top)
 
     def apply_background_settings(self) -> None:
-        overlay = int(self.settings.background_overlay * 255)
-        background = f"rgba(14, 18, 35, {overlay})"
-        image_path = Path(self.settings.background_image_path)
-        if self.settings.background_enabled and image_path.exists():
-            path = image_path.as_posix()
-            self.root_widget.setStyleSheet(
-                "QWidget#mainRoot {"
-                f"border-image: url({path}) 0 0 0 0 stretch stretch;"
-                f"background-color: {background};"
-                "}"
-            )
-        else:
-            self.root_widget.setStyleSheet(f"QWidget#mainRoot {{ background: {THEME_COLORS['background']}; }}")
+        self.root_widget.set_background_settings(
+            self.settings.background_enabled,
+            self.settings.background_image_path,
+            self.settings.background_overlay,
+        )
 
     def apply_low_distraction_settings(self) -> None:
         hidden = self.settings.low_distraction_mode
@@ -552,13 +566,22 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style())
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(6)
 
         top = QHBoxLayout()
         priority = QLabel(str(row["priority"]))
-        priority.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
+        priority.setAlignment(Qt.AlignCenter)
+        priority.setFixedHeight(24)
+        priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        priority.setStyleSheet(
+            "font-weight: 700; padding: 2px 8px; border-radius: 7px; "
+            f"background: {_priority_chip_background(str(row['priority']))}; "
+            f"color: {_priority_chip_text(str(row['priority']))};"
+        )
         top.addWidget(priority)
         title = QLabel(str(row["title"]))
         title.setWordWrap(True)
@@ -571,7 +594,12 @@ class MainWindow(QMainWindow):
         progress = QSlider(Qt.Horizontal)
         progress.setRange(0, 100)
         progress.setValue(int(row["progress"]))
-        progress.valueChanged.connect(lambda value, task_id=task_id: self.update_task_progress(task_id, value))
+        progress.valueChanged.connect(
+            lambda value, task_id=task_id, slider=progress, label=progress_label: self._handle_row_progress_value(
+                task_id, slider, label, value
+            )
+        )
+        progress.sliderReleased.connect(lambda task_id=task_id, slider=progress: self.update_task_progress(task_id, slider.value()))
         layout.addWidget(progress)
 
         actions = QHBoxLayout()
@@ -600,9 +628,31 @@ class MainWindow(QMainWindow):
         layout.addLayout(meta)
         return card
 
+    def _handle_row_progress_value(self, task_id: str, slider: QSlider, label: QLabel, value: int) -> None:
+        label.setText(f"{value}%")
+        if slider.isSliderDown():
+            return
+        self.update_task_progress(task_id, value)
+
 
 def _card_style() -> str:
     return (
         f"QFrame {{ background: {THEME_COLORS['surface']}; "
-        f"border: 1px solid {THEME_COLORS['border']}; border-radius: 8px; }}"
+        "border: none; border-radius: 8px; }}"
     )
+
+
+def _priority_chip_background(priority: str) -> str:
+    return {
+        "P1": "#3B2416",
+        "P2": "#102333",
+        "P3": "#132820",
+    }.get(priority, "#1A1F2B")
+
+
+def _priority_chip_text(priority: str) -> str:
+    return {
+        "P1": THEME_COLORS["warning"],
+        "P2": THEME_COLORS["accent"],
+        "P3": THEME_COLORS["accent_secondary"],
+    }.get(priority, THEME_COLORS["text"])
