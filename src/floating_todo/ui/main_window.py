@@ -29,6 +29,7 @@ from floating_todo.settings import AppSettings, settings_to_dict
 from floating_todo.store import save_json_object
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.backdrop import AnimatedBackdrop
+from floating_todo.ui.completion_dialog import CompletionDialog
 from floating_todo.ui.effects import apply_soft_shadow
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
@@ -373,6 +374,8 @@ class MainWindow(QMainWindow):
         index = self._task_index(task_id)
         if index is None:
             return
+        if not self.confirm_complete_task(self.tasks[index]):
+            return
         now = datetime.now(timezone.utc)
         completed = replace(self.tasks[index], status="done", progress=100, completed_at=now, updated_at=now)
         self.tasks = [*self.tasks[:index], completed, *self.tasks[index + 1 :]]
@@ -381,6 +384,10 @@ class MainWindow(QMainWindow):
             self._save_settings()
         self.store.save_tasks(self.tasks)
         self.refresh()
+
+    def confirm_complete_task(self, task: Task) -> bool:
+        dialog = CompletionDialog(task, self)
+        return dialog.exec() == QDialog.Accepted
 
     def delete_task(self, task_id: str) -> None:
         index = self._task_index(task_id)

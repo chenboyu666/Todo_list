@@ -179,6 +179,30 @@ def test_dialog_saves_selected_local_deadline_as_utc(
     dialog.close()
 
 
+def test_effort_change_updates_deadline_from_current_local_time(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.task_dialog as task_dialog
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 5, 14, 9, 0, tzinfo=tz)
+
+    monkeypatch.setattr(task_dialog, "datetime", FrozenDateTime)
+    monkeypatch.setattr(task_dialog, "local_timezone", lambda: timezone(timedelta(hours=8)))
+    dialog = task_dialog.TaskDialog()
+
+    dialog.effort_spin.setValue(90)
+
+    assert dialog.deadline_date_input.date().toPython().isoformat() == "2026-05-14"
+    assert dialog.deadline_hour_input.currentText() == "10"
+    assert dialog.deadline_minute_input.currentText() == "30"
+    assert dialog.build_task().deadline == datetime(2026, 5, 14, 2, 30, tzinfo=timezone.utc)
+
+    dialog.close()
+
+
 def test_edit_dialog_preserves_empty_deadline_when_unchanged(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 

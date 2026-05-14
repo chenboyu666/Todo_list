@@ -343,6 +343,7 @@ def test_complete_task_marks_done_with_progress_and_completion_time(qapp: QAppli
     original = make_task("完成我", task_id="task-1", progress=40)
     store = MemoryStore([original])
     window = MainWindow(store)
+    window.confirm_complete_task = lambda task: True
 
     window.complete_task("task-1")
 
@@ -354,6 +355,22 @@ def test_complete_task_marks_done_with_progress_and_completion_time(qapp: QAppli
     assert completed.completed_at is not None
     assert completed.completed_at.tzinfo is timezone.utc
     assert window.task_list_layout.count() == 0
+
+    window.close()
+
+
+def test_complete_task_keeps_active_when_confirmation_declines(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    original = make_task("暂不完成", task_id="task-1", progress=40)
+    store = MemoryStore([original])
+    window = MainWindow(store)
+    window.confirm_complete_task = lambda task: False
+
+    window.complete_task("task-1")
+
+    assert store.saved_tasks is None
+    assert window.tasks == [original]
 
     window.close()
 
