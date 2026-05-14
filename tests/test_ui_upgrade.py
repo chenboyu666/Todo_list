@@ -153,6 +153,8 @@ def test_history_window_saves_reflection(qapp: QApplication) -> None:
     store = MemoryStore([task])
     window = HistoryWindow([task], store)
 
+    assert window.windowFlags() & Qt.FramelessWindowHint
+
     window.save_reflection("done-1", "这次要提前拆小任务")
 
     assert store.saved_tasks == [replace(task, reflection="这次要提前拆小任务")]

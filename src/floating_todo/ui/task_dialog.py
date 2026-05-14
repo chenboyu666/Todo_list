@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, time, timezone
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, QPoint, QTimeZone, Qt
+from PySide6.QtCore import QDate, QDateTime, QTimeZone, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QSlider,
     QSpinBox,
     QTextEdit,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
 
 
@@ -42,10 +42,8 @@ class DeadlineInputAdapter:
         self.dialog = dialog
 
     def setDateTime(self, value: QDateTime) -> None:
-        parsed = to_local_datetime(value.toPython())
-        self.dialog.deadline_date_input.setDate(QDate(parsed.year, parsed.month, parsed.day))
-        self.dialog.deadline_hour_input.setCurrentText(f"{parsed.hour:02d}")
-        self.dialog.deadline_minute_input.setCurrentText(f"{parsed.minute:02d}")
+        self.dialog._set_deadline_fields(value.toPython())
+        self.dialog._deadline_changed = True
 
     def dateTime(self) -> QDateTime:
         deadline = self.dialog._deadline()
@@ -55,44 +53,6 @@ class DeadlineInputAdapter:
 
     def calendarPopup(self) -> bool:
         return self.dialog.deadline_date_input.calendarPopup()
-
-
-class DialogTitleBar(QFrame):
-    def __init__(self, dialog: QDialog, title: str) -> None:
-        super().__init__(dialog)
-        self.dialog = dialog
-        self._drag_start: QPoint | None = None
-        self.setStyleSheet("QFrame { background: transparent; border: none; }")
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
-        layout.addWidget(title_label)
-        layout.addStretch(1)
-        close_button = QPushButton("X")
-        close_button.setFixedWidth(38)
-        close_button.setToolTip("关闭")
-        close_button.clicked.connect(dialog.reject)
-        layout.addWidget(close_button)
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton:
-            self._drag_start = event.globalPosition().toPoint() - self.dialog.frameGeometry().topLeft()
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_start is not None and event.buttons() & Qt.LeftButton:
-            self.dialog.move(event.globalPosition().toPoint() - self._drag_start)
-            event.accept()
-            return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_start = None
-        super().mouseReleaseEvent(event)
 
 
 class TaskDialog(QDialog):
@@ -139,6 +99,7 @@ class TaskDialog(QDialog):
         self.deadline_date_input.dateChanged.connect(self._mark_deadline_changed)
         self.deadline_hour_input.currentTextChanged.connect(self._mark_deadline_changed)
         self.deadline_minute_input.currentTextChanged.connect(self._mark_deadline_changed)
+        self.effort_input.valueChanged.connect(self._sync_deadline_from_effort)
         self.progress_slider.valueChanged.connect(lambda value: self.progress_label.setText(f"{value}%"))
 
     def _build_ui(self) -> None:
@@ -207,6 +168,25 @@ class TaskDialog(QDialog):
         self.notes_input.setPlainText(task.notes if task else "")
 
     def _mark_deadline_changed(self, *args) -> None:
+        self._deadline_changed = True
+
+    def _set_deadline_fields(self, deadline: datetime) -> None:
+        deadline = to_local_datetime(deadline)
+        self.deadline_date_input.blockSignals(True)
+        self.deadline_hour_input.blockSignals(True)
+        self.deadline_minute_input.blockSignals(True)
+        try:
+            self.deadline_date_input.setDate(QDate(deadline.year, deadline.month, deadline.day))
+            self.deadline_hour_input.setCurrentText(f"{deadline.hour:02d}")
+            self.deadline_minute_input.setCurrentText(f"{deadline.minute:02d}")
+        finally:
+            self.deadline_date_input.blockSignals(False)
+            self.deadline_hour_input.blockSignals(False)
+            self.deadline_minute_input.blockSignals(False)
+
+    def _sync_deadline_from_effort(self, minutes: int) -> None:
+        base = datetime.now(local_timezone()).replace(second=0, microsecond=0)
+        self._set_deadline_fields(base + timedelta(minutes=max(0, int(minutes))))
         self._deadline_changed = True
 
     def _deadline(self) -> datetime | None:
