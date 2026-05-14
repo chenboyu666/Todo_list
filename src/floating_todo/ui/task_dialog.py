@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, time, timezone
+from datetime import datetime, timedelta, time, timezone
 from uuid import uuid4
 
 from PySide6.QtCore import QDate, QDateTime, QPoint, QTimeZone, Qt
@@ -27,12 +27,22 @@ from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.effects import apply_soft_shadow
 
 
+def local_timezone():
+    return datetime.now().astimezone().tzinfo or timezone.utc
+
+
+def to_local_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(local_timezone())
+
+
 class DeadlineInputAdapter:
     def __init__(self, dialog: "TaskDialog") -> None:
         self.dialog = dialog
 
     def setDateTime(self, value: QDateTime) -> None:
-        parsed = value.toPython()
+        parsed = to_local_datetime(value.toPython())
         self.dialog.deadline_date_input.setDate(QDate(parsed.year, parsed.month, parsed.day))
         self.dialog.deadline_hour_input.setCurrentText(f"{parsed.hour:02d}")
         self.dialog.deadline_minute_input.setCurrentText(f"{parsed.minute:02d}")
@@ -182,11 +192,9 @@ class TaskDialog(QDialog):
         layout.addWidget(buttons)
 
     def _populate_fields(self, task: Task | None) -> None:
-        default_deadline = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        default_deadline = default_deadline.replace(hour=(default_deadline.hour + 1) % 24)
+        default_deadline = datetime.now(local_timezone()).replace(second=0, microsecond=0) + timedelta(hours=1)
         deadline = task.deadline if task and task.deadline else default_deadline
-        if deadline.tzinfo is None:
-            deadline = deadline.replace(tzinfo=timezone.utc)
+        deadline = to_local_datetime(deadline)
 
         self.title_input.setText(task.title if task else "")
         self.priority_input.setCurrentText(task.priority if task else "P2")
@@ -208,9 +216,9 @@ class TaskDialog(QDialog):
         selected_time = time(
             hour=int(self.deadline_hour_input.currentText()),
             minute=int(self.deadline_minute_input.currentText()),
-            tzinfo=timezone.utc,
+            tzinfo=local_timezone(),
         )
-        return datetime.combine(selected_date, selected_time)
+        return datetime.combine(selected_date, selected_time).astimezone(timezone.utc)
 
     def build_task(self) -> Task:
         now = datetime.now(timezone.utc)
