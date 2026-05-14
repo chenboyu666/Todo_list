@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from PySide6.QtCore import QDateTime, QTimeZone
+from PySide6.QtCore import QDate, QDateTime, QTimeZone
 from PySide6.QtWidgets import QApplication, QMainWindow
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
@@ -141,6 +141,42 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
 
     dialog.close()
     parent.close()
+
+
+def test_edit_dialog_displays_stored_deadline_in_local_time(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.task_dialog as task_dialog
+
+    monkeypatch.setattr(task_dialog, "local_timezone", lambda: timezone(timedelta(hours=8)))
+    existing = replace(make_task(), deadline=datetime(2026, 5, 12, 16, 45, tzinfo=timezone.utc))
+
+    dialog = task_dialog.TaskDialog(None, existing)
+
+    assert dialog.deadline_date_input.date().toPython().isoformat() == "2026-05-13"
+    assert dialog.deadline_hour_input.currentText() == "00"
+    assert dialog.deadline_minute_input.currentText() == "45"
+    assert dialog.build_task().deadline == existing.deadline
+
+    dialog.close()
+
+
+def test_dialog_saves_selected_local_deadline_as_utc(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.task_dialog as task_dialog
+
+    monkeypatch.setattr(task_dialog, "local_timezone", lambda: timezone(timedelta(hours=8)))
+    dialog = task_dialog.TaskDialog()
+    dialog.deadline_date_input.setDate(QDate(2026, 5, 14))
+    dialog.deadline_hour_input.setCurrentText("09")
+    dialog.deadline_minute_input.setCurrentText("30")
+
+    task = dialog.build_task()
+
+    assert task.deadline == datetime(2026, 5, 14, 1, 30, tzinfo=timezone.utc)
+
+    dialog.close()
 
 
 def test_edit_dialog_preserves_empty_deadline_when_unchanged(qapp: QApplication) -> None:
