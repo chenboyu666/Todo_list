@@ -151,4 +151,32 @@ QCheckBox {{
   background: transparent;
   spacing: 8px;
 }}
+QMenu {{
+  background: {THEME_COLORS["surface"]};
+  color: {THEME_COLORS["text"]};
+  border: none;
+  border-radius: 8px;
+  padding: 6px;
+}}
+QMenu::item {{
+  background: transparent;
+  color: {THEME_COLORS["text"]};
+  min-height: 28px;
+  padding: 6px 28px 6px 14px;
+  border-radius: 6px;
+}}
+QMenu::item:selected {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #143044,
+    stop:1 #1E3A36);
+  color: {THEME_COLORS["text"]};
+}}
+QMenu::item:disabled {{
+  color: {THEME_COLORS["muted"]};
+}}
+QMenu::separator {{
+  height: 1px;
+  background: #253044;
+  margin: 6px 8px;
+}}
 """
