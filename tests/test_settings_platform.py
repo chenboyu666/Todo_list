@@ -66,14 +66,24 @@ def test_malformed_settings_fall_back_without_raising():
         {
             "opacity": "bad",
             "notification_lead_minutes": {},
+            "notification_repeat_minutes": {},
             "window_geometry": {"x": "bad", "y": "30", "width": None, "height": []},
         }
     )
 
     assert settings.opacity == 0.96
     assert settings.notification_lead_minutes == 15
+    assert settings.notification_repeat_minutes == 10
     assert dict(settings.window_geometry) == {"x": 1200, "y": 30, "width": 410, "height": 620}
     assert settings_from_dict({"opacity": None}).opacity == 0.96
+
+
+def test_notification_repeat_minutes_round_trip_and_clamps_minimum():
+    settings = settings_from_dict({"notification_repeat_minutes": "12"})
+
+    assert settings.notification_repeat_minutes == 12
+    assert settings_to_dict(settings)["notification_repeat_minutes"] == 12
+    assert settings_from_dict({"notification_repeat_minutes": 0}).notification_repeat_minutes == 1
 
 
 def test_boolean_strings_parse_predictably():

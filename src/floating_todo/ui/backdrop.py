@@ -33,6 +33,9 @@ class AnimatedBackdrop(QWidget):
         self._phase = (self._phase + 1) % 10000
         self.update()
 
+    def stop_animation(self) -> None:
+        self._timer.stop()
+
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)

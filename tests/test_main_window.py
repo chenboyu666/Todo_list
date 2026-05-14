@@ -633,16 +633,16 @@ def test_refresh_sends_due_reminders_once_and_persists_flags(qapp: QApplication)
 
     window = MainWindow(store, AppSettings(notification_lead_minutes=15), notification_sender=sender)
 
-    assert sender.sent == [("任务临近截止", "提醒任务"), ("任务已到期", "提醒任务")]
+    assert sender.sent == [("任务已超时", "提醒任务")]
     assert store.save_count == 1
     assert store.saved_tasks is not None
     saved_task = store.saved_tasks[0]
-    assert saved_task.notification_state["deadline_warning_sent"] is True
+    assert saved_task.notification_state["deadline_warning_sent"] is False
     assert saved_task.notification_state["deadline_due_sent"] is True
 
     window.refresh()
 
-    assert sender.sent == [("任务临近截止", "提醒任务"), ("任务已到期", "提醒任务")]
+    assert sender.sent == [("任务已超时", "提醒任务")]
     assert store.save_count == 1
 
     window.close()

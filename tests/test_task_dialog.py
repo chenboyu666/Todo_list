@@ -130,7 +130,7 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.status == existing.status
     assert updated.created_at == existing.created_at
     assert updated.completed_at == existing.completed_at
-    assert updated.notification_state == existing.notification_state
+    assert dict(updated.notification_state) == DEFAULT_NOTIFICATION_STATE
     assert updated.title == "更新任务"
     assert updated.priority == "P3"
     assert updated.effort_minutes == 120
@@ -138,6 +138,23 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.progress == 70
     assert updated.notes == "新备注"
     assert updated.updated_at > existing.updated_at
+
+    dialog.close()
+    parent.close()
+
+
+def test_edit_dialog_preserves_notification_state_when_deadline_is_unchanged(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    existing = make_task()
+    parent = QMainWindow()
+    dialog = TaskDialog(parent, existing)
+    dialog.title_edit.setText("只改标题")
+
+    updated = dialog.build_task()
+
+    assert updated.deadline == existing.deadline
+    assert updated.notification_state == existing.notification_state
 
     dialog.close()
     parent.close()
