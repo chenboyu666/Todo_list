@@ -27,6 +27,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         opacity=0.72,
         low_distraction_mode=True,
         notification_lead_minutes=45,
+        notification_repeat_minutes=12,
     )
     dialog = SettingsWindow(settings)
 
@@ -42,6 +43,9 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.lead_minutes_spinbox.minimum() == 1
     assert dialog.lead_minutes_spinbox.maximum() == 240
     assert dialog.lead_minutes_spinbox.value() == 45
+    assert dialog.repeat_minutes_spinbox.minimum() == 1
+    assert dialog.repeat_minutes_spinbox.maximum() == 240
+    assert dialog.repeat_minutes_spinbox.value() == 12
 
     visible_text = "\n".join(
         [widget.text() for widget in dialog.findChildren(QCheckBox)]
@@ -55,6 +59,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         "低干扰模式",
         "透明度",
         "提前提醒分钟",
+        "重复提醒间隔分钟",
     ):
         assert label in visible_text
 
@@ -73,6 +78,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     dialog.low_distraction_checkbox.setChecked(True)
     dialog.opacity_slider.setValue(64)
     dialog.lead_minutes_spinbox.setValue(33)
+    dialog.repeat_minutes_spinbox.setValue(9)
 
     updated = dialog.build_settings()
 
@@ -84,6 +90,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.low_distraction_mode is True
     assert updated.opacity == 0.64
     assert updated.notification_lead_minutes == 33
+    assert updated.notification_repeat_minutes == 9
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
     assert updated.theme == "custom"
 

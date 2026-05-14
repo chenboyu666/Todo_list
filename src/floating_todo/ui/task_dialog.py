@@ -204,15 +204,22 @@ class TaskDialog(QDialog):
         now = datetime.now(timezone.utc)
         title = self.title_input.text().strip()
         if self.task:
+            deadline = self._deadline()
+            notification_state = (
+                dict(DEFAULT_NOTIFICATION_STATE)
+                if deadline != self.task.deadline
+                else self.task.notification_state
+            )
             return replace(
                 self.task,
                 title=title,
                 priority=self.priority_input.currentText(),
                 effort_minutes=self.effort_input.value(),
-                deadline=self._deadline(),
+                deadline=deadline,
                 progress=self.progress_slider.value(),
                 updated_at=now,
                 notes=self.notes_input.toPlainText(),
+                notification_state=notification_state,
             )
         return Task(
             id=str(uuid4()),

@@ -51,6 +51,11 @@ class SettingsWindow(QDialog):
         self.lead_minutes.setValue(settings.notification_lead_minutes)
         self.lead_minutes_spin = self.lead_minutes
         self.lead_minutes_spinbox = self.lead_minutes
+        self.repeat_minutes = QSpinBox()
+        self.repeat_minutes.setRange(1, 240)
+        self.repeat_minutes.setValue(settings.notification_repeat_minutes)
+        self.repeat_minutes_spin = self.repeat_minutes
+        self.repeat_minutes_spinbox = self.repeat_minutes
 
         self.background_enabled = QCheckBox()
         self.background_enabled.setChecked(settings.background_enabled)
@@ -70,6 +75,7 @@ class SettingsWindow(QDialog):
         form.addRow("低干扰模式", self.low_distraction)
         form.addRow("透明度", self.opacity)
         form.addRow("提前提醒分钟", self.lead_minutes)
+        form.addRow("重复提醒间隔分钟", self.repeat_minutes)
         form.addRow("启用背景图片", self.background_enabled)
 
         background_layout = QHBoxLayout()
@@ -108,6 +114,7 @@ class SettingsWindow(QDialog):
             low_distraction_mode=self.low_distraction.isChecked(),
             opacity=self.opacity.value() / 100,
             notification_lead_minutes=self.lead_minutes.value(),
+            notification_repeat_minutes=self.repeat_minutes.value(),
             background_enabled=self.background_enabled.isChecked(),
             background_image_path=self.background_path.text().strip(),
             background_overlay=self.background_overlay.value() / 100,

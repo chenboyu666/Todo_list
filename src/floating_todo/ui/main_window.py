@@ -472,6 +472,8 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.hide()
             return
+        self._clock_timer.stop()
+        self.root_widget.stop_animation()
         event.accept()
 
     def setGeometry(self, *args) -> None:
@@ -517,14 +519,19 @@ class MainWindow(QMainWindow):
     def process_reminders(self, now: datetime) -> None:
         if self.notification_sender is None:
             return
-        event_titles = {"deadline_warning": "任务临近截止", "deadline_due": "任务已到期"}
+        event_titles = {"deadline_warning": "任务临近截止", "deadline_due": "任务已超时"}
         updated_tasks: list[Task] = []
         changed = False
         for task in self.tasks:
             updated_task = task
-            for event in reminder_events(updated_task, now, self.settings.notification_lead_minutes):
+            for event in reminder_events(
+                updated_task,
+                now,
+                self.settings.notification_lead_minutes,
+                self.settings.notification_repeat_minutes,
+            ):
                 self.notification_sender.send(event_titles[event], updated_task.title)
-                updated_task = mark_event_sent(updated_task, event)
+                updated_task = mark_event_sent(updated_task, event, now)
                 changed = True
             updated_tasks.append(updated_task)
         if changed:

@@ -30,7 +30,7 @@ class Task:
     completed_at: datetime | None
     notes: str = ""
     reflection: str = ""
-    notification_state: Mapping[str, bool] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
+    notification_state: Mapping[str, Any] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "deadline", normalize_datetime(self.deadline))

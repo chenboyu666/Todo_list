@@ -18,6 +18,7 @@ class AppSettings:
     opacity: float = 0.96
     low_distraction_mode: bool = False
     notification_lead_minutes: int = 15
+    notification_repeat_minutes: int = 10
     window_geometry: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(DEFAULT_GEOMETRY)))
     theme: str = "calm-tech-dark"
     focus_task_id: str | None = None
@@ -84,6 +85,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         opacity=opacity,
         low_distraction_mode=_coerce_bool(data.get("low_distraction_mode", False), False),
         notification_lead_minutes=max(1, _coerce_int(data.get("notification_lead_minutes", 15), 15)),
+        notification_repeat_minutes=max(1, _coerce_int(data.get("notification_repeat_minutes", 10), 10)),
         window_geometry=geometry,
         theme=str(data.get("theme", "calm-tech-dark")),
         focus_task_id=str(raw_focus_task_id) if raw_focus_task_id else None,
@@ -102,6 +104,7 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "opacity": settings.opacity,
         "low_distraction_mode": settings.low_distraction_mode,
         "notification_lead_minutes": settings.notification_lead_minutes,
+        "notification_repeat_minutes": settings.notification_repeat_minutes,
         "window_geometry": dict(settings.window_geometry),
         "theme": settings.theme,
         "focus_task_id": settings.focus_task_id,
