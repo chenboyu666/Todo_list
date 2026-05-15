@@ -10,6 +10,7 @@ from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -150,22 +151,6 @@ class TaskRowCard(QFrame):
         super().__init__(window)
         self.task_id = task_id
         self.window = window
-        self._drag_start: QPoint | None = None
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton:
-            self._drag_start = event.position().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_start is None or not event.buttons() & Qt.LeftButton:
-            super().mouseMoveEvent(event)
-            return
-        if (event.position().toPoint() - self._drag_start).manhattanLength() < 8:
-            super().mouseMoveEvent(event)
-            return
-        self.start_drag()
-        event.accept()
 
     def start_drag(self) -> None:
         if self.window.is_task_drag_active:
@@ -303,6 +288,7 @@ class MainWindow(QMainWindow):
         self.focus_deadline_label = QLabel("截止 --:--:--")
         self.focus_urgency_label = QLabel("等待")
         self.focus_progress = NoWheelSlider(Qt.Horizontal)
+        self.focus_progress.setObjectName("focusProgress")
         self.focus_progress.setRange(0, 100)
         self.focus_progress.valueChanged.connect(self.update_focus_progress)
         self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
@@ -311,7 +297,7 @@ class MainWindow(QMainWindow):
         self.task_rows_container = QWidget()
         self.task_rows_container.setObjectName("taskRowsContainer")
         self.task_rows_container.setStyleSheet("QWidget#taskRowsContainer { background: transparent; }")
-        self.task_list_layout = QVBoxLayout(self.task_rows_container)
+        self.task_list_layout = QGridLayout(self.task_rows_container)
         self.add_button = QPushButton("+")
         self.settings_button = QPushButton("设置")
         self.history_button = QPushButton("历史")
@@ -399,7 +385,8 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self.empty_state_widget)
 
         self.task_list_layout.setContentsMargins(0, 0, 0, 0)
-        self.task_list_layout.setSpacing(8)
+        self.task_list_layout.setHorizontalSpacing(10)
+        self.task_list_layout.setVerticalSpacing(10)
         self.task_list_layout.setAlignment(Qt.AlignTop)
         self.task_scroll_area = QScrollArea()
         self.task_scroll_area.setWidgetResizable(True)
@@ -774,20 +761,30 @@ class MainWindow(QMainWindow):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        for row in rows:
-            self.task_list_layout.addWidget(self._task_row(row, focus_task_id))
+        columns = self._task_grid_columns()
+        for column in range(3):
+            self.task_list_layout.setColumnStretch(column, 1 if column < columns else 0)
+        for index, row in enumerate(rows):
+            self.task_list_layout.addWidget(self._task_row(row, focus_task_id), index // columns, index % columns)
+
+    def _task_grid_columns(self) -> int:
+        width = self.task_scroll_area.viewport().width() if hasattr(self, "task_scroll_area") else self.width()
+        return 2 if width >= 620 else 1
 
     def _task_row(self, row: dict[str, object], focus_task_id: str | None = None) -> QFrame:
         task_id = str(row["id"])
         urgency = str(row["urgency"])
+        is_focused = task_id == focus_task_id
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
-        card.setStyleSheet(_card_style(urgency, selected=task_id == focus_task_id))
+        card.setStyleSheet(_card_style(urgency, selected=is_focused))
+        card.setMinimumHeight(152)
+        card.setMinimumWidth(244)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
+        apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
 
         top = QHBoxLayout()
         drag_handle = TaskDragHandle(card)
@@ -809,13 +806,18 @@ class MainWindow(QMainWindow):
         top.addWidget(urgency_chip)
         title = QLabel(str(row["title"]))
         title.setWordWrap(True)
-        title.setStyleSheet("font-weight: 700;")
+        title.setStyleSheet("font-size: 14px; font-weight: 700;")
         top.addWidget(title, 1)
-        progress_label = QLabel(str(row["progress_label"]))
-        top.addWidget(progress_label)
         layout.addLayout(top)
 
+        progress_label = QLabel(str(row["progress_label"]))
+        progress_label.setAlignment(Qt.AlignCenter)
+        progress_label.setFixedHeight(24)
+        progress_label.setStyleSheet(_progress_value_style(selected=is_focused))
+        progress_row = QHBoxLayout()
+        progress_row.setSpacing(8)
         progress = NoWheelSlider(Qt.Horizontal)
+        progress.setObjectName("activeTaskProgress" if is_focused else "taskProgress")
         progress.setRange(0, 100)
         progress.setValue(int(row["progress"]))
         progress.valueChanged.connect(
@@ -824,13 +826,24 @@ class MainWindow(QMainWindow):
             )
         )
         progress.sliderReleased.connect(lambda task_id=task_id, slider=progress: self.update_task_progress(task_id, slider.value()))
-        layout.addWidget(progress)
+        progress_row.addWidget(progress, 1)
+        progress_row.addWidget(progress_label)
+        layout.addLayout(progress_row)
+
+        meta = QHBoxLayout()
+        meta.addWidget(QLabel(f"工作量 {row['effort_label']}"))
+        meta.addStretch(1)
+        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
+        deadline.setStyleSheet(_deadline_label_style(urgency))
+        meta.addWidget(deadline)
+        layout.addLayout(meta)
 
         actions = QHBoxLayout()
         actions.addStretch(1)
-        focus_button = QPushButton("进行中" if task_id == focus_task_id else "置顶")
+        focus_button = QPushButton("进行中" if is_focused else "置顶")
         focus_button.setToolTip("设为当前置顶任务")
-        focus_button.setEnabled(task_id != focus_task_id)
+        if is_focused:
+            focus_button.setObjectName("currentTaskButton")
         focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
         actions.addWidget(focus_button)
         edit_button = QPushButton("编辑")
@@ -846,14 +859,6 @@ class MainWindow(QMainWindow):
         delete_button.clicked.connect(lambda checked=False, task_id=task_id: self.delete_task(task_id))
         actions.addWidget(delete_button)
         layout.addLayout(actions)
-
-        meta = QHBoxLayout()
-        meta.addWidget(QLabel(f"工作量 {row['effort_label']}"))
-        meta.addStretch(1)
-        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
-        deadline.setStyleSheet(_deadline_label_style(urgency))
-        meta.addWidget(deadline)
-        layout.addLayout(meta)
         return card
 
     def _handle_row_progress_value(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
@@ -922,13 +927,15 @@ def _urgency_style(urgency: str) -> dict[str, str]:
 def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
     style = _urgency_style(urgency)
     selected_stop = style["selected"] if selected else style["surface_alt"]
+    border_color = style["accent"] if selected else "#26364A"
+    glow_stop = "#24465A" if selected else selected_stop
     return (
         "QFrame {"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
         f" stop:0 {style['surface']},"
-        f" stop:0.68 {THEME_COLORS['surface']},"
-        f" stop:1 {selected_stop});"
-        "border: 1px solid #26364A;"
+        f" stop:0.58 {THEME_COLORS['surface']},"
+        f" stop:1 {glow_stop});"
+        f"border: 1px solid {border_color};"
         "border-radius: 8px;"
         "}"
     )
@@ -944,6 +951,19 @@ def _urgency_chip_style(urgency: str) -> str:
 
 def _deadline_label_style(urgency: str) -> str:
     return f"color: {_urgency_style(urgency)['accent']}; font-weight: 700;"
+
+
+def _progress_value_style(*, selected: bool = False) -> str:
+    if selected:
+        return (
+            "font-weight: 800; min-width: 48px; padding: 1px 8px; border-radius: 8px; "
+            "color: #ECFEFF; background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            " stop:0 #155E75, stop:0.55 #0E7490, stop:1 #047857);"
+        )
+    return (
+        f"font-weight: 700; min-width: 48px; padding: 1px 8px; border-radius: 8px; "
+        f"color: {THEME_COLORS['accent']}; background: #102033;"
+    )
 
 
 def _priority_chip_background(priority: str) -> str:

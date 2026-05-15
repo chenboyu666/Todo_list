@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 import os
 
 import pytest
-from PySide6.QtCore import QDateTime, QPoint, QTimeZone, Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
+from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QPushButton
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -129,6 +130,58 @@ def test_progress_slider_drag_defers_save_until_release(qapp: QApplication, tmp_
     window.close()
 
 
+def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> None:
+    slider = NoWheelSlider(Qt.Horizontal)
+    slider.setRange(0, 100)
+    slider.resize(220, 28)
+    release_count = 0
+
+    def count_release() -> None:
+        nonlocal release_count
+        release_count += 1
+
+    slider.sliderReleased.connect(count_release)
+
+    slider.mousePressEvent(
+        QMouseEvent(
+            QEvent.MouseButtonPress,
+            QPointF(12, 14),
+            QPointF(12, 14),
+            Qt.LeftButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+    )
+    slider.mouseMoveEvent(
+        QMouseEvent(
+            QEvent.MouseMove,
+            QPointF(198, 14),
+            QPointF(198, 14),
+            Qt.NoButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+    )
+
+    assert slider.isSliderDown() is True
+    assert slider.value() > 80
+
+    slider.mouseReleaseEvent(
+        QMouseEvent(
+            QEvent.MouseButtonRelease,
+            QPointF(198, 14),
+            QPointF(198, 14),
+            Qt.LeftButton,
+            Qt.NoButton,
+            Qt.NoModifier,
+        )
+    )
+
+    assert slider.isSliderDown() is False
+    assert release_count == 1
+    slider.close()
+
+
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow, TaskDragHandle
 
@@ -144,9 +197,13 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "2026-" in row_labels
     assert "已超时" in row_labels
     assert "进行中" in button_text
+    assert isinstance(window.task_list_layout, QGridLayout)
     assert isinstance(window.task_rows_container.findChildren(NoWheelSlider)[0], NoWheelSlider)
+    assert window.task_rows_container.findChildren(NoWheelSlider)[0].objectName() == "activeTaskProgress"
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
+    current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
+    assert current_buttons[0].objectName() == "currentTaskButton"
     drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
     assert drag_handles
     assert drag_handles[0].toolTip() == "拖到上方设为进行中"
