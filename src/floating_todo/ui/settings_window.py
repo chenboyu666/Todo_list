@@ -101,7 +101,7 @@ class SettingsWindow(QDialog):
             self,
             "选择背景图片",
             self.background_path.text(),
-            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All Files (*)",
+            "Images and GIFs (*.png *.jpg *.jpeg *.bmp *.webp *.gif);;All Files (*)",
         )
         if path:
             self.background_path.setText(path)

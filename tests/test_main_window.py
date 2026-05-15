@@ -92,6 +92,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.settings_button.text() == "设置"
     assert window.settings_button.toolTip() == "打开设置"
     assert window.focus_progress.value() == 0
+    assert window.focus_progress_label.text() == "0%"
     assert window.focus_complete_button.isEnabled() is False
     assert window.focus_delete_button.isEnabled() is False
     assert window.active_count_label.text() == "0"
@@ -143,6 +144,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.focus_meta_label.text() == "P1 · 工作量 90 min"
     assert window.focus_notes_label.text() == "备注：重点关注验收口径"
     assert window.focus_progress.value() == 60
+    assert window.focus_progress_label.text() == "60%"
     assert window.task_list_layout.count() == 2
 
     row_labels = window.task_rows_container.findChildren(QLabel)

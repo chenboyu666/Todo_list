@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -92,6 +93,7 @@ class HistoryWindow(QDialog):
         self.tasks = list(tasks)
         self.store = store
         self._selected_date_key: str | None = None
+        self._selected_page_index = 0
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setMinimumSize(520, 560)
@@ -113,8 +115,17 @@ class HistoryWindow(QDialog):
         search_row.addWidget(self.search_input, 1)
         self.group_mode = QComboBox()
         self.group_mode.addItems(["按日期", "按等级"])
-        self.group_mode.currentTextChanged.connect(self._render)
+        self.group_mode.currentTextChanged.connect(self._reset_page)
         search_row.addWidget(self.group_mode)
+        page_size_label = QLabel("每页")
+        page_size_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
+        search_row.addWidget(page_size_label)
+        self.page_size_input = QSpinBox()
+        self.page_size_input.setRange(1, 100)
+        self.page_size_input.setValue(5)
+        self.page_size_input.setSuffix(" 条")
+        self.page_size_input.valueChanged.connect(self._reset_page)
+        search_row.addWidget(self.page_size_input)
         self.count_label = QLabel("0 条")
         self.count_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
         search_row.addWidget(self.count_label)
@@ -170,18 +181,24 @@ class HistoryWindow(QDialog):
         groups = self._group_completed_tasks(completed)
         if self.group_mode.currentText() == "按日期":
             group_title, tasks = self._selected_date_group(groups)
+            self._clamp_selected_page(tasks)
             self._set_date_pager(groups, group_title)
             self.list_layout.addWidget(self._group_header(group_title, len(tasks)))
-            for task in tasks:
+            for task in self._page_tasks(tasks):
                 self.list_layout.addWidget(self._history_card(task))
         else:
-            self._set_date_pager([], None)
-            for group_title, tasks in groups:
-                self.list_layout.addWidget(self._group_header(group_title, len(tasks)))
+            self._clamp_selected_page(completed)
+            self._set_level_pager(completed)
+            for group_title, tasks, total_count in self._paged_group_slices(groups):
+                self.list_layout.addWidget(self._group_header(group_title, total_count))
                 for task in tasks:
                     self.list_layout.addWidget(self._history_card(task))
         self.list_layout.addStretch(1)
         animate_content_swap(self.container)
+
+    def _reset_page(self, *args) -> None:
+        self._selected_page_index = 0
+        self._render()
 
     def _filtered_completed_tasks(self) -> list[Task]:
         completed = [task for task in self.tasks if task.status == "done"]
@@ -218,10 +235,42 @@ class HistoryWindow(QDialog):
         titles = [title for title, _ in groups]
         if self._selected_date_key not in titles:
             self._selected_date_key = titles[0]
+            self._selected_page_index = 0
         for title, tasks in groups:
             if title == self._selected_date_key:
                 return title, tasks
         return groups[0]
+
+    def _page_size(self) -> int:
+        return max(1, self.page_size_input.value())
+
+    def _page_count(self, tasks: list[Task]) -> int:
+        return max(1, (len(tasks) + self._page_size() - 1) // self._page_size())
+
+    def _clamp_selected_page(self, tasks: list[Task]) -> None:
+        self._selected_page_index = max(0, min(self._selected_page_index, self._page_count(tasks) - 1))
+
+    def _page_tasks(self, tasks: list[Task]) -> list[Task]:
+        page_size = self._page_size()
+        start = self._selected_page_index * page_size
+        return tasks[start : start + page_size]
+
+    def _paged_group_slices(self, groups: list[tuple[str, list[Task]]]) -> list[tuple[str, list[Task], int]]:
+        page_size = self._page_size()
+        start = self._selected_page_index * page_size
+        end = start + page_size
+        cursor = 0
+        paged: list[tuple[str, list[Task], int]] = []
+        for group_title, tasks in groups:
+            group_start = cursor
+            group_end = cursor + len(tasks)
+            cursor = group_end
+            if group_end <= start or group_start >= end:
+                continue
+            slice_start = max(0, start - group_start)
+            slice_end = min(len(tasks), end - group_start)
+            paged.append((group_title, tasks[slice_start:slice_end], len(tasks)))
+        return paged
 
     def _set_date_pager(self, groups: list[tuple[str, list[Task]]], selected_title: str | None) -> None:
         visible = self.group_mode.currentText() == "按日期" and bool(groups)
@@ -234,18 +283,64 @@ class HistoryWindow(QDialog):
         titles = [title for title, _ in groups]
         index = titles.index(selected_title)
         selected_tasks = groups[index][1]
-        self.date_page_label.setText(f"{selected_title} · {len(selected_tasks)} 条 · {index + 1}/{len(groups)}")
-        self.prev_date_button.setEnabled(index > 0)
-        self.next_date_button.setEnabled(index < len(groups) - 1)
+        self._clamp_selected_page(selected_tasks)
+        page_size = self._page_size()
+        page_count = self._page_count(selected_tasks)
+        start = self._selected_page_index * page_size + 1
+        end = min(len(selected_tasks), start + page_size - 1)
+        self.date_page_label.setText(
+            f"{selected_title} · {start}-{end}/{len(selected_tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
+        )
+        self.prev_date_button.setEnabled(index > 0 or self._selected_page_index > 0)
+        self.next_date_button.setEnabled(index < len(groups) - 1 or self._selected_page_index < page_count - 1)
+
+    def _set_level_pager(self, tasks: list[Task]) -> None:
+        self.date_pager_widget.setVisible(bool(tasks))
+        if not tasks:
+            self.date_page_label.setText("")
+            self.prev_date_button.setEnabled(False)
+            self.next_date_button.setEnabled(False)
+            return
+        self._clamp_selected_page(tasks)
+        page_size = self._page_size()
+        page_count = self._page_count(tasks)
+        start = self._selected_page_index * page_size + 1
+        end = min(len(tasks), start + page_size - 1)
+        self.date_page_label.setText(
+            f"按等级 · {start}-{end}/{len(tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
+        )
+        self.prev_date_button.setEnabled(self._selected_page_index > 0)
+        self.next_date_button.setEnabled(self._selected_page_index < page_count - 1)
 
     def _move_date_page(self, offset: int) -> None:
+        if self.group_mode.currentText() != "按日期":
+            completed = self._filtered_completed_tasks()
+            if not completed:
+                return
+            self._clamp_selected_page(completed)
+            next_page = self._selected_page_index + offset
+            if 0 <= next_page < self._page_count(completed):
+                self._selected_page_index = next_page
+                self._render()
+            return
         groups = self._group_completed_tasks(self._filtered_completed_tasks())
         if not groups:
             return
         titles = [title for title, _ in groups]
         current_index = titles.index(self._selected_date_key) if self._selected_date_key in titles else 0
-        next_index = max(0, min(len(groups) - 1, current_index + offset))
+        current_tasks = groups[current_index][1]
+        self._clamp_selected_page(current_tasks)
+        next_page = self._selected_page_index + offset
+        page_count = self._page_count(current_tasks)
+        if 0 <= next_page < page_count:
+            self._selected_page_index = next_page
+            self._render()
+            return
+        next_index = current_index + (1 if offset > 0 else -1)
+        if not 0 <= next_index < len(groups):
+            return
         self._selected_date_key = titles[next_index]
+        self._selected_page_index = 0 if offset > 0 else self._page_count(groups[next_index][1]) - 1
         self._render()
 
     def _group_header(self, title: str, count: int) -> QLabel:
