@@ -161,6 +161,29 @@ def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_
     window.close()
 
 
+def test_task_drag_defers_refresh_until_drag_finishes(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    tasks = [make_task("当前", "task-1"), make_task("后面的任务", "task-2")]
+    store = MemoryStore(tasks)
+    window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
+    first_row = window.task_list_layout.itemAt(0).widget()
+
+    window.begin_task_drag()
+    window.set_focus_task("task-2")
+
+    assert window.is_task_drag_active is True
+    assert window.task_list_layout.itemAt(0).widget() is first_row
+    assert window.focus_title_label.text() == "当前"
+
+    window.end_task_drag()
+
+    assert window.is_task_drag_active is False
+    assert window.focus_title_label.text() == "后面的任务"
+
+    window.close()
+
+
 def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 

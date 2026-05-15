@@ -128,9 +128,10 @@ class FocusDropCard(QFrame):
 
 
 class TaskRowCard(QFrame):
-    def __init__(self, task_id: str, parent=None) -> None:
-        super().__init__(parent)
+    def __init__(self, task_id: str, window: "MainWindow") -> None:
+        super().__init__(window)
         self.task_id = task_id
+        self.window = window
         self._drag_start: QPoint | None = None
 
     def mousePressEvent(self, event) -> None:
@@ -149,14 +150,18 @@ class TaskRowCard(QFrame):
         event.accept()
 
     def start_drag(self) -> None:
+        if self.window.is_task_drag_active:
+            return
         mime = QMimeData()
         mime.setData(TASK_MIME_TYPE, self.task_id.encode("utf-8"))
         drag = QDrag(self)
         drag.setMimeData(mime)
+        self.window.begin_task_drag()
         try:
             drag.exec(Qt.MoveAction)
         finally:
             self._drag_start = None
+            self.window.end_task_drag()
 
 
 class TaskDragHandle(QLabel):
@@ -212,6 +217,8 @@ class MainWindow(QMainWindow):
         self.tray_controller = None
         self._geometry_initialized = False
         self._restoring_geometry = False
+        self._task_drag_active = False
+        self._task_drag_refresh_pending = False
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle("FloatingTodo")
@@ -382,6 +389,23 @@ class MainWindow(QMainWindow):
         self.settings = replace(self.settings, focus_task_id=task_id)
         self._save_settings()
         self.refresh()
+
+    @property
+    def is_task_drag_active(self) -> bool:
+        return self._task_drag_active
+
+    def begin_task_drag(self) -> None:
+        self._task_drag_active = True
+        self._task_drag_refresh_pending = False
+
+    def end_task_drag(self) -> None:
+        if not self._task_drag_active:
+            return
+        needs_refresh = self._task_drag_refresh_pending
+        self._task_drag_active = False
+        self._task_drag_refresh_pending = False
+        if needs_refresh:
+            self.refresh()
 
     def update_focus_progress(self, value: int) -> None:
         if self.focus_progress.isSliderDown():
@@ -625,6 +649,9 @@ class MainWindow(QMainWindow):
 
     def refresh(self) -> None:
         self.update_clock()
+        if self._task_drag_active:
+            self._task_drag_refresh_pending = True
+            return
         self.tasks = self.store.load_tasks()
         now = datetime.now(timezone.utc)
         self.process_reminders(now)
