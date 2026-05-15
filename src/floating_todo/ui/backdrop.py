@@ -4,7 +4,7 @@ from math import sin
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QLinearGradient, QMovie, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from floating_todo.theme import THEME_COLORS
@@ -18,6 +18,7 @@ class AnimatedBackdrop(QWidget):
         self.background_overlay = 0.68
         self._phase = 0
         self._pixmap = QPixmap()
+        self._movie: QMovie | None = None
         self._click_pulses: list[tuple[QPointF, int]] = []
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
@@ -28,7 +29,16 @@ class AnimatedBackdrop(QWidget):
         self.background_image_path = image_path
         self.background_overlay = max(0.25, min(0.95, overlay))
         path = Path(image_path)
-        self._pixmap = QPixmap(str(path)) if enabled and path.exists() else QPixmap()
+        self._stop_movie()
+        self._pixmap = QPixmap()
+        if enabled and path.exists():
+            if path.suffix.lower() == ".gif":
+                self._movie = QMovie(str(path))
+                self._movie.setCacheMode(QMovie.CacheAll)
+                self._movie.frameChanged.connect(lambda frame_number: self.update())
+                self._movie.start()
+            else:
+                self._pixmap = QPixmap(str(path))
         self.update()
 
     def _tick(self) -> None:
@@ -38,6 +48,7 @@ class AnimatedBackdrop(QWidget):
 
     def stop_animation(self) -> None:
         self._timer.stop()
+        self._stop_movie()
 
     def add_click_pulse(self, point: QPoint | QPointF) -> None:
         self._click_pulses.append((QPointF(point), 11))
@@ -51,8 +62,9 @@ class AnimatedBackdrop(QWidget):
         if rect.isEmpty():
             return
 
-        if self.background_enabled and not self._pixmap.isNull():
-            scaled = self._pixmap.scaled(rect.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        background = self._current_background_pixmap()
+        if self.background_enabled and not background.isNull():
+            scaled = background.scaled(rect.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             x = (rect.width() - scaled.width()) // 2
             y = (rect.height() - scaled.height()) // 2
             painter.drawPixmap(x, y, scaled)
@@ -123,3 +135,15 @@ class AnimatedBackdrop(QWidget):
         scan.setColorAt(1, QColor(246, 193, 119, 0))
         painter.setPen(QPen(scan, 2))
         painter.drawLine(0, y, width, y)
+
+    def _current_background_pixmap(self) -> QPixmap:
+        if self._movie is not None:
+            return self._movie.currentPixmap()
+        return self._pixmap
+
+    def _stop_movie(self) -> None:
+        if self._movie is None:
+            return
+        self._movie.stop()
+        self._movie.deleteLater()
+        self._movie = None

@@ -293,6 +293,11 @@ class MainWindow(QMainWindow):
         self.focus_progress.setRange(0, 100)
         self.focus_progress.valueChanged.connect(self.update_focus_progress)
         self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
+        self.focus_progress_label = QLabel("0%")
+        self.focus_progress_label.setObjectName("focusProgressValue")
+        self.focus_progress_label.setAlignment(Qt.AlignCenter)
+        self.focus_progress_label.setFixedHeight(26)
+        self.focus_progress_label.setStyleSheet(_progress_value_style(selected=True))
         self.empty_state_label = QLabel("没有进行中的任务")
         self.empty_state_hint_label = QLabel("点击新增任务开始")
         self.task_rows_container = QWidget()
@@ -363,7 +368,11 @@ class MainWindow(QMainWindow):
         self.focus_notes_label.setObjectName("focusNotesLabel")
         self.focus_notes_label.setStyleSheet(_notes_style(selected=True))
         focus_layout.addWidget(self.focus_notes_label)
-        focus_layout.addWidget(self.focus_progress)
+        focus_progress_row = QHBoxLayout()
+        focus_progress_row.setSpacing(10)
+        focus_progress_row.addWidget(self.focus_progress, 1)
+        focus_progress_row.addWidget(self.focus_progress_label)
+        focus_layout.addLayout(focus_progress_row)
         focus_actions = QHBoxLayout()
         focus_actions.addStretch(1)
         self.focus_edit_button = QPushButton("编辑")
@@ -504,6 +513,7 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def update_focus_progress(self, value: int) -> None:
+        self.focus_progress_label.setText(f"{value}%")
         if self.focus_progress.isSliderDown():
             return
         self._commit_focus_progress(value)
@@ -780,6 +790,7 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
             self.focus_progress.setValue(0)
+            self.focus_progress_label.setText("0%")
             self._set_focus_action_enabled(False)
             self.empty_state_widget.show()
         else:
@@ -795,6 +806,7 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
             self.focus_progress.setValue(focus_task.progress)
+            self.focus_progress_label.setText(f"{focus_task.progress}%")
             self._set_focus_action_enabled(True)
             self.empty_state_widget.hide()
         self.focus_progress.blockSignals(False)

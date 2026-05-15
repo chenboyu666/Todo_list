@@ -212,6 +212,11 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert window.focus_delete_button.isEnabled()
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
+    assert window.focus_progress_label.text() == "10%"
+    window.focus_progress.setSliderDown(True)
+    window.focus_progress.setValue(67)
+    assert window.focus_progress_label.text() == "67%"
+    window.focus_progress.setSliderDown(False)
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
     assert current_buttons[0].objectName() == "currentTaskButton"
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
@@ -302,6 +307,22 @@ def test_background_settings_are_applied(qapp: QApplication, tmp_path) -> None:
     window.close()
 
 
+def test_backdrop_supports_animated_gif_background(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.backdrop import AnimatedBackdrop
+
+    gif_path = tmp_path / "background.gif"
+    gif_path.write_bytes(b"GIF89a")
+    backdrop = AnimatedBackdrop()
+
+    backdrop.set_background_settings(True, str(gif_path), 0.55)
+
+    assert backdrop._movie is not None
+    assert backdrop._pixmap.isNull()
+
+    backdrop.stop_animation()
+    backdrop.close()
+
+
 def test_history_window_saves_reflection(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 
@@ -349,7 +370,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert note_buttons
 
     labels = rendered_history_text()
-    assert "2026-05-12 · 1 条 · 1/2" in window.date_page_label.text()
+    assert "2026-05-12 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
     assert "完成任务" in labels
     assert "任务备注：交付前确认了备注" in labels
     assert "完成体会：完成后觉得复盘有效" in labels
@@ -359,7 +380,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "2026-05-11 · 1 条 · 2/2" in window.date_page_label.text()
+    assert "2026-05-11 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
     assert "另一条记录" in labels
     assert "完成任务" not in labels
 
@@ -367,16 +388,79 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     qapp.processEvents()
 
     assert window.count_label.text() == "1 条"
-    assert "2026-05-11 · 1 条 · 1/1" in window.date_page_label.text()
+    assert "2026-05-11 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
 
     window.search_input.clear()
     window.group_mode.setCurrentText("按等级")
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert window.date_pager_widget.isHidden()
+    assert not window.date_pager_widget.isHidden()
+    assert "按等级 · 1-2/2 条 · 1/1 页" in window.date_page_label.text()
     assert "P1 · 1 条" in labels
     assert "P2 · 1 条" in labels
+
+    window.close()
+
+
+def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    tasks = [
+        replace(
+            make_task(f"完成记录 {index}", f"done-{index}", status="done"),
+            completed_at=base - timedelta(minutes=index),
+            updated_at=base - timedelta(minutes=index),
+        )
+        for index in range(6)
+    ]
+    store = MemoryStore(tasks)
+    window = HistoryWindow(tasks, store)
+
+    def rendered_history_text() -> str:
+        parts: list[str] = []
+        for index in range(window.list_layout.count()):
+            widget = window.list_layout.itemAt(index).widget()
+            if widget is None:
+                continue
+            parts.extend(label.text() for label in widget.findChildren(QLabel))
+        return "\n".join(parts)
+
+    labels = rendered_history_text()
+    assert window.page_size_input.value() == 5
+    assert "2026-05-12 · 1-5/6 条 · 1/2 页" in window.date_page_label.text()
+    assert "完成记录 0" in labels
+    assert "完成记录 5" not in labels
+
+    window.next_date_button.click()
+    qapp.processEvents()
+
+    labels = rendered_history_text()
+    assert "2026-05-12 · 6-6/6 条 · 2/2 页" in window.date_page_label.text()
+    assert "完成记录 5" in labels
+    assert "完成记录 0" not in labels
+
+    window.page_size_input.setValue(2)
+    qapp.processEvents()
+
+    assert "2026-05-12 · 1-2/6 条 · 1/3 页" in window.date_page_label.text()
+
+    window.group_mode.setCurrentText("按等级")
+    qapp.processEvents()
+
+    labels = rendered_history_text()
+    assert "按等级 · 1-2/6 条 · 1/3 页" in window.date_page_label.text()
+    assert "完成记录 0" in labels
+    assert "完成记录 2" not in labels
+
+    window.next_date_button.click()
+    qapp.processEvents()
+
+    labels = rendered_history_text()
+    assert "按等级 · 3-4/6 条 · 2/3 页" in window.date_page_label.text()
+    assert "完成记录 2" in labels
+    assert "完成记录 0" not in labels
 
     window.close()
 

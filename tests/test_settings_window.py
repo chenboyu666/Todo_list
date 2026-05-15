@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMainWindow
+from PySide6.QtWidgets import QApplication, QCheckBox, QFileDialog, QLabel, QMainWindow
 
 from floating_todo.settings import AppSettings
 
@@ -119,3 +119,27 @@ def test_settings_window_previews_opacity_and_background(qapp: QApplication, tmp
 
     dialog.close()
     parent.close()
+
+
+def test_settings_window_background_picker_accepts_gif(
+    qapp: QApplication, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    captured: dict[str, str] = {}
+    gif_path = tmp_path / "motion.gif"
+
+    def fake_get_open_file_name(parent, title, directory, file_filter):
+        captured["filter"] = file_filter
+        return str(gif_path), ""
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", fake_get_open_file_name)
+    dialog = SettingsWindow(AppSettings())
+
+    dialog.choose_background()
+
+    assert "*.gif" in captured["filter"]
+    assert dialog.background_path.text() == str(gif_path)
+    assert dialog.background_enabled.isChecked() is True
+
+    dialog.close()
