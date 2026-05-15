@@ -91,10 +91,38 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.settings_button.text() == "设置"
     assert window.settings_button.toolTip() == "打开设置"
     assert window.focus_progress.value() == 0
+    assert window.focus_complete_button.isEnabled() is False
+    assert window.focus_delete_button.isEnabled() is False
     assert window.active_count_label.text() == "0"
     assert window.today_completion_label.text() == "0%"
 
     window.close()
+
+
+def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    complete_task = make_task("顶部完成", task_id="task-complete", progress=40)
+    complete_store = MemoryStore([complete_task])
+    complete_window = MainWindow(complete_store, AppSettings(focus_task_id="task-complete"))
+    complete_window.confirm_complete_task = lambda task: True
+
+    complete_window.focus_complete_button.click()
+
+    assert complete_store.saved_tasks is not None
+    assert complete_store.saved_tasks[0].status == "done"
+    assert complete_store.saved_tasks[0].progress == 100
+    complete_window.close()
+
+    delete_task = make_task("顶部删除", task_id="task-delete")
+    delete_store = MemoryStore([delete_task])
+    delete_window = MainWindow(delete_store, AppSettings(focus_task_id="task-delete"))
+    delete_window.confirm_delete_task = lambda task: True
+
+    delete_window.focus_delete_button.click()
+
+    assert delete_store.saved_tasks == []
+    delete_window.close()
 
 
 def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication) -> None:
