@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMainWindow
 
 from floating_todo.settings import AppSettings
 
@@ -95,3 +95,27 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.theme == "custom"
 
     dialog.close()
+
+
+def test_settings_window_previews_opacity_and_background(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    parent = QMainWindow()
+    previews: list[AppSettings] = []
+    parent.preview_settings = lambda settings: previews.append(settings)
+    image_path = tmp_path / "preview.png"
+
+    dialog = SettingsWindow(AppSettings(opacity=0.72), parent)
+    dialog.opacity_slider.setValue(58)
+    dialog.background_path.setText(str(image_path))
+    dialog.background_enabled.setChecked(True)
+    dialog.background_overlay.setValue(45)
+
+    assert previews
+    assert previews[-1].opacity == 0.58
+    assert previews[-1].background_image_path == str(image_path)
+    assert previews[-1].background_enabled is True
+    assert previews[-1].background_overlay == 0.45
+
+    dialog.close()
+    parent.close()

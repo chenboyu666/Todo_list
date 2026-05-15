@@ -145,6 +145,10 @@ class TaskRowCard(QFrame):
         if (event.position().toPoint() - self._drag_start).manhattanLength() < 8:
             super().mouseMoveEvent(event)
             return
+        self.start_drag()
+        event.accept()
+
+    def start_drag(self) -> None:
         mime = QMimeData()
         mime.setData(TASK_MIME_TYPE, self.task_id.encode("utf-8"))
         drag = QDrag(self)
@@ -153,6 +157,43 @@ class TaskRowCard(QFrame):
             drag.exec(Qt.MoveAction)
         finally:
             self._drag_start = None
+
+
+class TaskDragHandle(QLabel):
+    def __init__(self, card: TaskRowCard) -> None:
+        super().__init__("↥", card)
+        self.card = card
+        self._drag_start: QPoint | None = None
+        self.setAlignment(Qt.AlignCenter)
+        self.setFixedSize(24, 24)
+        self.setToolTip("拖到上方设为进行中")
+        self.setStyleSheet(
+            f"background: {THEME_COLORS['surface_hover']}; "
+            f"color: {THEME_COLORS['accent']}; "
+            "font-weight: 900; border-radius: 7px;"
+        )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_start = event.position().toPoint()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is None or not event.buttons() & Qt.LeftButton:
+            super().mouseMoveEvent(event)
+            return
+        if (event.position().toPoint() - self._drag_start).manhattanLength() < 8:
+            super().mouseMoveEvent(event)
+            return
+        self.card.start_drag()
+        self._drag_start = None
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_start = None
+        super().mouseReleaseEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -233,6 +274,7 @@ class MainWindow(QMainWindow):
 
         self.focus_card = FocusDropCard(self)
         self.focus_card.setObjectName("focusCard")
+        self.focus_card.setToolTip("把任务拖到这里设为进行中")
         self.focus_card.setStyleSheet(_card_style("normal", selected=True))
         apply_soft_shadow(self.focus_card, blur=34, y_offset=12, alpha=120)
         focus_layout = QVBoxLayout(self.focus_card)
@@ -450,6 +492,22 @@ class MainWindow(QMainWindow):
             self.settings.background_overlay,
         )
 
+    def preview_settings(self, settings: AppSettings) -> None:
+        self.setWindowOpacity(settings.opacity)
+        self.root_widget.set_background_settings(
+            settings.background_enabled,
+            settings.background_image_path,
+            settings.background_overlay,
+        )
+
+    def restore_settings_preview(self, settings: AppSettings) -> None:
+        self.setWindowOpacity(settings.opacity)
+        self.root_widget.set_background_settings(
+            settings.background_enabled,
+            settings.background_image_path,
+            settings.background_overlay,
+        )
+
     def apply_low_distraction_settings(self) -> None:
         hidden = self.settings.low_distraction_mode
         self.summary_widget.setHidden(hidden)
@@ -463,14 +521,17 @@ class MainWindow(QMainWindow):
         self.setGeometry(int(geometry["x"]), int(geometry["y"]), int(geometry["width"]), int(geometry["height"]))
 
     def open_settings(self) -> None:
+        previous_settings = self.settings
         dialog = SettingsWindow(self.settings, self)
         if dialog.exec() != QDialog.Accepted:
+            self.restore_settings_preview(previous_settings)
             return
         updated_settings = dialog.build_settings()
         if updated_settings.launch_on_startup != self.settings.launch_on_startup:
             try:
                 set_launch_on_startup("FloatingTodo", current_startup_command(), updated_settings.launch_on_startup)
             except OSError as exc:
+                self.restore_settings_preview(previous_settings)
                 QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
                 return
 
@@ -623,6 +684,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(6)
 
         top = QHBoxLayout()
+        drag_handle = TaskDragHandle(card)
+        top.addWidget(drag_handle)
         priority = QLabel(str(row["priority"]))
         priority.setAlignment(Qt.AlignCenter)
         priority.setFixedHeight(24)
