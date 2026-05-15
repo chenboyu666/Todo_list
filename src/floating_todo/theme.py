@@ -75,6 +75,20 @@ QPushButton#currentTaskButton:hover {{
     stop:0.48 #0891B2,
     stop:1 #059669);
 }}
+QPushButton#taskExpandButton, QPushButton#taskCollapseButton {{
+  min-height: 28px;
+  padding: 3px 9px;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #162333,
+    stop:1 #183943);
+  color: #BAE6FD;
+  font-weight: 700;
+}}
+QPushButton#taskExpandButton:hover, QPushButton#taskCollapseButton:hover {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #1D3147,
+    stop:1 #1E4E4A);
+}}
 QPushButton#dangerButton {{
   background: #3A1822;
   color: #FFD5DF;
@@ -187,15 +201,31 @@ QScrollArea, QAbstractScrollArea {{
 }}
 QScrollBar:vertical {{
   background: transparent;
-  width: 8px;
+  width: 7px;
   margin: 0;
 }}
 QScrollBar::handle:vertical {{
-  background: #273142;
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 #2B4256,
+    stop:1 #1E5A62);
   border-radius: 4px;
   min-height: 28px;
 }}
+QScrollBar::handle:vertical:hover {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 #365E77,
+    stop:1 #238071);
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+  background: transparent;
+}}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+  height: 0;
+  background: transparent;
+}}
+QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {{
+  background: transparent;
+  width: 0;
   height: 0;
 }}
 QCheckBox {{

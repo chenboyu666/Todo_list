@@ -125,6 +125,15 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     buttons = window.task_rows_container.findChildren(QPushButton)
     button_texts = [button.text() for button in buttons]
     button_tooltips = [button.toolTip() for button in buttons]
+    assert "展开" in button_texts
+    assert {"编辑", "完成", "删除"}.isdisjoint(button_texts)
+
+    next(button for button in buttons if button.text() == "展开").click()
+    qapp.processEvents()
+
+    buttons = window.task_rows_container.findChildren(QPushButton)
+    button_texts = [button.text() for button in buttons]
+    button_tooltips = [button.toolTip() for button in buttons]
     assert {"编辑", "完成", "删除"} <= set(button_texts)
     assert {"编辑任务", "标记任务完成", "删除任务"} <= set(button_tooltips)
 
