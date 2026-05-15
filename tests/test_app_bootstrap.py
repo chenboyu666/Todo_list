@@ -27,7 +27,8 @@ def test_theme_exposes_reusable_tokens_used_by_qss():
     assert THEME_COLORS["accent"] == "#7DD3FC"
     assert THEME_RADIUS["control"] == "8px"
     assert THEME_SPACING["control_padding"] == "5px 12px"
-    assert THEME_FONT["family"] == '"Microsoft YaHei UI", "Segoe UI"'
+    assert "Segoe UI Variable" in THEME_FONT["family"]
+    assert "Microsoft YaHei UI" in THEME_FONT["family"]
 
     assert f"background: {THEME_COLORS['background']};" in CALM_TECH_QSS
     assert f"border-radius: {THEME_RADIUS['control']};" in CALM_TECH_QSS

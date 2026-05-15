@@ -27,7 +27,7 @@ THEME_SPACING = {
 }
 
 THEME_FONT = {
-    "family": '"Microsoft YaHei UI", "Segoe UI"',
+    "family": '"Segoe UI Variable", "HarmonyOS Sans SC", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI"',
     "size": "13px",
 }
 
@@ -60,6 +60,20 @@ QPushButton:hover {{
 }}
 QPushButton:pressed {{
   background: {THEME_COLORS["surface_pressed"]};
+}}
+QPushButton#currentTaskButton {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #155E75,
+    stop:0.52 #0E7490,
+    stop:1 #047857);
+  color: #ECFEFF;
+  font-weight: 800;
+}}
+QPushButton#currentTaskButton:hover {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0E7490,
+    stop:0.48 #0891B2,
+    stop:1 #059669);
 }}
 QPushButton#dangerButton {{
   background: #3A1822;
@@ -144,6 +158,28 @@ QSlider::handle:horizontal {{
 }}
 QSlider::handle:horizontal:hover {{
   background: {THEME_COLORS["accent"]};
+}}
+QSlider#focusProgress::groove:horizontal, QSlider#activeTaskProgress::groove:horizontal {{
+  background: #07111B;
+  height: 12px;
+  border-radius: 6px;
+}}
+QSlider#focusProgress::sub-page:horizontal, QSlider#activeTaskProgress::sub-page:horizontal {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #A7F3D0,
+    stop:0.45 #7DD3FC,
+    stop:1 #F6C177);
+  border-radius: 6px;
+}}
+QSlider#focusProgress::handle:horizontal, QSlider#activeTaskProgress::handle:horizontal {{
+  background: #ECFEFF;
+  width: 20px;
+  height: 20px;
+  margin: -4px 0;
+  border-radius: 10px;
+}}
+QSlider#focusProgress::handle:horizontal:hover, QSlider#activeTaskProgress::handle:horizontal:hover {{
+  background: #A7F3D0;
 }}
 QScrollArea, QAbstractScrollArea {{
   background: transparent;
