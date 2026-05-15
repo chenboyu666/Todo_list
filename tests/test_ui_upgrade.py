@@ -52,12 +52,13 @@ def make_task(title: str, task_id: str, *, status: str = "active") -> Task:
 
 
 def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import CornerResizeGrip, MainWindow
 
     tasks = [make_task("普通任务", "task-1"), make_task("拖入进行中", "task-2")]
     window = MainWindow(MemoryStore(tasks), AppSettings(), tmp_path / "settings.json")
 
     assert window.windowFlags() & Qt.FramelessWindowHint
+    assert isinstance(window.resize_grip, CornerResizeGrip)
     assert window.resize_grip.toolTip() == "拖动调整窗口大小"
 
     window.set_focus_task("task-2")
@@ -137,7 +138,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "已超时" in row_labels
     assert "进行中" in button_text
     assert isinstance(window.task_rows_container.findChildren(NoWheelSlider)[0], NoWheelSlider)
-    assert "设为当前进行中的任务" in button_tooltips
+    assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
     assert drag_handles
@@ -153,7 +154,9 @@ def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_
     store = MemoryStore(tasks)
     window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
 
-    window.set_focus_task("task-2")
+    buttons = window.task_rows_container.findChildren(QPushButton)
+    focus_button = next(button for button in buttons if button.text() == "置顶")
+    focus_button.click()
 
     assert window.settings.focus_task_id == "task-2"
     assert window.focus_title_label.text() == "后面的任务"
@@ -234,7 +237,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 
     first = make_task("完成任务", "done-1", status="done")
-    second = make_task("另一条记录", "done-2", status="done")
+    second = replace(make_task("另一条记录", "done-2", status="done"), priority="P2")
     store = MemoryStore([first, second])
     window = HistoryWindow([first, second], store)
 
@@ -246,6 +249,15 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     window.search_input.setText("另一条")
 
     assert window.count_label.text() == "1 条"
+    labels = "\n".join(label.text() for label in window.findChildren(QLabel))
+    assert "2026-05-12 · 1 条" in labels
+
+    window.search_input.clear()
+    window.group_mode.setCurrentText("按等级")
+
+    labels = "\n".join(label.text() for label in window.findChildren(QLabel))
+    assert "P1 · 1 条" in labels
+    assert "P2 · 1 条" in labels
 
     window.close()
 

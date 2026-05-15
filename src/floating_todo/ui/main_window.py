@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
-from PySide6.QtCore import QMimeData, QPoint, QTimer, Qt
+from PySide6.QtCore import QMimeData, QPoint, QRect, QTimer, Qt
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QDialog,
@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QSizeGrip,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -67,15 +66,29 @@ class TitleBar(QFrame):
         self.window = window
         self._drag_start: QPoint | None = None
         self.setObjectName("titleBar")
-        self.setStyleSheet("QFrame#titleBar { background: transparent; }")
+        self.setCursor(Qt.SizeAllCursor)
+        self.setMinimumHeight(46)
+        self.setStyleSheet(
+            "QFrame#titleBar {"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            " stop:0 #10263A,"
+            " stop:0.48 #132F3C,"
+            " stop:1 #142A33);"
+            "border: 1px solid #2C5365;"
+            "border-radius: 10px;"
+            "}"
+        )
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 6, 8, 6)
         layout.setSpacing(8)
         title = QLabel("FloatingTodo")
         title.setObjectName("windowTitleLabel")
         title.setStyleSheet("font-size: 18px; font-weight: 700;")
         layout.addWidget(title)
+        drag_hint = QLabel("拖动")
+        drag_hint.setStyleSheet(f"color: {THEME_COLORS['accent_secondary']}; font-weight: 700;")
+        layout.addWidget(drag_hint)
         layout.addStretch(1)
         layout.addWidget(window.clock_label)
         window.settings_button.setText("设置")
@@ -197,7 +210,56 @@ class TaskDragHandle(QLabel):
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:
+        if self._drag_start is not None and event.button() == Qt.LeftButton:
+            self.card.window.set_focus_task(self.card.task_id)
+            event.accept()
+            self._drag_start = None
+            return
         self._drag_start = None
+        super().mouseReleaseEvent(event)
+
+
+class CornerResizeGrip(QFrame):
+    def __init__(self, window: "MainWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self._drag_start: QPoint | None = None
+        self._start_geometry: QRect | None = None
+        self.setFixedSize(24, 24)
+        self.setCursor(Qt.SizeFDiagCursor)
+        self.setToolTip("拖动调整窗口大小")
+        self.setStyleSheet(
+            "QFrame {"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+            " stop:0 #1B3B4B,"
+            " stop:1 #7DD3FC);"
+            "border: none;"
+            "border-radius: 8px;"
+            "}"
+        )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and not self.window.settings.lock_position:
+            self._drag_start = event.globalPosition().toPoint()
+            self._start_geometry = QRect(self.window.geometry())
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is None or self._start_geometry is None or not event.buttons() & Qt.LeftButton:
+            super().mouseMoveEvent(event)
+            return
+        delta = event.globalPosition().toPoint() - self._drag_start
+        minimum = self.window.minimumSize()
+        width = max(minimum.width(), self._start_geometry.width() + delta.x())
+        height = max(minimum.height(), self._start_geometry.height() + delta.y())
+        self.window.setGeometry(self._start_geometry.x(), self._start_geometry.y(), width, height)
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_start = None
+        self._start_geometry = None
         super().mouseReleaseEvent(event)
 
 
@@ -347,9 +409,7 @@ class MainWindow(QMainWindow):
         resize_row = QHBoxLayout()
         resize_row.setContentsMargins(0, 0, 0, 0)
         resize_row.addStretch(1)
-        self.resize_grip = QSizeGrip(root)
-        self.resize_grip.setFixedSize(18, 18)
-        self.resize_grip.setToolTip("拖动调整窗口大小")
+        self.resize_grip = CornerResizeGrip(self)
         resize_row.addWidget(self.resize_grip)
         root_layout.addLayout(resize_row)
         self.apply_background_settings()
@@ -749,8 +809,8 @@ class MainWindow(QMainWindow):
 
         actions = QHBoxLayout()
         actions.addStretch(1)
-        focus_button = QPushButton("进行中" if task_id == focus_task_id else "进行")
-        focus_button.setToolTip("设为当前进行中的任务")
+        focus_button = QPushButton("进行中" if task_id == focus_task_id else "置顶")
+        focus_button.setToolTip("设为当前置顶任务")
         focus_button.setEnabled(task_id != focus_task_id)
         focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
         actions.addWidget(focus_button)
@@ -849,7 +909,7 @@ def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
         f" stop:0 {style['surface']},"
         f" stop:0.68 {THEME_COLORS['surface']},"
         f" stop:1 {selected_stop});"
-        "border: none;"
+        "border: 1px solid #26364A;"
         "border-radius: 8px;"
         "}"
     )

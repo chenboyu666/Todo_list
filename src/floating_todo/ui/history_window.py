@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -47,6 +48,10 @@ class HistoryWindow(QDialog):
         self.search_input.setPlaceholderText("搜索历史任务")
         self.search_input.textChanged.connect(self._render)
         search_row.addWidget(self.search_input, 1)
+        self.group_mode = QComboBox()
+        self.group_mode.addItems(["按日期", "按等级"])
+        self.group_mode.currentTextChanged.connect(self._render)
+        search_row.addWidget(self.group_mode)
         self.count_label = QLabel("0 条")
         self.count_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
         search_row.addWidget(self.count_label)
@@ -91,9 +96,34 @@ class HistoryWindow(QDialog):
             empty.setStyleSheet(f"color: {THEME_COLORS['border']};")
             self.list_layout.addWidget(empty)
             return
-        for task in sorted(completed, key=lambda item: item.completed_at or item.updated_at, reverse=True):
-            self.list_layout.addWidget(self._history_card(task))
+        for group_title, tasks in self._group_completed_tasks(completed):
+            self.list_layout.addWidget(self._group_header(group_title, len(tasks)))
+            for task in tasks:
+                self.list_layout.addWidget(self._history_card(task))
         self.list_layout.addStretch(1)
+
+    def _group_completed_tasks(self, tasks: list[Task]) -> list[tuple[str, list[Task]]]:
+        sorted_tasks = sorted(tasks, key=lambda item: item.completed_at or item.updated_at, reverse=True)
+        groups: dict[str, list[Task]] = {}
+        if self.group_mode.currentText() == "按等级":
+            order = ["P1", "P2", "P3"]
+            for task in sorted_tasks:
+                groups.setdefault(task.priority, []).append(task)
+            return [(priority, groups[priority]) for priority in order if priority in groups]
+
+        for task in sorted_tasks:
+            completed_at = task.completed_at or task.updated_at
+            title = completed_at.astimezone().strftime("%Y-%m-%d") if completed_at else "未记录日期"
+            groups.setdefault(title, []).append(task)
+        return list(groups.items())
+
+    def _group_header(self, title: str, count: int) -> QLabel:
+        label = QLabel(f"{title} · {count} 条")
+        label.setStyleSheet(
+            f"color: {THEME_COLORS['accent']}; "
+            "font-size: 14px; font-weight: 700; padding: 6px 2px 2px 2px;"
+        )
+        return label
 
     def _history_card(self, task: Task) -> QFrame:
         card = QFrame()

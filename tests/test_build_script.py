@@ -20,8 +20,13 @@ def test_build_script_uses_repeatable_pyinstaller_onedir_contract():
     assert '"FloatingTodo"' in script
     assert '"--add-data"' in script
     assert '"src/floating_todo/assets;floating_todo/assets"' in script
-    assert '"--collect-all"' in script
-    assert '"PySide6"' in script
+    assert '"--collect-all"' not in script
+    assert '"PySide6.QtCore"' in script
+    assert '"PySide6.QtGui"' in script
+    assert '"PySide6.QtWidgets"' in script
+    assert '"PySide6.QtSvg"' in script
+    assert '"--exclude-module"' in script
+    assert '"PySide6.QtWebEngineWidgets"' in script
     assert '"src/floating_todo/__main__.py"' in script
     assert "dist/FloatingTodo/data" in script
     assert "Build complete: dist/FloatingTodo/FloatingTodo.exe" in script
