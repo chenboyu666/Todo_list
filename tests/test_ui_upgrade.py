@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import os
 
 import pytest
-from PySide6.QtCore import QDateTime, QTimeZone, Qt
+from PySide6.QtCore import QDateTime, QPoint, QTimeZone, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
 from floating_todo.domain import Task
@@ -70,6 +70,8 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
 
     assert window.settings.focus_task_id == "task-2"
     assert window.focus_title_label.text() == "拖入进行中"
+    assert getattr(qapp, "_floating_todo_interaction_filter", None) is not None
+    assert window.root_widget._click_pulses
 
     window.close()
 
@@ -343,6 +345,33 @@ def test_history_note_dialog_shows_large_editors(qapp: QApplication) -> None:
     assert dialog.reflection() == "旧体会"
 
     dialog.close()
+
+
+def test_backdrop_click_pulse_records_and_expires(qapp: QApplication) -> None:
+    from floating_todo.ui.backdrop import AnimatedBackdrop
+
+    backdrop = AnimatedBackdrop()
+    backdrop.add_click_pulse(QPoint(24, 32))
+
+    assert len(backdrop._click_pulses) == 1
+
+    for _ in range(11):
+        backdrop._tick()
+
+    assert backdrop._click_pulses == []
+
+    backdrop.stop_animation()
+    backdrop.close()
+
+
+def test_global_interaction_effect_filter_installs_once(qapp: QApplication) -> None:
+    from floating_todo.ui.effects import InteractionEffectFilter, install_global_interaction_effects
+
+    first = install_global_interaction_effects(qapp)
+    second = install_global_interaction_effects(qapp)
+
+    assert first is second
+    assert isinstance(first, InteractionEffectFilter)
 
 
 def test_delete_dialog_uses_frameless_app_chrome(qapp: QApplication) -> None:

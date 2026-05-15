@@ -10,6 +10,7 @@ from floating_todo.notifications import NotificationSender
 from floating_todo.settings import settings_from_dict
 from floating_todo.store import JsonTaskStore, load_json_object
 from floating_todo.theme import CALM_TECH_QSS
+from floating_todo.ui.effects import install_global_interaction_effects, prepare_window_entrance
 from floating_todo.ui.tray import TrayController
 
 
@@ -37,6 +38,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("FloatingTodo")
     app.setStyleSheet(CALM_TECH_QSS)
+    install_global_interaction_effects(app)
     data_dir = ensure_data_files()
     store = JsonTaskStore(data_dir / "tasks.json")
     settings_path = data_dir / "settings.json"
@@ -50,5 +52,6 @@ def main() -> int:
         window.tray_controller = TrayController(window, icon)
     except Exception:
         window.tray_controller = None
+    prepare_window_entrance(window, target_opacity=settings.opacity, slide=0, duration=260)
     window.show()
     return app.exec()

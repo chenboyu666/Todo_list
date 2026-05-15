@@ -31,7 +31,7 @@ from floating_todo.ui.backdrop import AnimatedBackdrop
 from floating_todo.ui.completion_dialog import CompletionDialog
 from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
 from floating_todo.ui.controls import NoWheelSlider
-from floating_todo.ui.effects import apply_soft_shadow
+from floating_todo.ui.effects import apply_soft_shadow, install_global_interaction_effects, prepare_window_entrance
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
@@ -277,6 +277,7 @@ class MainWindow(QMainWindow):
         notification_sender: NotificationSenderProtocol | None = None,
     ) -> None:
         super().__init__()
+        install_global_interaction_effects()
         self.store = store
         self.settings = settings or AppSettings()
         self.settings_path = Path(settings_path) if settings_path is not None else None
@@ -454,6 +455,7 @@ class MainWindow(QMainWindow):
         self.settings = replace(self.settings, focus_task_id=task_id)
         self._save_settings()
         self.refresh()
+        self._pulse_widget(self.focus_card)
 
     @property
     def is_task_drag_active(self) -> bool:
@@ -499,6 +501,7 @@ class MainWindow(QMainWindow):
 
     def add_task(self) -> None:
         dialog = TaskDialog(self)
+        prepare_window_entrance(dialog)
         if dialog.exec() != QDialog.Accepted:
             return
         task = dialog.build_task()
@@ -513,6 +516,7 @@ class MainWindow(QMainWindow):
         if index is None:
             return
         dialog = TaskDialog(self, self.tasks[index])
+        prepare_window_entrance(dialog)
         if dialog.exec() != QDialog.Accepted:
             return
         updated = dialog.build_task()
@@ -539,6 +543,7 @@ class MainWindow(QMainWindow):
 
     def confirm_complete_task(self, task: Task) -> bool:
         dialog = CompletionDialog(task, self)
+        prepare_window_entrance(dialog)
         return dialog.exec() == QDialog.Accepted
 
     def delete_task(self, task_id: str) -> None:
@@ -556,10 +561,12 @@ class MainWindow(QMainWindow):
 
     def confirm_delete_task(self, task: Task) -> bool:
         dialog = DeleteTaskDialog(task, self)
+        prepare_window_entrance(dialog)
         return dialog.exec() == QDialog.Accepted
 
     def open_history(self) -> None:
         dialog = HistoryWindow(self.tasks, self.store, self)
+        prepare_window_entrance(dialog)
         dialog.exec()
         self.tasks = self.store.load_tasks()
         self.refresh()
@@ -612,6 +619,7 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         previous_settings = self.settings
         dialog = SettingsWindow(self.settings, self)
+        prepare_window_entrance(dialog)
         if dialog.exec() != QDialog.Accepted:
             self.restore_settings_preview(previous_settings)
             return
@@ -678,6 +686,12 @@ class MainWindow(QMainWindow):
         if self.settings_path is None:
             return
         save_json_object(self.settings_path, settings_to_dict(self.settings))
+
+    def _pulse_widget(self, widget: QWidget) -> None:
+        add_click_pulse = getattr(self.root_widget, "add_click_pulse", None)
+        if not callable(add_click_pulse):
+            return
+        add_click_pulse(self.root_widget.mapFromGlobal(widget.mapToGlobal(widget.rect().center())))
 
     def _restore_locked_geometry(self) -> None:
         self._restoring_geometry = True
