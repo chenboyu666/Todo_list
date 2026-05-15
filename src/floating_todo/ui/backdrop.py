@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import sin
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QTimer, Qt
+from PySide6.QtCore import QPoint, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -18,6 +18,7 @@ class AnimatedBackdrop(QWidget):
         self.background_overlay = 0.68
         self._phase = 0
         self._pixmap = QPixmap()
+        self._click_pulses: list[tuple[QPointF, int]] = []
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(80)
@@ -32,10 +33,16 @@ class AnimatedBackdrop(QWidget):
 
     def _tick(self) -> None:
         self._phase = (self._phase + 1) % 10000
+        self._click_pulses = [(point, life - 1) for point, life in self._click_pulses if life > 1]
         self.update()
 
     def stop_animation(self) -> None:
         self._timer.stop()
+
+    def add_click_pulse(self, point: QPoint | QPointF) -> None:
+        self._click_pulses.append((QPointF(point), 11))
+        self._click_pulses = self._click_pulses[-8:]
+        self.update()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -60,6 +67,7 @@ class AnimatedBackdrop(QWidget):
 
         self._draw_grid(painter, rect.width(), rect.height())
         self._draw_particles(painter, rect.width(), rect.height())
+        self._draw_click_pulses(painter)
         self._draw_scan(painter, rect.width(), rect.height())
         painter.end()
 
@@ -92,6 +100,18 @@ class AnimatedBackdrop(QWidget):
                 color = QColor(246, 193, 119, alpha)
             painter.setBrush(color)
             painter.drawEllipse(QPointF(float(x), float(y)), radius, radius)
+
+    def _draw_click_pulses(self, painter: QPainter) -> None:
+        painter.setBrush(Qt.NoBrush)
+        for point, life in self._click_pulses:
+            progress = 1 - (life / 11)
+            radius = 14 + progress * 98
+            cyan = QColor(125, 211, 252, int(120 * (1 - progress)))
+            mint = QColor(167, 243, 208, int(70 * (1 - progress)))
+            painter.setPen(QPen(cyan, 1.8))
+            painter.drawEllipse(point, radius, radius)
+            painter.setPen(QPen(mint, 1.0))
+            painter.drawEllipse(point, radius * 0.62, radius * 0.62)
 
     def _draw_scan(self, painter: QPainter, width: int, height: int) -> None:
         if height <= 0:

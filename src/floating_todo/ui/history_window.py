@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from floating_todo.domain import Task
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.dialog_chrome import DialogTitleBar
-from floating_todo.ui.effects import apply_soft_shadow
+from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
 
 
 class HistoryNoteDialog(QDialog):
@@ -165,6 +165,7 @@ class HistoryWindow(QDialog):
             empty = QLabel("没有匹配的完成记录" if query else "还没有完成记录")
             empty.setStyleSheet(f"color: {THEME_COLORS['border']};")
             self.list_layout.addWidget(empty)
+            animate_content_swap(self.container)
             return
         groups = self._group_completed_tasks(completed)
         if self.group_mode.currentText() == "按日期":
@@ -180,6 +181,7 @@ class HistoryWindow(QDialog):
                 for task in tasks:
                     self.list_layout.addWidget(self._history_card(task))
         self.list_layout.addStretch(1)
+        animate_content_swap(self.container)
 
     def _filtered_completed_tasks(self) -> list[Task]:
         completed = [task for task in self.tasks if task.status == "done"]
@@ -300,6 +302,7 @@ class HistoryWindow(QDialog):
 
     def open_note_editor(self, task: Task) -> None:
         dialog = HistoryNoteDialog(task, self)
+        prepare_window_entrance(dialog)
         if dialog.exec() != QDialog.Accepted:
             return
         self.save_history_notes(task.id, dialog.notes(), dialog.reflection())
