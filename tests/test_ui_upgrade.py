@@ -183,7 +183,7 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
 
 
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow, TaskDragHandle
+    from floating_todo.ui.main_window import MainWindow, TaskDragHandle, _card_style
 
     task = make_task("临近任务", "task-1")
     store = MemoryStore([task])
@@ -197,13 +197,26 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "2026-" in row_labels
     assert "已超时" in row_labels
     assert "进行中" in button_text
+    assert "展开" in button_text
     assert isinstance(window.task_list_layout, QGridLayout)
-    assert isinstance(window.task_rows_container.findChildren(NoWheelSlider)[0], NoWheelSlider)
-    assert window.task_rows_container.findChildren(NoWheelSlider)[0].objectName() == "activeTaskProgress"
+    assert "border: none" in _card_style("normal")
+    assert "border: 1px" not in _card_style("normal")
+    assert window.task_rows_container.findChildren(NoWheelSlider) == []
+    progress_values = window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue")
+    assert progress_values
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
     assert current_buttons[0].objectName() == "currentTaskButton"
+    expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
+    expand_button.click()
+    qapp.processEvents()
+
+    sliders = window.task_rows_container.findChildren(NoWheelSlider)
+    assert sliders
+    assert sliders[0].objectName() == "activeTaskProgress"
+    assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
+
     drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
     assert drag_handles
     assert drag_handles[0].toolTip() == "拖到上方设为进行中"

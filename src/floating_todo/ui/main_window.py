@@ -272,6 +272,7 @@ class MainWindow(QMainWindow):
         self._restoring_geometry = False
         self._task_drag_active = False
         self._task_drag_refresh_pending = False
+        self.expanded_task_ids: set[str] = set()
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle("FloatingTodo")
@@ -392,6 +393,7 @@ class MainWindow(QMainWindow):
         self.task_scroll_area.setWidgetResizable(True)
         self.task_scroll_area.setFrameShape(QFrame.NoFrame)
         self.task_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.task_scroll_area.verticalScrollBar().setSingleStep(32)
         self.task_scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         self.task_scroll_area.viewport().setAutoFillBackground(False)
         self.task_scroll_area.viewport().setStyleSheet("background: transparent;")
@@ -756,35 +758,51 @@ class MainWindow(QMainWindow):
         self.apply_low_distraction_settings()
 
     def _render_task_rows(self, rows: list[dict[str, object]], focus_task_id: str | None = None) -> None:
+        active_ids = {str(row["id"]) for row in rows}
+        self.expanded_task_ids.intersection_update(active_ids)
         while self.task_list_layout.count():
             item = self.task_list_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
         columns = self._task_grid_columns()
-        for column in range(3):
+        for column in range(5):
             self.task_list_layout.setColumnStretch(column, 1 if column < columns else 0)
         for index, row in enumerate(rows):
             self.task_list_layout.addWidget(self._task_row(row, focus_task_id), index // columns, index % columns)
 
     def _task_grid_columns(self) -> int:
         width = self.task_scroll_area.viewport().width() if hasattr(self, "task_scroll_area") else self.width()
-        return 2 if width >= 620 else 1
+        if width >= 900:
+            return 4
+        if width >= 680:
+            return 3
+        if width >= 460:
+            return 2
+        return 1
+
+    def toggle_task_details(self, task_id: str) -> None:
+        if task_id in self.expanded_task_ids:
+            self.expanded_task_ids.remove(task_id)
+        else:
+            self.expanded_task_ids.add(task_id)
+        self.refresh()
 
     def _task_row(self, row: dict[str, object], focus_task_id: str | None = None) -> QFrame:
         task_id = str(row["id"])
         urgency = str(row["urgency"])
         is_focused = task_id == focus_task_id
+        is_expanded = task_id in self.expanded_task_ids
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(152)
-        card.setMinimumWidth(244)
+        card.setMinimumHeight(172 if is_expanded else 104)
+        card.setMinimumWidth(168)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 9)
+        layout.setSpacing(6)
 
         top = QHBoxLayout()
         drag_handle = TaskDragHandle(card)
@@ -806,16 +824,37 @@ class MainWindow(QMainWindow):
         top.addWidget(urgency_chip)
         title = QLabel(str(row["title"]))
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 14px; font-weight: 700;")
+        title.setStyleSheet("font-size: 13px; font-weight: 700;")
         top.addWidget(title, 1)
-        layout.addLayout(top)
-
         progress_label = QLabel(str(row["progress_label"]))
+        progress_label.setObjectName("activeTaskProgressValue" if is_focused else "taskProgressValue")
         progress_label.setAlignment(Qt.AlignCenter)
         progress_label.setFixedHeight(24)
         progress_label.setStyleSheet(_progress_value_style(selected=is_focused))
-        progress_row = QHBoxLayout()
-        progress_row.setSpacing(8)
+        top.addWidget(progress_label)
+        layout.addLayout(top)
+
+        compact_row = QHBoxLayout()
+        compact_row.setSpacing(6)
+        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
+        deadline.setStyleSheet(_deadline_label_style(urgency))
+        compact_row.addWidget(deadline, 1)
+        focus_button = QPushButton("进行中" if is_focused else "置顶")
+        focus_button.setToolTip("设为当前置顶任务")
+        if is_focused:
+            focus_button.setObjectName("currentTaskButton")
+        focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
+        compact_row.addWidget(focus_button)
+        expand_button = QPushButton("收起" if is_expanded else "展开")
+        expand_button.setObjectName("taskCollapseButton" if is_expanded else "taskExpandButton")
+        expand_button.setToolTip("显示或收起详细操作")
+        expand_button.clicked.connect(lambda checked=False, task_id=task_id: self.toggle_task_details(task_id))
+        compact_row.addWidget(expand_button)
+        layout.addLayout(compact_row)
+
+        if not is_expanded:
+            return card
+
         progress = NoWheelSlider(Qt.Horizontal)
         progress.setObjectName("activeTaskProgress" if is_focused else "taskProgress")
         progress.setRange(0, 100)
@@ -826,39 +865,25 @@ class MainWindow(QMainWindow):
             )
         )
         progress.sliderReleased.connect(lambda task_id=task_id, slider=progress: self.update_task_progress(task_id, slider.value()))
-        progress_row.addWidget(progress, 1)
-        progress_row.addWidget(progress_label)
-        layout.addLayout(progress_row)
+        layout.addWidget(progress)
 
-        meta = QHBoxLayout()
-        meta.addWidget(QLabel(f"工作量 {row['effort_label']}"))
-        meta.addStretch(1)
-        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
-        deadline.setStyleSheet(_deadline_label_style(urgency))
-        meta.addWidget(deadline)
-        layout.addLayout(meta)
-
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        focus_button = QPushButton("进行中" if is_focused else "置顶")
-        focus_button.setToolTip("设为当前置顶任务")
-        if is_focused:
-            focus_button.setObjectName("currentTaskButton")
-        focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
-        actions.addWidget(focus_button)
+        detail_row = QHBoxLayout()
+        detail_row.setSpacing(6)
+        detail_row.addWidget(QLabel(f"工作量 {row['effort_label']}"))
+        detail_row.addStretch(1)
         edit_button = QPushButton("编辑")
         edit_button.setToolTip("编辑任务")
         edit_button.clicked.connect(lambda checked=False, task_id=task_id: self.edit_task(task_id))
-        actions.addWidget(edit_button)
+        detail_row.addWidget(edit_button)
         complete_button = QPushButton("完成")
         complete_button.setToolTip("标记任务完成")
         complete_button.clicked.connect(lambda checked=False, task_id=task_id: self.complete_task(task_id))
-        actions.addWidget(complete_button)
+        detail_row.addWidget(complete_button)
         delete_button = QPushButton("删除")
         delete_button.setToolTip("删除任务")
         delete_button.clicked.connect(lambda checked=False, task_id=task_id: self.delete_task(task_id))
-        actions.addWidget(delete_button)
-        layout.addLayout(actions)
+        detail_row.addWidget(delete_button)
+        layout.addLayout(detail_row)
         return card
 
     def _handle_row_progress_value(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
@@ -927,15 +952,15 @@ def _urgency_style(urgency: str) -> dict[str, str]:
 def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
     style = _urgency_style(urgency)
     selected_stop = style["selected"] if selected else style["surface_alt"]
-    border_color = style["accent"] if selected else "#26364A"
     glow_stop = "#24465A" if selected else selected_stop
+    mid_stop = "#132536" if selected else THEME_COLORS["surface"]
     return (
         "QFrame {"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
         f" stop:0 {style['surface']},"
-        f" stop:0.58 {THEME_COLORS['surface']},"
+        f" stop:0.46 {mid_stop},"
         f" stop:1 {glow_stop});"
-        f"border: 1px solid {border_color};"
+        "border: none;"
         "border-radius: 8px;"
         "}"
     )

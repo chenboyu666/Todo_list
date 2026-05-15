@@ -36,6 +36,8 @@ def test_theme_exposes_reusable_tokens_used_by_qss():
     assert "border: 1px" not in CALM_TECH_QSS
     assert "QMenu::item:selected" in CALM_TECH_QSS
     assert "QPushButton#dangerButton" in CALM_TECH_QSS
+    assert "QPushButton#taskExpandButton" in CALM_TECH_QSS
+    assert "QScrollBar::add-page:vertical" in CALM_TECH_QSS
     assert "QSizeGrip" in CALM_TECH_QSS
     assert f"color: {THEME_COLORS['text']};" in CALM_TECH_QSS
 
