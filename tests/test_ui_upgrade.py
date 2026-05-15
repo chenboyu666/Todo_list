@@ -122,7 +122,7 @@ def test_progress_slider_drag_defers_save_until_release(qapp: QApplication, tmp_
 
 
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MainWindow, TaskDragHandle
 
     task = make_task("临近任务", "task-1")
     store = MemoryStore([task])
@@ -138,6 +138,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "进行中" in button_text
     assert isinstance(window.task_rows_container.findChildren(NoWheelSlider)[0], NoWheelSlider)
     assert "设为当前进行中的任务" in button_tooltips
+    assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
+    drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
+    assert drag_handles
+    assert drag_handles[0].toolTip() == "拖到上方设为进行中"
 
     window.close()
 

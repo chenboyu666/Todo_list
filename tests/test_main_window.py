@@ -521,6 +521,34 @@ def test_settings_button_acceptance_saves_applies_and_updates_startup(
     window.close()
 
 
+def test_settings_preview_is_restored_when_dialog_is_cancelled(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    original = AppSettings(opacity=0.88, background_enabled=False, background_image_path="", background_overlay=0.68)
+    preview = replace(original, opacity=0.42, background_enabled=True, background_image_path=str(tmp_path / "bg.png"), background_overlay=0.35)
+
+    class CancelledSettingsWindow:
+        def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
+            parent.preview_settings(preview)
+
+        def exec(self) -> int:
+            return QDialog.Rejected
+
+    window = main_window.MainWindow(MemoryStore([]), original, tmp_path / "settings.json")
+    monkeypatch.setattr(main_window, "SettingsWindow", CancelledSettingsWindow)
+
+    window.open_settings()
+
+    assert window.windowOpacity() == pytest.approx(0.88, abs=0.01)
+    assert window.root_widget.background_enabled is False
+    assert window.root_widget.background_image_path == ""
+    assert window.root_widget.background_overlay == 0.68
+
+    window.close()
+
+
 def test_settings_startup_oserror_shows_warning(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

@@ -25,6 +25,7 @@ class SettingsWindow(QDialog):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.settings = settings
+        self._preview_ready = False
         self.setMinimumWidth(460)
 
         self.always_on_top = QCheckBox()
@@ -92,6 +93,8 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.addLayout(form)
         layout.addWidget(buttons)
+        self._preview_ready = True
+        self._connect_preview_signals()
 
     def choose_background(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -103,6 +106,19 @@ class SettingsWindow(QDialog):
         if path:
             self.background_path.setText(path)
             self.background_enabled.setChecked(True)
+
+    def _connect_preview_signals(self) -> None:
+        self.opacity.valueChanged.connect(self._emit_preview)
+        self.background_enabled.toggled.connect(self._emit_preview)
+        self.background_path.textChanged.connect(self._emit_preview)
+        self.background_overlay.valueChanged.connect(self._emit_preview)
+
+    def _emit_preview(self, *args) -> None:
+        if not self._preview_ready:
+            return
+        preview_settings = getattr(self.parent(), "preview_settings", None)
+        if callable(preview_settings):
+            preview_settings(self.build_settings())
 
     def build_settings(self) -> AppSettings:
         return replace(
