@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from math import sin
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -58,6 +59,7 @@ class AnimatedBackdrop(QWidget):
             painter.fillRect(rect, base)
 
         self._draw_grid(painter, rect.width(), rect.height())
+        self._draw_particles(painter, rect.width(), rect.height())
         self._draw_scan(painter, rect.width(), rect.height())
         painter.end()
 
@@ -69,6 +71,27 @@ class AnimatedBackdrop(QWidget):
             painter.drawLine(x, 0, x, height)
         for y in range(-offset, height + spacing, spacing):
             painter.drawLine(0, y, width, y)
+
+    def _draw_particles(self, painter: QPainter, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+        painter.setPen(Qt.NoPen)
+        for index in range(22):
+            seed = index * 53 + 17
+            speed = 0.18 + (index % 5) * 0.045
+            x = (seed * 19 + self._phase * speed) % (width + 48) - 24
+            wave = sin((self._phase + seed) / 42)
+            y = (seed * 31 + self._phase * (0.12 + (index % 3) * 0.035)) % (height + 52) - 26
+            radius = 1.3 + (index % 4) * 0.45
+            alpha = 32 + int((wave + 1) * 18)
+            if index % 3 == 0:
+                color = QColor(125, 211, 252, alpha)
+            elif index % 3 == 1:
+                color = QColor(167, 243, 208, alpha)
+            else:
+                color = QColor(246, 193, 119, alpha)
+            painter.setBrush(color)
+            painter.drawEllipse(QPointF(float(x), float(y)), radius, radius)
 
     def _draw_scan(self, painter: QPainter, width: int, height: int) -> None:
         if height <= 0:

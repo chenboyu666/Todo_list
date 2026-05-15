@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from floating_todo.domain import Task
-from floating_todo.view_models import countdown_label, task_rows, today_completion_percent
+from floating_todo.view_models import (
+    countdown_label,
+    deadline_at_label,
+    deadline_urgency,
+    task_rows,
+    today_completion_percent,
+)
 
 
 def make_task(title, progress, status="active", deadline_delta=None, priority="P1"):
@@ -47,6 +53,23 @@ def test_countdown_label_accepts_naive_deadline_as_utc():
     assert countdown_label(deadline, now) == "00:15:00"
 
 
+def test_deadline_at_label_shows_local_date_and_time():
+    deadline = datetime(2026, 5, 12, 8, 15, tzinfo=timezone.utc)
+
+    assert deadline_at_label(deadline) == deadline.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def test_deadline_urgency_levels_follow_remaining_time():
+    now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+
+    assert deadline_urgency(None, now) == ("none", "无截止")
+    assert deadline_urgency(now - timedelta(seconds=1), now) == ("overdue", "已超时")
+    assert deadline_urgency(now + timedelta(minutes=9), now) == ("critical", "10 分内")
+    assert deadline_urgency(now + timedelta(minutes=20), now) == ("urgent", "半小时内")
+    assert deadline_urgency(now + timedelta(minutes=90), now) == ("soon", "临近")
+    assert deadline_urgency(now + timedelta(hours=3), now) == ("normal", "充裕")
+
+
 def test_today_completion_percent_uses_done_tasks():
     tasks = [make_task("a", 100, "done"), make_task("b", 50), make_task("c", 0)]
 
@@ -60,6 +83,9 @@ def test_task_rows_include_priority_deadline_and_progress():
     assert rows[0]["title"] == "a"
     assert rows[0]["progress_label"] == "30%"
     assert rows[0]["deadline_label"] == "00:00:00"
+    assert rows[0]["deadline_at_label"] == now.astimezone().strftime("%Y-%m-%d %H:%M")
+    assert rows[0]["urgency"] == "critical"
+    assert rows[0]["urgency_label"] == "10 分内"
 
 
 def test_task_rows_uses_sorted_active_tasks():

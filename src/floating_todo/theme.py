@@ -61,6 +61,21 @@ QPushButton:hover {{
 QPushButton:pressed {{
   background: {THEME_COLORS["surface_pressed"]};
 }}
+QPushButton#dangerButton {{
+  background: #3A1822;
+  color: #FFD5DF;
+}}
+QPushButton#dangerButton:hover {{
+  background: #5A1F2B;
+}}
+QPushButton#dangerButton:pressed {{
+  background: #742538;
+}}
+QSizeGrip {{
+  background: transparent;
+  width: 18px;
+  height: 18px;
+}}
 QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QDateEdit, QComboBox {{
   background: {THEME_COLORS["field"]};
   border: none;

@@ -375,15 +375,13 @@ def test_complete_task_keeps_active_when_confirmation_declines(qapp: QApplicatio
     window.close()
 
 
-def test_delete_task_confirms_before_removing(
-    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_delete_task_confirms_before_removing(qapp: QApplication) -> None:
     import floating_todo.ui.main_window as main_window
 
     task = make_task("删除我", task_id="task-1")
     store = MemoryStore([task])
     window = main_window.MainWindow(store)
-    monkeypatch.setattr(main_window.QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    window.confirm_delete_task = lambda task: True
 
     window.delete_task("task-1")
 
@@ -393,15 +391,13 @@ def test_delete_task_confirms_before_removing(
     window.close()
 
 
-def test_delete_task_keeps_task_when_confirmation_declines_or_task_missing(
-    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_delete_task_keeps_task_when_confirmation_declines_or_task_missing(qapp: QApplication) -> None:
     import floating_todo.ui.main_window as main_window
 
     task = make_task("保留我", task_id="task-1")
     store = MemoryStore([task])
     window = main_window.MainWindow(store)
-    monkeypatch.setattr(main_window.QMessageBox, "question", lambda *args, **kwargs: QMessageBox.No)
+    window.confirm_delete_task = lambda task: False
 
     window.delete_task("missing")
     window.delete_task("task-1")

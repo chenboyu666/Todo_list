@@ -6,10 +6,11 @@ import os
 
 import pytest
 from PySide6.QtCore import QDateTime, QTimeZone, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QTextEdit
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
+from floating_todo.ui.controls import NoWheelSlider
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -57,6 +58,7 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     window = MainWindow(MemoryStore(tasks), AppSettings(), tmp_path / "settings.json")
 
     assert window.windowFlags() & Qt.FramelessWindowHint
+    assert window.resize_grip.toolTip() == "拖动调整窗口大小"
 
     window.set_focus_task("task-2")
 
@@ -72,6 +74,8 @@ def test_progress_slider_updates_task_progress(qapp: QApplication, tmp_path) -> 
     task = make_task("拖动进度", "task-1")
     store = MemoryStore([task])
     window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
+
+    assert isinstance(window.focus_progress, NoWheelSlider)
 
     window.focus_progress.setValue(64)
 
@@ -117,6 +121,42 @@ def test_progress_slider_drag_defers_save_until_release(qapp: QApplication, tmp_
     window.close()
 
 
+def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    task = make_task("临近任务", "task-1")
+    store = MemoryStore([task])
+    window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
+
+    row_labels = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
+    button_text = "\n".join(button.text() for button in window.task_rows_container.findChildren(QPushButton))
+    button_tooltips = "\n".join(button.toolTip() for button in window.task_rows_container.findChildren(QPushButton))
+
+    assert "截止" in row_labels
+    assert "2026-" in row_labels
+    assert "已超时" in row_labels
+    assert "进行中" in button_text
+    assert isinstance(window.task_rows_container.findChildren(NoWheelSlider)[0], NoWheelSlider)
+    assert "设为当前进行中的任务" in button_tooltips
+
+    window.close()
+
+
+def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    tasks = [make_task("当前", "task-1"), make_task("后面的任务", "task-2")]
+    store = MemoryStore(tasks)
+    window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
+
+    window.set_focus_task("task-2")
+
+    assert window.settings.focus_task_id == "task-2"
+    assert window.focus_title_label.text() == "后面的任务"
+
+    window.close()
+
+
 def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 
@@ -124,6 +164,7 @@ def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> N
     deadline = datetime(2026, 5, 12, 10, 37, tzinfo=timezone.utc)
     dialog.deadline_edit.setDateTime(QDateTime.fromSecsSinceEpoch(int(deadline.timestamp()), QTimeZone.utc()))
 
+    assert isinstance(dialog.progress_slider, NoWheelSlider)
     assert dialog.deadline_minute_input.count() == 60
     assert dialog.deadline_minute_input.itemText(37) == "37"
     assert dialog.build_task().deadline == deadline
@@ -160,3 +201,35 @@ def test_history_window_saves_reflection(qapp: QApplication) -> None:
     assert store.saved_tasks == [replace(task, reflection="这次要提前拆小任务")]
 
     window.close()
+
+
+def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    first = make_task("完成任务", "done-1", status="done")
+    second = make_task("另一条记录", "done-2", status="done")
+    store = MemoryStore([first, second])
+    window = HistoryWindow([first, second], store)
+
+    editors = window.findChildren(QTextEdit)
+    assert editors
+    assert editors[0].minimumHeight() == 58
+    assert editors[0].maximumHeight() == 58
+
+    window.search_input.setText("另一条")
+
+    assert window.count_label.text() == "1 条"
+
+    window.close()
+
+
+def test_delete_dialog_uses_frameless_app_chrome(qapp: QApplication) -> None:
+    from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
+
+    task = make_task("删除确认", "delete-1")
+    dialog = DeleteTaskDialog(task)
+
+    assert dialog.windowFlags() & Qt.FramelessWindowHint
+    assert dialog.windowTitle() == "删除任务"
+
+    dialog.close()
