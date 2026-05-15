@@ -66,7 +66,7 @@ class TitleBar(QFrame):
         self.window = window
         self._drag_start: QPoint | None = None
         self.setObjectName("titleBar")
-        self.setCursor(Qt.SizeAllCursor)
+        self.setCursor(Qt.OpenHandCursor)
         self.setMinimumHeight(46)
         self.setStyleSheet(
             "QFrame#titleBar {"
@@ -93,18 +93,22 @@ class TitleBar(QFrame):
         layout.addWidget(window.clock_label)
         window.settings_button.setText("设置")
         window.settings_button.setToolTip("打开设置")
+        window.settings_button.setCursor(Qt.PointingHandCursor)
         layout.addWidget(window.settings_button)
         window.minimize_button = QPushButton("–")
         window.minimize_button.setToolTip("最小化")
+        window.minimize_button.setCursor(Qt.PointingHandCursor)
         window.minimize_button.clicked.connect(window.showMinimized)
         layout.addWidget(window.minimize_button)
         window.close_button = QPushButton("×")
         window.close_button.setToolTip("关闭")
+        window.close_button.setCursor(Qt.PointingHandCursor)
         window.close_button.clicked.connect(window.close)
         layout.addWidget(window.close_button)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
+            self.setCursor(Qt.ClosedHandCursor)
             self._drag_start = event.globalPosition().toPoint() - self.window.frameGeometry().topLeft()
             event.accept()
             return
@@ -119,6 +123,7 @@ class TitleBar(QFrame):
 
     def mouseReleaseEvent(self, event) -> None:
         self._drag_start = None
+        self.setCursor(Qt.OpenHandCursor)
         super().mouseReleaseEvent(event)
 
 

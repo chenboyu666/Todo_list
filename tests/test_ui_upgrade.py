@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 
 import pytest
 from PySide6.QtCore import QDateTime, QTimeZone, Qt
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QTextEdit
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -60,6 +60,11 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     assert window.windowFlags() & Qt.FramelessWindowHint
     assert isinstance(window.resize_grip, CornerResizeGrip)
     assert window.resize_grip.toolTip() == "拖动调整窗口大小"
+    title_label = window.centralWidget().findChild(QLabel, "windowTitleLabel")
+    assert title_label is not None
+    assert title_label.parent().cursor().shape() == Qt.OpenHandCursor
+    assert window.close_button.text() == "×"
+    assert window.close_button.cursor().shape() == Qt.PointingHandCursor
 
     window.set_focus_task("task-2")
 
@@ -237,29 +242,107 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 
     first = make_task("完成任务", "done-1", status="done")
-    second = replace(make_task("另一条记录", "done-2", status="done"), priority="P2")
+    second = replace(
+        make_task("另一条记录", "done-2", status="done"),
+        priority="P2",
+        completed_at=first.completed_at - timedelta(days=1),
+        updated_at=first.updated_at - timedelta(days=1),
+    )
     store = MemoryStore([first, second])
     window = HistoryWindow([first, second], store)
 
-    editors = window.findChildren(QTextEdit)
-    assert editors
-    assert editors[0].minimumHeight() == 58
-    assert editors[0].maximumHeight() == 58
+    def rendered_history_text() -> str:
+        parts: list[str] = []
+        for index in range(window.list_layout.count()):
+            widget = window.list_layout.itemAt(index).widget()
+            if widget is None:
+                continue
+            if isinstance(widget, QLabel):
+                parts.append(widget.text())
+            parts.extend(label.text() for label in widget.findChildren(QLabel))
+        return "\n".join(parts)
+
+    note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
+    assert note_buttons
+
+    labels = rendered_history_text()
+    assert "2026-05-12 · 1 条 · 1/2" in window.date_page_label.text()
+    assert "完成任务" in labels
+    assert "另一条记录" not in labels
+
+    window.next_date_button.click()
+    qapp.processEvents()
+
+    labels = rendered_history_text()
+    assert "2026-05-11 · 1 条 · 2/2" in window.date_page_label.text()
+    assert "另一条记录" in labels
+    assert "完成任务" not in labels
 
     window.search_input.setText("另一条")
+    qapp.processEvents()
 
     assert window.count_label.text() == "1 条"
-    labels = "\n".join(label.text() for label in window.findChildren(QLabel))
-    assert "2026-05-12 · 1 条" in labels
+    assert "2026-05-11 · 1 条 · 1/1" in window.date_page_label.text()
 
     window.search_input.clear()
     window.group_mode.setCurrentText("按等级")
+    qapp.processEvents()
 
-    labels = "\n".join(label.text() for label in window.findChildren(QLabel))
+    labels = rendered_history_text()
+    assert window.date_pager_widget.isHidden()
     assert "P1 · 1 条" in labels
     assert "P2 · 1 条" in labels
 
     window.close()
+
+
+def test_history_note_editor_saves_notes_and_reflection(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    import floating_todo.ui.history_window as history_window
+
+    task = replace(make_task("完成任务", "done-1", status="done"), notes="旧备注", reflection="旧体会")
+    store = MemoryStore([task])
+    captured: dict[str, object] = {}
+
+    class AcceptedNoteDialog:
+        def __init__(self, task, parent=None) -> None:
+            captured["task"] = task
+            captured["parent"] = parent
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def notes(self) -> str:
+            return "新的备注"
+
+        def reflection(self) -> str:
+            return "新的体会"
+
+    monkeypatch.setattr(history_window, "HistoryNoteDialog", AcceptedNoteDialog)
+    window = history_window.HistoryWindow([task], store)
+
+    window.open_note_editor(task)
+
+    assert captured["task"] == task
+    assert captured["parent"] is window
+    assert store.saved_tasks == [replace(task, notes="新的备注", reflection="新的体会")]
+
+    window.close()
+
+
+def test_history_note_dialog_shows_large_editors(qapp: QApplication) -> None:
+    from PySide6.QtWidgets import QTextEdit
+    from floating_todo.ui.history_window import HistoryNoteDialog
+
+    task = replace(make_task("完成任务", "done-1", status="done"), notes="旧备注", reflection="旧体会")
+    dialog = HistoryNoteDialog(task)
+
+    editors = dialog.findChildren(QTextEdit)
+
+    assert len(editors) == 2
+    assert dialog.notes() == "旧备注"
+    assert dialog.reflection() == "旧体会"
+
+    dialog.close()
 
 
 def test_delete_dialog_uses_frameless_app_chrome(qapp: QApplication) -> None:
