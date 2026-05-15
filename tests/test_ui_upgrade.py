@@ -206,6 +206,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert progress_values
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
+    assert window.focus_complete_button.text() == "完成"
+    assert window.focus_delete_button.text() == "删除"
+    assert window.focus_complete_button.isEnabled()
+    assert window.focus_delete_button.isEnabled()
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
     assert current_buttons[0].objectName() == "currentTaskButton"
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
@@ -218,8 +222,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
 
     drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
-    assert drag_handles
-    assert drag_handles[0].toolTip() == "拖到上方设为进行中"
+    assert drag_handles == []
 
     window.close()
 

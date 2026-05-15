@@ -359,6 +359,23 @@ class MainWindow(QMainWindow):
         focus_layout.addWidget(self.focus_title_label)
         focus_layout.addWidget(self.focus_meta_label)
         focus_layout.addWidget(self.focus_progress)
+        focus_actions = QHBoxLayout()
+        focus_actions.addStretch(1)
+        self.focus_edit_button = QPushButton("编辑")
+        self.focus_edit_button.setToolTip("编辑当前进行中的任务")
+        self.focus_edit_button.clicked.connect(self.edit_focus_task)
+        focus_actions.addWidget(self.focus_edit_button)
+        self.focus_complete_button = QPushButton("完成")
+        self.focus_complete_button.setObjectName("focusCompleteButton")
+        self.focus_complete_button.setToolTip("完成当前进行中的任务")
+        self.focus_complete_button.clicked.connect(self.complete_focus_task)
+        focus_actions.addWidget(self.focus_complete_button)
+        self.focus_delete_button = QPushButton("删除")
+        self.focus_delete_button.setObjectName("dangerButton")
+        self.focus_delete_button.setToolTip("删除当前进行中的任务")
+        self.focus_delete_button.clicked.connect(self.delete_focus_task)
+        focus_actions.addWidget(self.focus_delete_button)
+        focus_layout.addLayout(focus_actions)
         root_layout.addWidget(self.focus_card)
 
         self.task_section_widget = QWidget()
@@ -445,6 +462,24 @@ class MainWindow(QMainWindow):
         self._save_settings()
         self.refresh()
         self._pulse_widget(self.focus_card)
+
+    def edit_focus_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None:
+            return
+        self.edit_task(focused.id)
+
+    def complete_focus_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None:
+            return
+        self.complete_task(focused.id)
+
+    def delete_focus_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None:
+            return
+        self.delete_task(focused.id)
 
     @property
     def is_task_drag_active(self) -> bool:
@@ -738,6 +773,7 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
             self.focus_progress.setValue(0)
+            self._set_focus_action_enabled(False)
             self.empty_state_widget.show()
         else:
             urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
@@ -751,6 +787,7 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
             self.focus_progress.setValue(focus_task.progress)
+            self._set_focus_action_enabled(True)
             self.empty_state_widget.hide()
         self.focus_progress.blockSignals(False)
 
@@ -805,8 +842,6 @@ class MainWindow(QMainWindow):
         layout.setSpacing(6)
 
         top = QHBoxLayout()
-        drag_handle = TaskDragHandle(card)
-        top.addWidget(drag_handle)
         priority = QLabel(str(row["priority"]))
         priority.setAlignment(Qt.AlignCenter)
         priority.setFixedHeight(24)
@@ -891,6 +926,10 @@ class MainWindow(QMainWindow):
         if slider.isSliderDown():
             return
         self.update_task_progress(task_id, value)
+
+    def _set_focus_action_enabled(self, enabled: bool) -> None:
+        for button in (self.focus_edit_button, self.focus_complete_button, self.focus_delete_button):
+            button.setEnabled(enabled)
 
 
 URGENCY_STYLES = {
