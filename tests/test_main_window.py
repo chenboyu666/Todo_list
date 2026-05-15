@@ -55,6 +55,7 @@ def make_task(
     effort_minutes: int = 45,
     deadline_delta: timedelta | None = timedelta(hours=2),
     status: str = "active",
+    notes: str = "",
     notification_state: dict[str, bool] | None = None,
 ) -> Task:
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
@@ -69,7 +70,7 @@ def make_task(
         created_at=now,
         updated_at=now,
         completed_at=now if status == "done" else None,
-        notes="",
+        notes=notes,
         notification_state=notification_state or {},
     )
 
@@ -131,7 +132,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     tasks = [
         make_task("完成归档", status="done", progress=100),
         make_task("低优先任务", priority="P3", progress=10, effort_minutes=20),
-        make_task("关键交付", priority="P1", progress=60, effort_minutes=90),
+        make_task("关键交付", priority="P1", progress=60, effort_minutes=90, notes="重点关注验收口径"),
     ]
     window = MainWindow(MemoryStore(tasks))
 
@@ -140,6 +141,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.today_completion_label.text() == "33%"
     assert window.focus_title_label.text() == "关键交付"
     assert window.focus_meta_label.text() == "P1 · 工作量 90 min"
+    assert window.focus_notes_label.text() == "备注：重点关注验收口径"
     assert window.focus_progress.value() == 60
     assert window.task_list_layout.count() == 2
 
@@ -149,6 +151,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert "低优先任务" in row_text
     assert "截止" in row_text
     assert "60%" in row_text
+    assert "重点关注验收口径" not in row_text
 
     buttons = window.task_rows_container.findChildren(QPushButton)
     button_texts = [button.text() for button in buttons]
@@ -164,6 +167,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     button_tooltips = [button.toolTip() for button in buttons]
     assert {"编辑", "完成", "删除"} <= set(button_texts)
     assert {"编辑任务", "标记任务完成", "删除任务"} <= set(button_tooltips)
+    assert "重点关注验收口径" in "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
 
     window.close()
 

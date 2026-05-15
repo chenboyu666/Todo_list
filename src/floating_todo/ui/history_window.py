@@ -283,10 +283,11 @@ class HistoryWindow(QDialog):
         completed = QLabel(f"完成时间 {completed_at}")
         completed.setStyleSheet(f"color: {THEME_COLORS['muted']};")
         layout.addWidget(completed)
-        preview = QLabel(self._note_preview(task))
-        preview.setWordWrap(True)
-        preview.setStyleSheet(f"color: {THEME_COLORS['muted']};")
-        layout.addWidget(preview)
+        for preview_text in self._note_previews(task):
+            preview = QLabel(preview_text)
+            preview.setWordWrap(True)
+            preview.setStyleSheet(f"color: {THEME_COLORS['muted']};")
+            layout.addWidget(preview)
         note_button = QPushButton("查看/编辑备注")
         note_button.setFixedWidth(126)
         note_button.clicked.connect(lambda checked=False, task=task: self.open_note_editor(task))
@@ -296,9 +297,19 @@ class HistoryWindow(QDialog):
         layout.addLayout(actions)
         return card
 
-    def _note_preview(self, task: Task) -> str:
-        text = (task.reflection or task.notes or "还没有记录备注或完成体会").strip()
-        return text if len(text) <= 54 else f"{text[:54]}..."
+    def _note_previews(self, task: Task) -> list[str]:
+        previews: list[str] = []
+        notes = self._compact_text(task.notes)
+        reflection = self._compact_text(task.reflection)
+        if notes:
+            previews.append(f"任务备注：{notes}")
+        if reflection:
+            previews.append(f"完成体会：{reflection}")
+        return previews or ["还没有记录备注或完成体会"]
+
+    def _compact_text(self, text: str, limit: int = 54) -> str:
+        compact = " ".join(str(text or "").split())
+        return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
     def open_note_editor(self, task: Task) -> None:
         dialog = HistoryNoteDialog(task, self)

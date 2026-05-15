@@ -358,6 +358,11 @@ class MainWindow(QMainWindow):
         self.focus_title_label.setWordWrap(True)
         focus_layout.addWidget(self.focus_title_label)
         focus_layout.addWidget(self.focus_meta_label)
+        self.focus_notes_label = QLabel()
+        self.focus_notes_label.setWordWrap(True)
+        self.focus_notes_label.setObjectName("focusNotesLabel")
+        self.focus_notes_label.setStyleSheet(_notes_style(selected=True))
+        focus_layout.addWidget(self.focus_notes_label)
         focus_layout.addWidget(self.focus_progress)
         focus_actions = QHBoxLayout()
         focus_actions.addStretch(1)
@@ -767,6 +772,8 @@ class MainWindow(QMainWindow):
         if focus_task is None:
             self.focus_title_label.setText("没有进行中的任务")
             self.focus_meta_label.setText("工作量 --")
+            self.focus_notes_label.clear()
+            self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
             self.focus_urgency_label.setText("等待")
@@ -779,6 +786,7 @@ class MainWindow(QMainWindow):
             urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
             self.focus_title_label.setText(focus_task.title)
             self.focus_meta_label.setText(f"{focus_task.priority} · 工作量 {focus_task.effort_minutes} min")
+            self._set_focus_notes(focus_task.notes)
             self.focus_deadline_label.setText(
                 f"截止 {deadline_at_label(focus_task.deadline)} · {countdown_label(focus_task.deadline, now)}"
             )
@@ -890,6 +898,14 @@ class MainWindow(QMainWindow):
         if not is_expanded:
             return card
 
+        notes_text = _note_preview(str(row.get("notes", "")), limit=78)
+        if notes_text:
+            notes_label = QLabel(f"备注：{notes_text}")
+            notes_label.setWordWrap(True)
+            notes_label.setObjectName("taskNotesPreview")
+            notes_label.setStyleSheet(_notes_style(selected=is_focused))
+            layout.addWidget(notes_label)
+
         progress = NoWheelSlider(Qt.Horizontal)
         progress.setObjectName("activeTaskProgress" if is_focused else "taskProgress")
         progress.setRange(0, 100)
@@ -930,6 +946,15 @@ class MainWindow(QMainWindow):
     def _set_focus_action_enabled(self, enabled: bool) -> None:
         for button in (self.focus_edit_button, self.focus_complete_button, self.focus_delete_button):
             button.setEnabled(enabled)
+
+    def _set_focus_notes(self, notes: str) -> None:
+        preview = _note_preview(notes, limit=92)
+        if not preview:
+            self.focus_notes_label.clear()
+            self.focus_notes_label.hide()
+            return
+        self.focus_notes_label.setText(f"备注：{preview}")
+        self.focus_notes_label.show()
 
 
 URGENCY_STYLES = {
@@ -1028,6 +1053,26 @@ def _progress_value_style(*, selected: bool = False) -> str:
         f"font-weight: 700; min-width: 48px; padding: 1px 8px; border-radius: 8px; "
         f"color: {THEME_COLORS['accent']}; background: #102033;"
     )
+
+
+def _notes_style(*, selected: bool = False) -> str:
+    if selected:
+        return (
+            "color: #D7F8FF; background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            " stop:0 #14485C, stop:1 #166552);"
+            "border: none; border-radius: 8px; padding: 6px 8px; font-weight: 600;"
+        )
+    return (
+        f"color: {THEME_COLORS['muted']}; background: #101A27; "
+        "border: none; border-radius: 8px; padding: 5px 8px;"
+    )
+
+
+def _note_preview(notes: str, *, limit: int = 72) -> str:
+    text = " ".join(str(notes or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}..."
 
 
 def _priority_chip_background(priority: str) -> str:

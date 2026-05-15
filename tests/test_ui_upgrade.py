@@ -34,7 +34,7 @@ def qapp() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
-def make_task(title: str, task_id: str, *, status: str = "active") -> Task:
+def make_task(title: str, task_id: str, *, status: str = "active", notes: str = "") -> Task:
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     return Task(
         id=task_id,
@@ -47,7 +47,7 @@ def make_task(title: str, task_id: str, *, status: str = "active") -> Task:
         created_at=now,
         updated_at=now,
         completed_at=now if status == "done" else None,
-        notes="",
+        notes=notes,
         notification_state={},
     )
 
@@ -185,7 +185,7 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow, TaskDragHandle, _card_style
 
-    task = make_task("临近任务", "task-1")
+    task = make_task("临近任务", "task-1", notes="先确认接口，再整理交付材料")
     store = MemoryStore([task])
     window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
 
@@ -210,6 +210,8 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
+    assert not window.focus_notes_label.isHidden()
+    assert "备注：先确认接口" in window.focus_notes_label.text()
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
     assert current_buttons[0].objectName() == "currentTaskButton"
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
@@ -220,6 +222,9 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert sliders
     assert sliders[0].objectName() == "activeTaskProgress"
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
+    task_notes = window.task_rows_container.findChildren(QLabel, "taskNotesPreview")
+    assert task_notes
+    assert "备注：先确认接口" in task_notes[0].text()
 
     drag_handles = window.task_rows_container.findChildren(TaskDragHandle)
     assert drag_handles == []
@@ -316,7 +321,10 @@ def test_history_window_saves_reflection(qapp: QApplication) -> None:
 def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 
-    first = make_task("完成任务", "done-1", status="done")
+    first = replace(
+        make_task("完成任务", "done-1", status="done", notes="交付前确认了备注"),
+        reflection="完成后觉得复盘有效",
+    )
     second = replace(
         make_task("另一条记录", "done-2", status="done"),
         priority="P2",
@@ -343,6 +351,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     labels = rendered_history_text()
     assert "2026-05-12 · 1 条 · 1/2" in window.date_page_label.text()
     assert "完成任务" in labels
+    assert "任务备注：交付前确认了备注" in labels
+    assert "完成体会：完成后觉得复盘有效" in labels
     assert "另一条记录" not in labels
 
     window.next_date_button.click()

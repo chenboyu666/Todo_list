@@ -60,6 +60,7 @@ def task_rows(tasks: list[Task], now: datetime) -> list[dict[str, object]]:
             {
                 "id": task.id,
                 "title": task.title,
+                "notes": task.notes,
                 "priority": task.priority,
                 "effort_label": f"{task.effort_minutes} min",
                 "deadline_label": countdown_label(task.deadline, now),

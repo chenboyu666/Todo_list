@@ -81,6 +81,7 @@ def test_task_rows_include_priority_deadline_and_progress():
     rows = task_rows([make_task("a", 30, deadline_delta=timedelta(0))], now)
 
     assert rows[0]["title"] == "a"
+    assert rows[0]["notes"] == ""
     assert rows[0]["progress_label"] == "30%"
     assert rows[0]["deadline_label"] == "00:00:00"
     assert rows[0]["deadline_at_label"] == now.astimezone().strftime("%Y-%m-%d %H:%M")
