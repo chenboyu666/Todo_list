@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QSlider,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -23,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.controls import NoWheelSlider
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
 
@@ -83,7 +83,7 @@ class TaskDialog(QDialog):
         self.deadline_minute_input = QComboBox()
         self.deadline_minute_input.addItems([f"{minute:02d}" for minute in range(60)])
 
-        self.progress_slider = QSlider(Qt.Horizontal)
+        self.progress_slider = NoWheelSlider(Qt.Horizontal)
         self.progress_slider.setRange(0, 100)
         self.progress_input = self.progress_slider
         self.progress_spin = self.progress_slider

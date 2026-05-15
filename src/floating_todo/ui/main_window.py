@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizeGrip,
     QSizePolicy,
-    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -30,11 +30,19 @@ from floating_todo.store import save_json_object
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.backdrop import AnimatedBackdrop
 from floating_todo.ui.completion_dialog import CompletionDialog
+from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
+from floating_todo.ui.controls import NoWheelSlider
 from floating_todo.ui.effects import apply_soft_shadow
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
-from floating_todo.view_models import countdown_label, task_rows, today_completion_percent
+from floating_todo.view_models import (
+    countdown_label,
+    deadline_at_label,
+    deadline_urgency,
+    task_rows,
+    today_completion_percent,
+)
 
 
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
@@ -168,7 +176,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("FloatingTodo")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.apply_window_behavior_settings()
-        self.setMinimumWidth(430)
+        self.setMinimumSize(430, 420)
         self.apply_saved_geometry()
 
         self.clock_label = QLabel()
@@ -177,7 +185,8 @@ class MainWindow(QMainWindow):
         self.focus_title_label = QLabel("没有进行中的任务")
         self.focus_meta_label = QLabel("工作量 --")
         self.focus_deadline_label = QLabel("截止 --:--:--")
-        self.focus_progress = QSlider(Qt.Horizontal)
+        self.focus_urgency_label = QLabel("等待")
+        self.focus_progress = NoWheelSlider(Qt.Horizontal)
         self.focus_progress.setRange(0, 100)
         self.focus_progress.valueChanged.connect(self.update_focus_progress)
         self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
@@ -224,16 +233,19 @@ class MainWindow(QMainWindow):
 
         self.focus_card = FocusDropCard(self)
         self.focus_card.setObjectName("focusCard")
-        self.focus_card.setStyleSheet(_card_style())
+        self.focus_card.setStyleSheet(_card_style("normal", selected=True))
         apply_soft_shadow(self.focus_card, blur=34, y_offset=12, alpha=120)
         focus_layout = QVBoxLayout(self.focus_card)
         focus_layout.setContentsMargins(12, 10, 12, 12)
         focus_layout.setSpacing(8)
 
         focus_top = QHBoxLayout()
-        focus_title_prefix = QLabel("进行中")
-        focus_title_prefix.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
-        focus_top.addWidget(focus_title_prefix)
+        self.focus_title_prefix = QLabel("进行中")
+        self.focus_title_prefix.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
+        focus_top.addWidget(self.focus_title_prefix)
+        self.focus_urgency_label.setAlignment(Qt.AlignCenter)
+        self.focus_urgency_label.setFixedHeight(24)
+        focus_top.addWidget(self.focus_urgency_label)
         focus_top.addStretch(1)
         focus_top.addWidget(self.focus_deadline_label)
         focus_layout.addLayout(focus_top)
@@ -282,6 +294,15 @@ class MainWindow(QMainWindow):
         self.task_scroll_area.setWidget(self.task_rows_container)
         self.task_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root_layout.addWidget(self.task_scroll_area, 1)
+
+        resize_row = QHBoxLayout()
+        resize_row.setContentsMargins(0, 0, 0, 0)
+        resize_row.addStretch(1)
+        self.resize_grip = QSizeGrip(root)
+        self.resize_grip.setFixedSize(18, 18)
+        self.resize_grip.setToolTip("拖动调整窗口大小")
+        resize_row.addWidget(self.resize_grip)
+        root_layout.addLayout(resize_row)
         self.apply_background_settings()
 
     def _summary_card(self, caption: str, value_label: QLabel) -> QFrame:
@@ -393,8 +414,7 @@ class MainWindow(QMainWindow):
         index = self._task_index(task_id)
         if index is None:
             return
-        answer = QMessageBox.question(self, "删除任务", "确定要删除这个任务吗？", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if answer != QMessageBox.Yes:
+        if not self.confirm_delete_task(self.tasks[index]):
             return
         self.tasks = [*self.tasks[:index], *self.tasks[index + 1 :]]
         if self.settings.focus_task_id == task_id:
@@ -402,6 +422,10 @@ class MainWindow(QMainWindow):
             self._save_settings()
         self.store.save_tasks(self.tasks)
         self.refresh()
+
+    def confirm_delete_task(self, task: Task) -> bool:
+        dialog = DeleteTaskDialog(task, self)
+        return dialog.exec() == QDialog.Accepted
 
     def open_history(self) -> None:
         dialog = HistoryWindow(self.tasks, self.store, self)
@@ -553,33 +577,45 @@ class MainWindow(QMainWindow):
             self.focus_title_label.setText("没有进行中的任务")
             self.focus_meta_label.setText("工作量 --")
             self.focus_deadline_label.setText("截止 --:--:--")
+            self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
+            self.focus_urgency_label.setText("等待")
+            self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
+            self.focus_card.setStyleSheet(_card_style("normal", selected=True))
             self.focus_progress.setValue(0)
             self.empty_state_widget.show()
         else:
+            urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
             self.focus_title_label.setText(focus_task.title)
             self.focus_meta_label.setText(f"{focus_task.priority} · 工作量 {focus_task.effort_minutes} min")
-            self.focus_deadline_label.setText(f"截止 {countdown_label(focus_task.deadline, now)}")
+            self.focus_deadline_label.setText(
+                f"截止 {deadline_at_label(focus_task.deadline)} · {countdown_label(focus_task.deadline, now)}"
+            )
+            self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
+            self.focus_urgency_label.setText(urgency_label)
+            self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
+            self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
             self.focus_progress.setValue(focus_task.progress)
             self.empty_state_widget.hide()
         self.focus_progress.blockSignals(False)
 
-        self._render_task_rows(task_rows(self.tasks, now))
+        self._render_task_rows(task_rows(self.tasks, now), focus_task.id if focus_task else None)
         self.apply_low_distraction_settings()
 
-    def _render_task_rows(self, rows: list[dict[str, object]]) -> None:
+    def _render_task_rows(self, rows: list[dict[str, object]], focus_task_id: str | None = None) -> None:
         while self.task_list_layout.count():
             item = self.task_list_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
         for row in rows:
-            self.task_list_layout.addWidget(self._task_row(row))
+            self.task_list_layout.addWidget(self._task_row(row, focus_task_id))
 
-    def _task_row(self, row: dict[str, object]) -> QFrame:
+    def _task_row(self, row: dict[str, object], focus_task_id: str | None = None) -> QFrame:
         task_id = str(row["id"])
+        urgency = str(row["urgency"])
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
-        card.setStyleSheet(_card_style())
+        card.setStyleSheet(_card_style(urgency, selected=task_id == focus_task_id))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
@@ -597,6 +633,11 @@ class MainWindow(QMainWindow):
             f"color: {_priority_chip_text(str(row['priority']))};"
         )
         top.addWidget(priority)
+        urgency_chip = QLabel(str(row["urgency_label"]))
+        urgency_chip.setAlignment(Qt.AlignCenter)
+        urgency_chip.setFixedHeight(24)
+        urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
+        top.addWidget(urgency_chip)
         title = QLabel(str(row["title"]))
         title.setWordWrap(True)
         title.setStyleSheet("font-weight: 700;")
@@ -605,7 +646,7 @@ class MainWindow(QMainWindow):
         top.addWidget(progress_label)
         layout.addLayout(top)
 
-        progress = QSlider(Qt.Horizontal)
+        progress = NoWheelSlider(Qt.Horizontal)
         progress.setRange(0, 100)
         progress.setValue(int(row["progress"]))
         progress.valueChanged.connect(
@@ -618,6 +659,11 @@ class MainWindow(QMainWindow):
 
         actions = QHBoxLayout()
         actions.addStretch(1)
+        focus_button = QPushButton("进行中" if task_id == focus_task_id else "进行")
+        focus_button.setToolTip("设为当前进行中的任务")
+        focus_button.setEnabled(task_id != focus_task_id)
+        focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
+        actions.addWidget(focus_button)
         edit_button = QPushButton("编辑")
         edit_button.setToolTip("编辑任务")
         edit_button.clicked.connect(lambda checked=False, task_id=task_id: self.edit_task(task_id))
@@ -635,32 +681,107 @@ class MainWindow(QMainWindow):
         meta = QHBoxLayout()
         meta.addWidget(QLabel(f"工作量 {row['effort_label']}"))
         meta.addStretch(1)
-        deadline = QLabel(f"截止 {row['deadline_label']}")
-        if row["is_overdue"]:
-            deadline.setStyleSheet("color: #FCA5A5;")
+        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
+        deadline.setStyleSheet(_deadline_label_style(urgency))
         meta.addWidget(deadline)
         layout.addLayout(meta)
         return card
 
-    def _handle_row_progress_value(self, task_id: str, slider: QSlider, label: QLabel, value: int) -> None:
+    def _handle_row_progress_value(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
         label.setText(f"{value}%")
         if slider.isSliderDown():
             return
         self.update_task_progress(task_id, value)
 
 
-def _card_style() -> str:
+URGENCY_STYLES = {
+    "none": {
+        "surface": "#111722",
+        "surface_alt": "#151B27",
+        "selected": "#1A2230",
+        "accent": THEME_COLORS["muted"],
+        "chip_bg": "#202838",
+        "chip_text": "#C9D2E4",
+    },
+    "normal": {
+        "surface": "#111722",
+        "surface_alt": "#142031",
+        "selected": "#1A2E3C",
+        "accent": THEME_COLORS["accent"],
+        "chip_bg": "#123047",
+        "chip_text": "#BAE6FD",
+    },
+    "soon": {
+        "surface": "#101B1E",
+        "surface_alt": "#132822",
+        "selected": "#18352D",
+        "accent": THEME_COLORS["accent_secondary"],
+        "chip_bg": "#12362D",
+        "chip_text": "#C8FFE8",
+    },
+    "urgent": {
+        "surface": "#1F1A13",
+        "surface_alt": "#2A2214",
+        "selected": "#3A2A16",
+        "accent": THEME_COLORS["warning"],
+        "chip_bg": "#4A3218",
+        "chip_text": "#FFE2A8",
+    },
+    "critical": {
+        "surface": "#251714",
+        "surface_alt": "#321D17",
+        "selected": "#422117",
+        "accent": "#FDBA74",
+        "chip_bg": "#5A2719",
+        "chip_text": "#FFD5BA",
+    },
+    "overdue": {
+        "surface": "#28151B",
+        "surface_alt": "#351722",
+        "selected": "#421927",
+        "accent": THEME_COLORS["danger"],
+        "chip_bg": "#5A1F2B",
+        "chip_text": "#FFD5DF",
+    },
+}
+
+
+def _urgency_style(urgency: str) -> dict[str, str]:
+    return URGENCY_STYLES.get(urgency, URGENCY_STYLES["normal"])
+
+
+def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
+    style = _urgency_style(urgency)
+    selected_stop = style["selected"] if selected else style["surface_alt"]
     return (
-        f"QFrame {{ background: {THEME_COLORS['surface']}; "
-        "border: none; border-radius: 8px; }}"
+        "QFrame {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+        f" stop:0 {style['surface']},"
+        f" stop:0.68 {THEME_COLORS['surface']},"
+        f" stop:1 {selected_stop});"
+        "border: none;"
+        "border-radius: 8px;"
+        "}"
     )
+
+
+def _urgency_chip_style(urgency: str) -> str:
+    style = _urgency_style(urgency)
+    return (
+        "font-weight: 700; padding: 2px 8px; border-radius: 7px; "
+        f"background: {style['chip_bg']}; color: {style['chip_text']};"
+    )
+
+
+def _deadline_label_style(urgency: str) -> str:
+    return f"color: {_urgency_style(urgency)['accent']}; font-weight: 700;"
 
 
 def _priority_chip_background(priority: str) -> str:
     return {
-        "P1": "#3B2416",
-        "P2": "#102333",
-        "P3": "#132820",
+        "P1": "#4A2B16",
+        "P2": "#123047",
+        "P3": "#12362D",
     }.get(priority, "#1A1F2B")
 
 
