@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QPushB
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
-from floating_todo.ui.controls import NoWheelSlider
+from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -90,6 +90,14 @@ def test_progress_slider_updates_task_progress(qapp: QApplication, tmp_path) -> 
 
     assert store.saved_tasks is not None
     assert store.saved_tasks[0].progress == 64
+    assert isinstance(window.focus_progress_label, NoWheelSpinBox)
+    assert window.focus_progress_label.value() == 64
+
+    window.focus_progress_label.setValue(38)
+
+    assert window.focus_progress.value() == 38
+    assert store.saved_tasks is not None
+    assert store.saved_tasks[0].progress == 38
 
     window.close()
 
@@ -165,6 +173,17 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
 
     assert slider.isSliderDown() is True
     assert slider.value() > 80
+    slider.mouseMoveEvent(
+        QMouseEvent(
+            QEvent.MouseMove,
+            QPointF(260, 14),
+            QPointF(260, 14),
+            Qt.NoButton,
+            Qt.NoButton,
+            Qt.NoModifier,
+        )
+    )
+    assert slider.value() == 100
 
     slider.mouseReleaseEvent(
         QMouseEvent(
@@ -226,6 +245,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     sliders = window.task_rows_container.findChildren(NoWheelSlider)
     assert sliders
     assert sliders[0].objectName() == "activeTaskProgress"
+    progress_inputs = window.task_rows_container.findChildren(NoWheelSpinBox, "activeTaskProgressInput")
+    assert progress_inputs
+    assert progress_inputs[0].text() == "67%"
+    progress_inputs[0].setValue(55)
+    assert store.saved_tasks is not None
+    assert store.saved_tasks[0].progress == 55
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
     task_notes = window.task_rows_container.findChildren(QLabel, "taskNotesPreview")
     assert task_notes
@@ -285,6 +310,11 @@ def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> N
     dialog.deadline_edit.setDateTime(QDateTime.fromSecsSinceEpoch(int(deadline.timestamp()), QTimeZone.utc()))
 
     assert isinstance(dialog.progress_slider, NoWheelSlider)
+    assert isinstance(dialog.progress_spin, NoWheelSpinBox)
+    dialog.progress_slider.setValue(34)
+    assert dialog.progress_spin.value() == 34
+    dialog.progress_spin.setValue(45)
+    assert dialog.progress_slider.value() == 45
     assert dialog.deadline_minute_input.count() == 60
     assert dialog.deadline_minute_input.itemText(37) == "37"
     assert dialog.build_task().deadline == deadline

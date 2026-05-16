@@ -31,7 +31,7 @@ from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.backdrop import AnimatedBackdrop
 from floating_todo.ui.completion_dialog import CompletionDialog
 from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
-from floating_todo.ui.controls import NoWheelSlider
+from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
 from floating_todo.ui.effects import apply_soft_shadow, install_global_interaction_effects, prepare_window_entrance
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
@@ -293,11 +293,15 @@ class MainWindow(QMainWindow):
         self.focus_progress.setRange(0, 100)
         self.focus_progress.valueChanged.connect(self.update_focus_progress)
         self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
-        self.focus_progress_label = QLabel("0%")
+        self.focus_progress_label = NoWheelSpinBox()
         self.focus_progress_label.setObjectName("focusProgressValue")
+        self.focus_progress_label.setRange(0, 100)
+        self.focus_progress_label.setSuffix("%")
         self.focus_progress_label.setAlignment(Qt.AlignCenter)
+        self.focus_progress_label.setFixedWidth(62)
         self.focus_progress_label.setFixedHeight(26)
-        self.focus_progress_label.setStyleSheet(_progress_value_style(selected=True))
+        self.focus_progress_label.setStyleSheet(_progress_input_style(selected=True))
+        self.focus_progress_label.valueChanged.connect(self.update_focus_progress_from_input)
         self.empty_state_label = QLabel("没有进行中的任务")
         self.empty_state_hint_label = QLabel("点击新增任务开始")
         self.task_rows_container = QWidget()
@@ -513,13 +517,28 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def update_focus_progress(self, value: int) -> None:
-        self.focus_progress_label.setText(f"{value}%")
+        self._set_focus_progress_input(value)
         if self.focus_progress.isSliderDown():
             return
         self._commit_focus_progress(value)
 
+    def update_focus_progress_from_input(self, value: int) -> None:
+        self.focus_progress.blockSignals(True)
+        try:
+            self.focus_progress.setValue(value)
+        finally:
+            self.focus_progress.blockSignals(False)
+        self._commit_focus_progress(value)
+
     def commit_focus_progress(self) -> None:
         self._commit_focus_progress(self.focus_progress.value())
+
+    def _set_focus_progress_input(self, value: int) -> None:
+        self.focus_progress_label.blockSignals(True)
+        try:
+            self.focus_progress_label.setValue(value)
+        finally:
+            self.focus_progress_label.blockSignals(False)
 
     def _commit_focus_progress(self, value: int) -> None:
         focused = self.focus_task()
@@ -779,6 +798,7 @@ class MainWindow(QMainWindow):
 
         focus_task = self.focus_task()
         self.focus_progress.blockSignals(True)
+        self.focus_progress_label.blockSignals(True)
         if focus_task is None:
             self.focus_title_label.setText("没有进行中的任务")
             self.focus_meta_label.setText("工作量 --")
@@ -790,7 +810,7 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
             self.focus_progress.setValue(0)
-            self.focus_progress_label.setText("0%")
+            self.focus_progress_label.setValue(0)
             self._set_focus_action_enabled(False)
             self.empty_state_widget.show()
         else:
@@ -806,10 +826,11 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
             self.focus_progress.setValue(focus_task.progress)
-            self.focus_progress_label.setText(f"{focus_task.progress}%")
+            self.focus_progress_label.setValue(focus_task.progress)
             self._set_focus_action_enabled(True)
             self.empty_state_widget.hide()
         self.focus_progress.blockSignals(False)
+        self.focus_progress_label.blockSignals(False)
 
         self._render_task_rows(task_rows(self.tasks, now), focus_task.id if focus_task else None)
         self.apply_low_distraction_settings()
@@ -922,13 +943,31 @@ class MainWindow(QMainWindow):
         progress.setObjectName("activeTaskProgress" if is_focused else "taskProgress")
         progress.setRange(0, 100)
         progress.setValue(int(row["progress"]))
+        progress_input = NoWheelSpinBox()
+        progress_input.setObjectName("activeTaskProgressInput" if is_focused else "taskProgressInput")
+        progress_input.setRange(0, 100)
+        progress_input.setSuffix("%")
+        progress_input.setAlignment(Qt.AlignCenter)
+        progress_input.setFixedWidth(58)
+        progress_input.setFixedHeight(24)
+        progress_input.setValue(int(row["progress"]))
+        progress_input.setStyleSheet(_progress_input_style(selected=is_focused))
         progress.valueChanged.connect(
-            lambda value, task_id=task_id, slider=progress, label=progress_label: self._handle_row_progress_value(
-                task_id, slider, label, value
+            lambda value, task_id=task_id, slider=progress, label=progress_label, value_input=progress_input: self._handle_row_progress_value(
+                task_id, slider, label, value_input, value
             )
         )
         progress.sliderReleased.connect(lambda task_id=task_id, slider=progress: self.update_task_progress(task_id, slider.value()))
-        layout.addWidget(progress)
+        progress_input.valueChanged.connect(
+            lambda value, task_id=task_id, slider=progress, label=progress_label: self._handle_row_progress_input(
+                task_id, slider, label, value
+            )
+        )
+        progress_row = QHBoxLayout()
+        progress_row.setSpacing(10)
+        progress_row.addWidget(progress, 1)
+        progress_row.addWidget(progress_input)
+        layout.addLayout(progress_row)
 
         detail_row = QHBoxLayout()
         detail_row.setSpacing(6)
@@ -949,15 +988,33 @@ class MainWindow(QMainWindow):
         layout.addLayout(detail_row)
         return card
 
-    def _handle_row_progress_value(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
+    def _handle_row_progress_value(
+        self, task_id: str, slider: NoWheelSlider, label: QLabel, value_input: NoWheelSpinBox, value: int
+    ) -> None:
         label.setText(f"{value}%")
+        value_input.blockSignals(True)
+        try:
+            value_input.setValue(value)
+        finally:
+            value_input.blockSignals(False)
         if slider.isSliderDown():
             return
+        self.update_task_progress(task_id, value)
+
+    def _handle_row_progress_input(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
+        label.setText(f"{value}%")
+        slider.blockSignals(True)
+        try:
+            slider.setValue(value)
+        finally:
+            slider.blockSignals(False)
         self.update_task_progress(task_id, value)
 
     def _set_focus_action_enabled(self, enabled: bool) -> None:
         for button in (self.focus_edit_button, self.focus_complete_button, self.focus_delete_button):
             button.setEnabled(enabled)
+        self.focus_progress.setEnabled(enabled)
+        self.focus_progress_label.setEnabled(enabled)
 
     def _set_focus_notes(self, notes: str) -> None:
         preview = _note_preview(notes, limit=92)
@@ -1064,6 +1121,37 @@ def _progress_value_style(*, selected: bool = False) -> str:
     return (
         f"font-weight: 700; min-width: 48px; padding: 1px 8px; border-radius: 8px; "
         f"color: {THEME_COLORS['accent']}; background: #102033;"
+    )
+
+
+def _progress_input_style(*, selected: bool = False) -> str:
+    if selected:
+        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #155E75, stop:0.55 #0E7490, stop:1 #047857)"
+        color = "#ECFEFF"
+    else:
+        background = "#102033"
+        color = THEME_COLORS["accent"]
+    return (
+        "QSpinBox {"
+        f"background: {background};"
+        f"color: {color};"
+        "border: none;"
+        "border-radius: 8px;"
+        "font-weight: 800;"
+        "padding: 1px 8px;"
+        "selection-background-color: #1D4ED8;"
+        "}"
+        "QSpinBox:focus {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0E7490, stop:1 #16A34A);"
+        "}"
+        "QSpinBox:disabled {"
+        "color: #5F6E7E;"
+        "background: #111827;"
+        "}"
+        "QSpinBox::up-button, QSpinBox::down-button {"
+        "width: 0px;"
+        "border: none;"
+        "}"
     )
 
 
