@@ -43,6 +43,7 @@ def test_settings_round_trip_with_defaults():
 
     assert settings.opacity == 0.5
     assert settings.close_to_tray is True
+    assert settings.mouse_passthrough is False
     assert settings.window_geometry["x"] == 10
     assert settings_to_dict(settings)["theme"] == "calm-tech-dark"
 
@@ -90,6 +91,7 @@ def test_boolean_strings_parse_predictably():
     settings = settings_from_dict(
         {
             "always_on_top": "false",
+            "mouse_passthrough": "true",
             "lock_position": "0",
             "close_to_tray": "true",
             "launch_on_startup": "1",
@@ -98,6 +100,7 @@ def test_boolean_strings_parse_predictably():
     )
 
     assert settings.always_on_top is False
+    assert settings.mouse_passthrough is True
     assert settings.lock_position is False
     assert settings.close_to_tray is True
     assert settings.launch_on_startup is True

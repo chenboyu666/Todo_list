@@ -473,6 +473,54 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     window.close()
 
 
+def test_mouse_passthrough_applies_only_when_window_is_topmost(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    settings_path = tmp_path / "settings.json"
+    window = MainWindow(MemoryStore([]), AppSettings(always_on_top=True, mouse_passthrough=True), settings_path)
+    window.tray_controller = type("AvailableTray", (), {"is_available": lambda self: True, "sync_actions": lambda self: None})()
+    window.apply_window_behavior_settings()
+
+    assert window.mouse_passthrough_active() is True
+    assert window.windowFlags() & Qt.WindowStaysOnTopHint
+    assert window.windowFlags() & Qt.WindowTransparentForInput
+    assert window.windowTitle() == "FloatingTodo · 穿透模式"
+    assert window.passthrough_hint_label.isHidden() is False
+
+    window.set_mouse_passthrough(False)
+
+    assert window.mouse_passthrough_active() is False
+    assert not window.windowFlags() & Qt.WindowTransparentForInput
+    assert json.loads(settings_path.read_text(encoding="utf-8"))["mouse_passthrough"] is False
+
+    window.close()
+
+
+def test_mouse_passthrough_stays_inactive_without_tray_restore_path(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(always_on_top=True, mouse_passthrough=True))
+
+    assert window.mouse_passthrough_active() is False
+    assert not window.windowFlags() & Qt.WindowTransparentForInput
+
+    window.close()
+
+
+def test_mouse_passthrough_is_inactive_without_topmost(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]), AppSettings(always_on_top=False, mouse_passthrough=True))
+    window.tray_controller = type("AvailableTray", (), {"is_available": lambda self: True, "sync_actions": lambda self: None})()
+    window.apply_window_behavior_settings()
+
+    assert window.mouse_passthrough_active() is False
+    assert not window.windowFlags() & Qt.WindowStaysOnTopHint
+    assert not window.windowFlags() & Qt.WindowTransparentForInput
+
+    window.close()
+
+
 def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow
 

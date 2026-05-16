@@ -22,6 +22,9 @@ class FakeAction:
     def trigger(self) -> None:
         self.triggered.emit()
 
+    def setText(self, label: str) -> None:
+        self.label = label
+
 
 class FakeMenu:
     def __init__(self) -> None:
@@ -78,6 +81,12 @@ class FakeWindow:
     def open_settings(self) -> None:
         self.calls.append("open_settings")
 
+    def toggle_mouse_passthrough(self) -> None:
+        self.calls.append("toggle_mouse_passthrough")
+
+    def mouse_passthrough_active(self) -> bool:
+        return "passthrough_active" in self.calls
+
 
 class FakeApp:
     def __init__(self) -> None:
@@ -113,16 +122,31 @@ def test_tray_controller_creates_menu_actions_and_shows_tray() -> None:
         "显示/隐藏",
         "快速新增任务",
         "设置",
+        "启用鼠标穿透",
         "退出",
     ]
 
     controller.menu.actions[1].trigger()
     controller.menu.actions[2].trigger()
     controller.menu.actions[3].trigger()
+    controller.menu.actions[4].trigger()
 
     assert "add_task" in window.calls
     assert "open_settings" in window.calls
+    assert "toggle_mouse_passthrough" in window.calls
     assert app.quit_called is True
+
+
+def test_tray_passthrough_action_label_reflects_window_state() -> None:
+    window = FakeWindow()
+    controller = make_controller(window)
+
+    assert controller.passthrough_action.label == "启用鼠标穿透"
+
+    window.calls.append("passthrough_active")
+    controller.sync_actions()
+
+    assert controller.passthrough_action.label == "退出鼠标穿透"
 
 
 def test_tray_toggle_hides_visible_window() -> None:
@@ -148,7 +172,7 @@ def test_tray_toggle_shows_raises_and_activates_hidden_window() -> None:
 def test_tray_quit_action_is_safe_without_application_instance() -> None:
     controller = make_controller(FakeWindow(), app=None)
 
-    controller.menu.actions[3].trigger()
+    controller.menu.actions[4].trigger()
 
 
 def test_tray_controller_reports_system_tray_availability() -> None:
