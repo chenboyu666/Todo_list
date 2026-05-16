@@ -49,9 +49,15 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.lead_minutes_spinbox.minimum() == 1
     assert dialog.lead_minutes_spinbox.maximum() == 240
     assert dialog.lead_minutes_spinbox.value() == 45
+    assert "↑ 增加" in dialog.lead_minutes_step_hint.text()
+    assert "↓ 减少" in dialog.lead_minutes_step_hint.text()
     assert dialog.repeat_minutes_spinbox.minimum() == 1
     assert dialog.repeat_minutes_spinbox.maximum() == 240
     assert dialog.repeat_minutes_spinbox.value() == 12
+    assert "↑ 增加" in dialog.repeat_minutes_step_hint.text()
+    assert "↓ 减少" in dialog.repeat_minutes_step_hint.text()
+    assert "▼ 展开" in dialog.background_resource_combo.toolTip()
+    assert "▼ 展开" in dialog.icon_resource_combo.toolTip()
     assert dialog.background_resource_combo.count() == 4
     assert dialog.background_resource_combo.itemText(1) == "一二学习图"
     assert dialog.icon_resource_combo.count() == 4

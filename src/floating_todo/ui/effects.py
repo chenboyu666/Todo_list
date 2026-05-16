@@ -202,6 +202,32 @@ def animate_content_swap(widget: QWidget, *, duration: int = 180) -> None:
     animation.start()
 
 
+def animate_value_tick(widget: QWidget, *, duration: int = 180) -> None:
+    if not isinstance(widget, QWidget):
+        return
+    old_animation = getattr(widget, "_floating_todo_value_tick_animation", None)
+    if old_animation is not None:
+        old_animation.stop()
+
+    effect = QGraphicsOpacityEffect(widget)
+    effect.setOpacity(0.88)
+    widget.setGraphicsEffect(effect)
+    animation = QPropertyAnimation(effect, b"opacity", widget)
+    animation.setDuration(duration)
+    animation.setStartValue(0.88)
+    animation.setEndValue(1.0)
+    animation.setEasingCurve(QEasingCurve.OutQuad)
+    widget._floating_todo_value_tick_animation = animation
+
+    def finish() -> None:
+        if widget.graphicsEffect() is effect:
+            widget.setGraphicsEffect(None)
+        widget._floating_todo_value_tick_animation = None
+
+    animation.finished.connect(finish)
+    animation.start()
+
+
 def _start_window_entrance(widget: QWidget, target_opacity: float, slide: int, duration: int) -> None:
     try:
         if not widget.isVisible():

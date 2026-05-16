@@ -206,4 +206,5 @@ def test_package_data_includes_app_icon_svg():
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
 
     assert "[tool.setuptools.package-data]" in pyproject
-    assert 'floating_todo = ["assets/app_icon.svg"]' in pyproject
+    for asset_pattern in ("assets/app_icon.svg", "assets/ui/*.svg", "assets/resources/*"):
+        assert f'"{asset_pattern}"' in pyproject

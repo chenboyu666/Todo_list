@@ -15,7 +15,7 @@ dependencies = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-floating_todo = ["assets/app_icon.svg"]
+floating_todo = ["assets/app_icon.svg", "assets/ui/*.svg", "assets/resources/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

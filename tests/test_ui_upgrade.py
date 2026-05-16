@@ -219,7 +219,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     tick_animations: list[tuple[str, int]] = []
     monkeypatch.setattr(
         main_window,
-        "animate_content_swap",
+        "animate_value_tick",
         lambda widget, duration=180: tick_animations.append((widget.objectName(), duration)),
     )
     window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
@@ -245,19 +245,19 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
-    assert "|" in _countdown_display("00:00:01", True)
+    assert _countdown_display("00:00:01", True) == "00:00:01"
     assert "font-size: 28px" in _countdown_label_style("normal", pulse=True)
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
     assert window.focus_priority_label.text() == "P1"
     assert "font-size: 23px" in window.focus_title_label.styleSheet()
-    assert ("focusCountdownLabel", 150) not in tick_animations
+    assert ("focusCountdownLabel", 170) not in tick_animations
     window.show()
     qapp.processEvents()
     window.focus_countdown_label.setText("00:00:00")
     window.refresh()
-    assert ("focusCountdownLabel", 150) in tick_animations
+    assert ("focusCountdownLabel", 170) in tick_animations
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_progress_label.text() == "10%"
@@ -540,6 +540,8 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
 
     labels = rendered_history_text()
     assert window.page_size_input.value() == 5
+    assert "↑ 多" in window.page_size_step_hint.text()
+    assert "↓ 少" in window.page_size_step_hint.text()
     assert "2026-05-12 · 1-5/6 条 · 1/2 页" in window.date_page_label.text()
     assert "完成记录 0" in labels
     assert "完成记录 5" not in labels
