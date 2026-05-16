@@ -141,7 +141,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.active_count_label.text() == "2"
     assert window.today_completion_label.text() == "33%"
     assert window.focus_title_label.text() == "关键交付"
-    assert window.focus_meta_label.text() == "P1 · 工作量 90 min"
+    assert window.focus_meta_label.text() == "工作量 90 min"
     assert window.focus_notes_label.text() == "备注：重点关注验收口径"
     assert window.focus_progress.value() == 60
     assert window.focus_progress_label.text() == "60%"

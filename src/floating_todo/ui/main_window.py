@@ -301,7 +301,7 @@ class MainWindow(QMainWindow):
         self.focus_priority_label = QLabel("--")
         self.focus_priority_label.setObjectName("focusPriorityLabel")
         self.focus_priority_label.setAlignment(Qt.AlignCenter)
-        self.focus_priority_label.setFixedHeight(24)
+        self.focus_priority_label.setFixedHeight(30)
         self.focus_urgency_label = QLabel("等待")
         self.focus_progress = NoWheelSlider(Qt.Horizontal)
         self.focus_progress.setObjectName("focusProgress")
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
         focus_top.addWidget(self.focus_title_prefix)
         focus_top.addWidget(self.focus_priority_label)
         self.focus_urgency_label.setAlignment(Qt.AlignCenter)
-        self.focus_urgency_label.setFixedHeight(24)
+        self.focus_urgency_label.setFixedHeight(30)
         focus_top.addWidget(self.focus_urgency_label)
         focus_top.addStretch(1)
         deadline_stack = QVBoxLayout()
@@ -385,9 +385,10 @@ class MainWindow(QMainWindow):
         focus_top.addLayout(deadline_stack)
         focus_layout.addLayout(focus_top)
 
-        self.focus_title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
+        self.focus_title_label.setStyleSheet(_focus_title_style())
         self.focus_title_label.setWordWrap(True)
         focus_layout.addWidget(self.focus_title_label)
+        self.focus_meta_label.setStyleSheet(_focus_meta_style())
         focus_layout.addWidget(self.focus_meta_label)
         self.focus_notes_label = QLabel()
         self.focus_notes_label.setWordWrap(True)
@@ -888,6 +889,7 @@ class MainWindow(QMainWindow):
         self.focus_progress_label.blockSignals(True)
         if focus_task is None:
             self.focus_title_label.setText("没有进行中的任务")
+            self.focus_title_label.setToolTip("")
             self.focus_meta_label.setText("工作量 --")
             self.focus_notes_label.clear()
             self.focus_notes_label.hide()
@@ -907,7 +909,8 @@ class MainWindow(QMainWindow):
         else:
             urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
             self.focus_title_label.setText(focus_task.title)
-            self.focus_meta_label.setText(f"{focus_task.priority} · 工作量 {focus_task.effort_minutes} min")
+            self.focus_title_label.setToolTip(focus_task.title)
+            self.focus_meta_label.setText(f"工作量 {focus_task.effort_minutes} min")
             self._set_focus_notes(focus_task.notes)
             self.focus_priority_label.setText(focus_task.priority)
             self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
@@ -970,7 +973,7 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(172 if is_expanded else 104)
+        card.setMinimumHeight(210 if is_expanded else 132)
         card.setMinimumWidth(168)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
@@ -981,26 +984,34 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         priority = QLabel(str(row["priority"]))
         priority.setAlignment(Qt.AlignCenter)
-        priority.setFixedHeight(24)
+        priority.setFixedHeight(30)
         priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
         top.addWidget(priority)
         urgency_chip = QLabel(str(row["urgency_label"]))
         urgency_chip.setAlignment(Qt.AlignCenter)
-        urgency_chip.setFixedHeight(24)
+        urgency_chip.setFixedHeight(30)
+        urgency_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
         top.addWidget(urgency_chip)
-        title = QLabel(str(row["title"]))
-        title.setWordWrap(True)
-        title.setStyleSheet("font-size: 13px; font-weight: 700;")
-        top.addWidget(title, 1)
+        top.addStretch(1)
         progress_label = QLabel(str(row["progress_label"]))
         progress_label.setObjectName("activeTaskProgressValue" if is_focused else "taskProgressValue")
         progress_label.setAlignment(Qt.AlignCenter)
-        progress_label.setFixedHeight(24)
+        progress_label.setFixedHeight(30)
         progress_label.setStyleSheet(_progress_value_style(selected=is_focused))
         top.addWidget(progress_label)
         layout.addLayout(top)
+
+        title = QLabel(str(row["title"]))
+        title.setObjectName("activeTaskTitle" if is_focused else "taskTitle")
+        title.setToolTip(str(row["title"]))
+        title.setWordWrap(True)
+        title.setMinimumHeight(38)
+        title.setMaximumHeight(44)
+        title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        title.setStyleSheet(_task_title_style(selected=is_focused))
+        layout.addWidget(title)
 
         compact_row = QHBoxLayout()
         compact_row.setSpacing(6)
@@ -1194,7 +1205,7 @@ def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
 def _urgency_chip_style(urgency: str) -> str:
     style = _urgency_style(urgency)
     return (
-        "font-weight: 700; padding: 2px 8px; border-radius: 7px; "
+        "font-size: 14px; font-weight: 900; padding: 3px 10px; border-radius: 8px; "
         f"background: {style['chip_bg']}; color: {style['chip_text']};"
     )
 
@@ -1226,6 +1237,52 @@ def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
 
 def _countdown_display(text: str, pulse: bool) -> str:
     return f"{text} {'|' if pulse else ' '}"
+
+
+def _focus_title_style() -> str:
+    return (
+        "font-size: 23px;"
+        "font-weight: 900;"
+        "color: #F8FBFF;"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        " stop:0 #143044,"
+        " stop:0.58 #10263A,"
+        " stop:1 #0F1A2A);"
+        "border: none;"
+        "border-radius: 8px;"
+        "padding: 6px 10px;"
+    )
+
+
+def _focus_meta_style() -> str:
+    return (
+        "font-size: 14px;"
+        "font-weight: 800;"
+        "color: #C9D8E8;"
+        "background: #0F1A27;"
+        "border: none;"
+        "border-radius: 8px;"
+        "padding: 5px 9px;"
+    )
+
+
+def _task_title_style(*, selected: bool = False) -> str:
+    if selected:
+        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #143B56, stop:1 #143D48)"
+        color = "#F8FBFF"
+    else:
+        background = "#0A121E"
+        color = "#F3F7FC"
+    return (
+        f"color: {color};"
+        f"background: {background};"
+        "border: none;"
+        "border-radius: 8px;"
+        "padding: 4px 8px;"
+        "font-size: 15px;"
+        "font-weight: 900;"
+        "line-height: 18px;"
+    )
 
 
 def _progress_value_style(*, selected: bool = False) -> str:
@@ -1359,7 +1416,7 @@ def _priority_style(priority: str) -> dict[str, str]:
 def _priority_chip_style(priority: str) -> str:
     style = _priority_style(priority)
     return (
-        "font-weight: 900; padding: 2px 8px; border-radius: 7px; "
+        "font-size: 14px; font-weight: 900; padding: 3px 10px; border-radius: 8px; "
         f"background: {style['background']}; color: {style['text']};"
     )
 
