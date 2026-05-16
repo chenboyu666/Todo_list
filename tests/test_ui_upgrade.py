@@ -353,6 +353,20 @@ def test_backdrop_supports_animated_gif_background(qapp: QApplication, tmp_path)
     backdrop.close()
 
 
+def test_backdrop_supports_builtin_animated_background(qapp: QApplication) -> None:
+    from floating_todo.ui.backdrop import AnimatedBackdrop
+
+    backdrop = AnimatedBackdrop()
+
+    backdrop.set_background_settings(True, "builtin:bubu-motion", 0.55)
+
+    assert backdrop._movie is not None
+    assert backdrop.background_image_path == "builtin:bubu-motion"
+
+    backdrop.stop_animation()
+    backdrop.close()
+
+
 def test_history_window_saves_reflection(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 

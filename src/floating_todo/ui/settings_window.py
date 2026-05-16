@@ -5,6 +5,7 @@ from dataclasses import replace
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from floating_todo.app_resources import BUILTIN_RESOURCES, BUILTIN_RESOURCE_PREFIX
 from floating_todo.app_identity import ICON_FILE_FILTER
 from floating_todo.settings import AppSettings
 
@@ -69,6 +71,9 @@ class SettingsWindow(QDialog):
 
         self.background_enabled = QCheckBox()
         self.background_enabled.setChecked(settings.background_enabled)
+        self.background_resource = QComboBox()
+        self.background_resource_combo = self.background_resource
+        self._populate_resource_combo(self.background_resource, "选择内置背景")
         self.background_path = QLineEdit(settings.background_image_path)
         self.background_path.setPlaceholderText("选择背景图片")
         browse_button = QPushButton("选择")
@@ -79,6 +84,9 @@ class SettingsWindow(QDialog):
         self.icon_path = QLineEdit(settings.icon_path)
         self.icon_path.setPlaceholderText("选择程序图标")
         self.icon_path_edit = self.icon_path
+        self.icon_resource = QComboBox()
+        self.icon_resource_combo = self.icon_resource
+        self._populate_resource_combo(self.icon_resource, "选择内置图标")
         icon_browse_button = QPushButton("选择")
         icon_browse_button.clicked.connect(self.choose_icon)
 
@@ -94,6 +102,7 @@ class SettingsWindow(QDialog):
         form.addRow("提前提醒分钟", self.lead_minutes)
         form.addRow("重复提醒间隔分钟", self.repeat_minutes)
         form.addRow("启用背景图片", self.background_enabled)
+        form.addRow("内置背景", self.background_resource)
 
         background_layout = QHBoxLayout()
         background_layout.addWidget(self.background_path, 1)
@@ -104,6 +113,7 @@ class SettingsWindow(QDialog):
         icon_layout = QHBoxLayout()
         icon_layout.addWidget(self.icon_path, 1)
         icon_layout.addWidget(icon_browse_button)
+        form.addRow("内置图标", self.icon_resource)
         form.addRow("程序图标", icon_layout)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -115,8 +125,15 @@ class SettingsWindow(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
         self._preview_ready = True
+        self._sync_resource_combo(self.background_resource, self.background_path.text())
+        self._sync_resource_combo(self.icon_resource, self.icon_path.text())
         self._sync_passthrough_availability()
         self._connect_preview_signals()
+
+    def _populate_resource_combo(self, combo: QComboBox, placeholder: str) -> None:
+        combo.addItem(placeholder, "")
+        for resource in BUILTIN_RESOURCES:
+            combo.addItem(resource.label, resource.value)
 
     def choose_background(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -141,11 +158,38 @@ class SettingsWindow(QDialog):
 
     def _connect_preview_signals(self) -> None:
         self.always_on_top.toggled.connect(self._sync_passthrough_availability)
+        self.background_resource.currentIndexChanged.connect(self.apply_background_resource)
+        self.icon_resource.currentIndexChanged.connect(self.apply_icon_resource)
         self.opacity.valueChanged.connect(self._emit_preview)
         self.background_enabled.toggled.connect(self._emit_preview)
         self.background_path.textChanged.connect(self._emit_preview)
+        self.background_path.textChanged.connect(lambda text: self._sync_resource_combo(self.background_resource, text))
         self.background_overlay.valueChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(self._emit_preview)
+        self.icon_path.textChanged.connect(lambda text: self._sync_resource_combo(self.icon_resource, text))
+
+    def apply_background_resource(self, *args) -> None:
+        value = self.background_resource.currentData()
+        if not value:
+            return
+        self.background_path.setText(str(value))
+        self.background_enabled.setChecked(True)
+
+    def apply_icon_resource(self, *args) -> None:
+        value = self.icon_resource.currentData()
+        if value:
+            self.icon_path.setText(str(value))
+
+    def _sync_resource_combo(self, combo: QComboBox, value: str) -> None:
+        if value and value.startswith(BUILTIN_RESOURCE_PREFIX):
+            index = combo.findData(value)
+        else:
+            index = 0
+        combo.blockSignals(True)
+        try:
+            combo.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            combo.blockSignals(False)
 
     def _sync_passthrough_availability(self, *args) -> None:
         enabled = self.always_on_top.isChecked()

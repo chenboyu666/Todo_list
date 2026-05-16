@@ -50,6 +50,10 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.repeat_minutes_spinbox.minimum() == 1
     assert dialog.repeat_minutes_spinbox.maximum() == 240
     assert dialog.repeat_minutes_spinbox.value() == 12
+    assert dialog.background_resource_combo.count() == 4
+    assert dialog.background_resource_combo.itemText(1) == "一二学习图"
+    assert dialog.icon_resource_combo.count() == 4
+    assert dialog.icon_resource_combo.itemText(3) == "一二布布动图"
     assert dialog.icon_path_edit.text() == r"C:\Icons\todo.ico"
 
     visible_text = "\n".join(
@@ -89,6 +93,8 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     dialog.lead_minutes_spinbox.setValue(33)
     dialog.repeat_minutes_spinbox.setValue(9)
     dialog.icon_path_edit.setText(r"C:\Icons\new-todo.ico")
+    dialog.background_resource_combo.setCurrentIndex(1)
+    dialog.icon_resource_combo.setCurrentIndex(3)
 
     updated = dialog.build_settings()
 
@@ -102,7 +108,9 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.opacity == 0.64
     assert updated.notification_lead_minutes == 33
     assert updated.notification_repeat_minutes == 9
-    assert updated.icon_path == r"C:\Icons\new-todo.ico"
+    assert updated.background_enabled is True
+    assert updated.background_image_path == "builtin:study"
+    assert updated.icon_path == "builtin:bubu-motion"
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
     assert updated.theme == "custom"
 
@@ -199,5 +207,27 @@ def test_settings_window_icon_picker_accepts_icon_files(
     assert "*.ico" in captured["filter"]
     assert "*.svg" in captured["filter"]
     assert dialog.icon_path_edit.text() == str(icon_path)
+    assert dialog.icon_resource_combo.currentIndex() == 0
+
+    dialog.close()
+
+
+def test_settings_window_builtin_resources_update_path_fields(qapp: QApplication) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    dialog = SettingsWindow(AppSettings())
+
+    dialog.background_resource_combo.setCurrentIndex(2)
+    dialog.icon_resource_combo.setCurrentIndex(1)
+
+    assert dialog.background_enabled.isChecked() is True
+    assert dialog.background_path.text() == "builtin:food"
+    assert dialog.icon_path_edit.text() == "builtin:study"
+
+    dialog.background_path.setText(r"C:\custom\background.png")
+    dialog.icon_path_edit.setText(r"C:\custom\icon.ico")
+
+    assert dialog.background_resource_combo.currentIndex() == 0
+    assert dialog.icon_resource_combo.currentIndex() == 0
 
     dialog.close()
