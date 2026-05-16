@@ -84,9 +84,16 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.effort_spin.maximum() == 1440
     assert dialog.effort_spin.singleStep() == 15
     assert dialog.effort_spin.value() == 60
+    assert "每次 15 分钟" in dialog.effort_hint_label.text()
+    assert "增减 15 分钟" in dialog.effort_spin.toolTip()
     assert dialog.progress_spin.minimum() == 0
     assert dialog.progress_spin.maximum() == 100
+    assert "每次增减 1%" in dialog.progress_hint_label.text()
     assert dialog.deadline_edit.calendarPopup()
+    assert "日期、小时和分钟" in dialog.deadline_hint_label.text()
+    assert dialog.deadline_date_input.accessibleName() == "截止日期"
+    assert dialog.deadline_hour_input.accessibleName() == "截止小时"
+    assert dialog.deadline_minute_input.accessibleName() == "截止分钟"
 
     default_deadline = dialog.deadline_edit.dateTime().toUTC().toPython()
     if default_deadline.tzinfo is None:
