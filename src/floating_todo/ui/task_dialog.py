@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.theme import THEME_COLORS
-from floating_todo.ui.controls import NoWheelSlider
+from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
 
@@ -85,11 +85,17 @@ class TaskDialog(QDialog):
 
         self.progress_slider = NoWheelSlider(Qt.Horizontal)
         self.progress_slider.setRange(0, 100)
-        self.progress_input = self.progress_slider
-        self.progress_spin = self.progress_slider
+        self.progress_value_input = NoWheelSpinBox()
+        self.progress_value_input.setRange(0, 100)
+        self.progress_value_input.setSuffix("%")
+        self.progress_value_input.setAlignment(Qt.AlignCenter)
+        self.progress_value_input.setFixedWidth(62)
+        self.progress_value_input.setFixedHeight(26)
+        self.progress_input = self.progress_value_input
+        self.progress_spin = self.progress_value_input
         self.deadline_input = DeadlineInputAdapter(self)
         self.deadline_edit = self.deadline_input
-        self.progress_label = QLabel("0%")
+        self.progress_label = self.progress_value_input
         self.notes_input = QTextEdit()
         self.notes_input.setPlaceholderText("备注")
         self.notes_edit = self.notes_input
@@ -100,7 +106,8 @@ class TaskDialog(QDialog):
         self.deadline_hour_input.currentTextChanged.connect(self._mark_deadline_changed)
         self.deadline_minute_input.currentTextChanged.connect(self._mark_deadline_changed)
         self.effort_input.valueChanged.connect(self._sync_deadline_from_effort)
-        self.progress_slider.valueChanged.connect(lambda value: self.progress_label.setText(f"{value}%"))
+        self.progress_slider.valueChanged.connect(self._sync_progress_input_from_slider)
+        self.progress_value_input.valueChanged.connect(self._sync_progress_slider_from_input)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -137,8 +144,8 @@ class TaskDialog(QDialog):
         progress_layout = QHBoxLayout()
         progress_layout.setSpacing(10)
         progress_layout.addWidget(self.progress_slider, 1)
-        self.progress_label.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
-        progress_layout.addWidget(self.progress_label)
+        self.progress_value_input.setStyleSheet(_progress_input_style())
+        progress_layout.addWidget(self.progress_value_input)
         form.addRow("手动进度", progress_layout)
         form.addRow("备注", self.notes_input)
         layout.addWidget(panel)
@@ -164,8 +171,26 @@ class TaskDialog(QDialog):
         self.deadline_hour_input.setCurrentText(f"{deadline.hour:02d}")
         self.deadline_minute_input.setCurrentText(f"{deadline.minute:02d}")
         self.progress_slider.setValue(task.progress if task else 0)
-        self.progress_label.setText(f"{self.progress_slider.value()}%")
+        self.progress_value_input.setValue(self.progress_slider.value())
         self.notes_input.setPlainText(task.notes if task else "")
+
+    def _sync_progress_input_from_slider(self, value: int) -> None:
+        self.progress_value_input.blockSignals(True)
+        try:
+            self.progress_value_input.setValue(value)
+        finally:
+            self.progress_value_input.blockSignals(False)
+
+    def _sync_progress_slider_from_input(self, value: int) -> None:
+        self.progress_slider.blockSignals(True)
+        try:
+            self.progress_slider.setValue(value)
+        finally:
+            self.progress_slider.blockSignals(False)
+
+    def _progress_value(self) -> int:
+        self.progress_value_input.interpretText()
+        return self.progress_value_input.value()
 
     def _mark_deadline_changed(self, *args) -> None:
         self._deadline_changed = True
@@ -216,7 +241,7 @@ class TaskDialog(QDialog):
                 priority=self.priority_input.currentText(),
                 effort_minutes=self.effort_input.value(),
                 deadline=deadline,
-                progress=self.progress_slider.value(),
+                progress=self._progress_value(),
                 updated_at=now,
                 notes=self.notes_input.toPlainText(),
                 notification_state=notification_state,
@@ -227,7 +252,7 @@ class TaskDialog(QDialog):
             priority=self.priority_input.currentText(),
             effort_minutes=self.effort_input.value(),
             deadline=self._deadline(),
-            progress=self.progress_slider.value(),
+            progress=self._progress_value(),
             status="active",
             created_at=now,
             updated_at=now,
@@ -235,3 +260,24 @@ class TaskDialog(QDialog):
             notes=self.notes_input.toPlainText(),
             notification_state=dict(DEFAULT_NOTIFICATION_STATE),
         )
+
+
+def _progress_input_style() -> str:
+    return (
+        "QSpinBox {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #155E75, stop:0.55 #0E7490, stop:1 #047857);"
+        "color: #ECFEFF;"
+        "border: none;"
+        "border-radius: 8px;"
+        "font-weight: 800;"
+        "padding: 1px 8px;"
+        "selection-background-color: #1D4ED8;"
+        "}"
+        "QSpinBox:focus {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0E7490, stop:1 #16A34A);"
+        "}"
+        "QSpinBox::up-button, QSpinBox::down-button {"
+        "width: 0px;"
+        "border: none;"
+        "}"
+    )
