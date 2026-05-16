@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import replace
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -8,9 +10,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFrame,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -25,6 +29,22 @@ from floating_todo.domain import Task
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
+
+
+CSV_HEADERS = [
+    "任务ID",
+    "标题",
+    "优先级",
+    "预估工作量分钟",
+    "截止时间",
+    "进度",
+    "状态",
+    "创建时间",
+    "更新时间",
+    "完成时间",
+    "任务备注",
+    "完成体会",
+]
 
 
 class HistoryNoteDialog(QDialog):
@@ -128,20 +148,33 @@ class HistoryWindow(QDialog):
 
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
-        stats_layout = QHBoxLayout(stats_panel)
+        stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(10, 8, 10, 8)
-        stats_layout.setSpacing(8)
-        self.priority_mix_label = self._metric_label("P1 0 · P2 0 · P3 0")
+        stats_layout.setSpacing(7)
+        priority_metrics = QHBoxLayout()
+        priority_metrics.setContentsMargins(0, 0, 0, 0)
+        priority_metrics.setSpacing(8)
+        self.priority_p1_label = self._metric_label("P1 0", "historyPriorityMetricP1")
+        self.priority_p2_label = self._metric_label("P2 0", "historyPriorityMetricP2")
+        self.priority_p3_label = self._metric_label("P3 0", "historyPriorityMetricP3")
+        self.priority_mix_label = self.priority_p1_label
+        for metric in (self.priority_p1_label, self.priority_p2_label, self.priority_p3_label):
+            priority_metrics.addWidget(metric, 1)
+        stats_layout.addLayout(priority_metrics)
+
+        summary_metrics = QHBoxLayout()
+        summary_metrics.setContentsMargins(0, 0, 0, 0)
+        summary_metrics.setSpacing(8)
         self.review_metric_label = self._metric_label("复盘 0/0")
         self.average_metric_label = self._metric_label("平均进度 --")
         self.latest_metric_label = self._metric_label("最近 --")
         for metric in (
-            self.priority_mix_label,
             self.review_metric_label,
             self.average_metric_label,
             self.latest_metric_label,
         ):
-            stats_layout.addWidget(metric, 1)
+            summary_metrics.addWidget(metric, 1)
+        stats_layout.addLayout(summary_metrics)
         root.addWidget(stats_panel)
 
         search_row = QHBoxLayout()
@@ -166,6 +199,11 @@ class HistoryWindow(QDialog):
         self.page_size_input.setSuffix(" 条")
         self.page_size_input.valueChanged.connect(self._reset_page)
         search_row.addWidget(self.page_size_input)
+        self.export_button = QPushButton("导出 CSV")
+        self.export_button.setObjectName("historyExportButton")
+        self.export_button.setToolTip("导出当前筛选后的历史记录表格")
+        self.export_button.clicked.connect(self.export_history)
+        search_row.addWidget(self.export_button)
         search_panel = QFrame()
         search_panel.setObjectName("historyToolbar")
         search_panel.setLayout(search_row)
@@ -204,11 +242,12 @@ class HistoryWindow(QDialog):
         root.addWidget(scroll, 1)
         self._render()
 
-    def _metric_label(self, text: str) -> QLabel:
+    def _metric_label(self, text: str, object_name: str = "historyMetricChip") -> QLabel:
         label = QLabel(text)
-        label.setObjectName("historyMetricChip")
+        label.setObjectName(object_name)
         label.setAlignment(Qt.AlignCenter)
         label.setMinimumHeight(32)
+        label.setWordWrap(False)
         return label
 
     def _render(self) -> None:
@@ -260,7 +299,9 @@ class HistoryWindow(QDialog):
             if latest_task
             else "--"
         )
-        self.priority_mix_label.setText(f"P1 {counts['P1']} · P2 {counts['P2']} · P3 {counts['P3']}")
+        self.priority_p1_label.setText(f"P1 {counts['P1']}")
+        self.priority_p2_label.setText(f"P2 {counts['P2']}")
+        self.priority_p3_label.setText(f"P3 {counts['P3']}")
         self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
         self.average_metric_label.setText(f"平均进度 {average}%" if average is not None else "平均进度 --")
         self.latest_metric_label.setText(f"最近 {latest}")
@@ -500,6 +541,30 @@ class HistoryWindow(QDialog):
         compact = " ".join(str(text or "").split())
         return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
+    def export_history(self) -> None:
+        tasks = self._filtered_completed_tasks()
+        if not tasks:
+            QMessageBox.information(self, "导出历史记录", "没有可导出的历史记录。")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出历史记录",
+            "Todo list-历史记录.csv",
+            "CSV 表格 (*.csv);;All Files (*)",
+        )
+        if not path:
+            return
+        export_path = Path(path)
+        if export_path.suffix.lower() != ".csv":
+            export_path = export_path.with_suffix(".csv")
+        count = self.export_history_to_path(export_path, tasks)
+        QMessageBox.information(self, "导出历史记录", f"已导出 {count} 条历史记录。")
+
+    def export_history_to_path(self, path: str | Path, tasks: list[Task] | None = None) -> int:
+        export_tasks = list(tasks if tasks is not None else self._filtered_completed_tasks())
+        export_history_csv(path, export_tasks)
+        return len(export_tasks)
+
     def open_note_editor(self, task: Task) -> None:
         dialog = HistoryNoteDialog(task, self)
         prepare_window_entrance(dialog)
@@ -521,6 +586,33 @@ class HistoryWindow(QDialog):
     def save_reflection(self, task_id: str, reflection: str) -> None:
         task = next((item for item in self.tasks if item.id == task_id), None)
         self.save_history_notes(task_id, task.notes if task else "", reflection)
+
+
+def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
+    with Path(path).open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=CSV_HEADERS)
+        writer.writeheader()
+        for task in tasks:
+            writer.writerow(
+                {
+                    "任务ID": task.id,
+                    "标题": task.title,
+                    "优先级": task.priority,
+                    "预估工作量分钟": task.effort_minutes,
+                    "截止时间": _export_datetime(task.deadline),
+                    "进度": f"{task.progress}%",
+                    "状态": task.status,
+                    "创建时间": _export_datetime(task.created_at),
+                    "更新时间": _export_datetime(task.updated_at),
+                    "完成时间": _export_datetime(task.completed_at),
+                    "任务备注": task.notes,
+                    "完成体会": task.reflection,
+                }
+            )
+
+
+def _export_datetime(value) -> str:
+    return value.astimezone().strftime("%Y-%m-%d %H:%M:%S") if value else ""
 
 
 def _history_window_style() -> str:
@@ -562,7 +654,10 @@ QFrame#historyStatsPanel {{
   border: none;
   border-radius: 8px;
 }}
-QLabel#historyMetricChip {{
+QLabel#historyMetricChip,
+QLabel#historyPriorityMetricP1,
+QLabel#historyPriorityMetricP2,
+QLabel#historyPriorityMetricP3 {{
   color: #D4E3F2;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #111D2C,
@@ -570,6 +665,18 @@ QLabel#historyMetricChip {{
   border: none;
   border-radius: 8px;
   font-weight: 900;
+}}
+QLabel#historyPriorityMetricP1 {{
+  color: #FFE1A6;
+  background: #4E2814;
+}}
+QLabel#historyPriorityMetricP2 {{
+  color: #DCE7FF;
+  background: #182B60;
+}}
+QLabel#historyPriorityMetricP3 {{
+  color: #D9FBE8;
+  background: #123A33;
 }}
 QFrame#historyToolbar {{
   background: #0C121D;
@@ -589,12 +696,12 @@ QLabel#historyPageLabel {{
   padding: 7px 12px;
   font-weight: 900;
 }}
-QPushButton#historyPageButton, QPushButton#historyNoteButton {{
+QPushButton#historyPageButton, QPushButton#historyNoteButton, QPushButton#historyExportButton {{
   background: #162033;
   color: #F6F8FC;
   font-weight: 800;
 }}
-QPushButton#historyPageButton:hover, QPushButton#historyNoteButton:hover {{
+QPushButton#historyPageButton:hover, QPushButton#historyNoteButton:hover, QPushButton#historyExportButton:hover {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #1E3A5F,
     stop:1 #155E75);
@@ -613,17 +720,17 @@ QFrame#historyCard {{
   border: none;
   border-radius: 8px;
 }}
-QFrame#historyAccentP1 {{ background: #F6C177; border-radius: 2px; }}
-QFrame#historyAccentP2 {{ background: #7DD3FC; border-radius: 2px; }}
+QFrame#historyAccentP1 {{ background: #F6A44D; border-radius: 2px; }}
+QFrame#historyAccentP2 {{ background: #8EA7FF; border-radius: 2px; }}
 QFrame#historyAccentP3 {{ background: #A7F3D0; border-radius: 2px; }}
 QLabel#historyPriorityP1, QLabel#historyPriorityP2, QLabel#historyPriorityP3 {{
   border: none;
   border-radius: 7px;
   font-weight: 900;
 }}
-QLabel#historyPriorityP1 {{ color: #FFE9C2; background: #4A2B16; }}
-QLabel#historyPriorityP2 {{ color: #DFF7FF; background: #123047; }}
-QLabel#historyPriorityP3 {{ color: #DDFBE9; background: #12362D; }}
+QLabel#historyPriorityP1 {{ color: #FFE1A6; background: #5A2D12; }}
+QLabel#historyPriorityP2 {{ color: #DCE7FF; background: #1B2F69; }}
+QLabel#historyPriorityP3 {{ color: #D9FBE8; background: #123B34; }}
 QLabel#historyTaskTitle {{
   color: #F8FBFF;
   font-size: 15px;
