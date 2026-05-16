@@ -17,10 +17,10 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
-    QPushButton,
     QWidget,
 )
 
@@ -103,7 +103,7 @@ class InteractionEffectFilter(QObject):
         if isinstance(watched, QWidget) and event.type() == QEvent.MouseButtonPress:
             self._play_backdrop_pulse(watched, event)
 
-        if not isinstance(watched, QPushButton):
+        if not isinstance(watched, QAbstractButton):
             return super().eventFilter(watched, event)
         if not watched.isEnabled():
             return super().eventFilter(watched, event)
@@ -120,7 +120,7 @@ class InteractionEffectFilter(QObject):
             self._apply_button_glow(watched)
         return super().eventFilter(watched, event)
 
-    def _apply_button_glow(self, button: QPushButton, *, stronger: bool = False) -> None:
+    def _apply_button_glow(self, button: QAbstractButton, *, stronger: bool = False) -> None:
         existing = button.graphicsEffect()
         if existing is not None and not getattr(button, "_floating_todo_button_glow", False):
             return
@@ -133,7 +133,7 @@ class InteractionEffectFilter(QObject):
         button.setGraphicsEffect(effect)
         button._floating_todo_button_glow = True
 
-    def _clear_button_glow(self, button: QPushButton) -> None:
+    def _clear_button_glow(self, button: QAbstractButton) -> None:
         if getattr(button, "_floating_todo_button_glow", False):
             button.setGraphicsEffect(None)
             button._floating_todo_button_glow = False
@@ -261,7 +261,7 @@ def _event_global_pos(event, widget: QWidget) -> QPoint:
     return widget.mapToGlobal(_event_pos(event, widget))
 
 
-def _button_effect_color(button: QPushButton) -> QColor:
+def _button_effect_color(button: QAbstractButton) -> QColor:
     text = button.text().lower()
     if button.objectName() == "dangerButton" or "delete" in text or "删除" in text:
         return QColor("#FCA5A5")

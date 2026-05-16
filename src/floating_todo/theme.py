@@ -229,8 +229,66 @@ QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {{
   height: 0;
 }}
 QCheckBox {{
-  background: transparent;
-  spacing: 8px;
+  background: #0A101A;
+  border: none;
+  border-radius: 8px;
+  min-width: 142px;
+  min-height: 34px;
+  padding: 4px 10px;
+  spacing: 10px;
+  color: #BFD0E2;
+  font-weight: 800;
+}}
+QCheckBox:hover {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0F1A2A,
+    stop:1 #102D36);
+  color: #F6F8FC;
+}}
+QCheckBox:pressed {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #143044,
+    stop:1 #12544F);
+  color: #ECFEFF;
+}}
+QCheckBox:focus {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #10263A,
+    stop:1 #12362D);
+}}
+QCheckBox:checked {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #123047,
+    stop:1 #115E59);
+  color: #ECFEFF;
+}}
+QCheckBox:disabled {{
+  background: #090D15;
+  color: #5F6B7C;
+}}
+QCheckBox::indicator {{
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 9px;
+  background: #243044;
+}}
+QCheckBox::indicator:hover {{
+  background: #2D4058;
+}}
+QCheckBox::indicator:checked {{
+  background: qradialgradient(cx:0.5, cy:0.5, radius:0.72,
+    fx:0.5, fy:0.5,
+    stop:0 #F6F8FC,
+    stop:0.46 #A7F3D0,
+    stop:1 #0E7490);
+}}
+QCheckBox::indicator:checked:hover {{
+  background: qradialgradient(cx:0.5, cy:0.5, radius:0.72,
+    fx:0.5, fy:0.5,
+    stop:0 #FFFFFF,
+    stop:0.48 #BAE6FD,
+    stop:1 #0891B2);
 }}
 QMenu {{
   background: {THEME_COLORS["surface"]};
