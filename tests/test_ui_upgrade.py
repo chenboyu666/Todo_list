@@ -201,7 +201,10 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
     slider.close()
 
 
-def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
+def test_task_rows_show_deadline_date_urgency_and_focus_button(
+    qapp: QApplication, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.main_window as main_window
     from floating_todo.ui.main_window import (
         MainWindow,
         TaskDragHandle,
@@ -213,6 +216,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
 
     task = make_task("临近任务", "task-1", notes="先确认接口，再整理交付材料")
     store = MemoryStore([task])
+    tick_animations: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        main_window,
+        "animate_content_swap",
+        lambda widget, duration=180: tick_animations.append((widget.objectName(), duration)),
+    )
     window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
 
     row_labels = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
@@ -243,6 +252,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "#5A2D12" in _priority_chip_style("P1")
     assert window.focus_priority_label.text() == "P1"
     assert "font-size: 23px" in window.focus_title_label.styleSheet()
+    assert ("focusCountdownLabel", 150) not in tick_animations
+    window.show()
+    qapp.processEvents()
+    window.focus_countdown_label.setText("00:00:00")
+    window.refresh()
+    assert ("focusCountdownLabel", 150) in tick_animations
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_progress_label.text() == "10%"

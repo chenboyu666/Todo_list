@@ -69,28 +69,42 @@ class TaskDialog(QDialog):
         self.title_edit = self.title_input
         self.priority_input = QComboBox()
         self.priority_input.addItems(["P1", "P2", "P3"])
+        self.priority_input.setToolTip("选择任务优先级：P1 最高，P3 较低")
+        self.priority_input.setAccessibleName("任务优先级")
         self.priority_combo = self.priority_input
         self.effort_input = QSpinBox()
         self.effort_input.setRange(0, 24 * 60)
         self.effort_input.setSingleStep(15)
         self.effort_input.setSuffix(" min")
+        self.effort_input.setToolTip("右侧箭头每次增减 15 分钟；修改后会按当前时间同步截止时间")
+        self.effort_input.setAccessibleName("预计工作量分钟")
         self.effort_spin = self.effort_input
 
         self.deadline_date_input = QDateEdit()
         self.deadline_date_input.setCalendarPopup(True)
+        self.deadline_date_input.setToolTip("选择截止日期")
+        self.deadline_date_input.setAccessibleName("截止日期")
         self.deadline_hour_input = QComboBox()
         self.deadline_hour_input.addItems([f"{hour:02d}" for hour in range(24)])
+        self.deadline_hour_input.setToolTip("选择截止小时")
+        self.deadline_hour_input.setAccessibleName("截止小时")
         self.deadline_minute_input = QComboBox()
         self.deadline_minute_input.addItems([f"{minute:02d}" for minute in range(60)])
+        self.deadline_minute_input.setToolTip("选择截止分钟")
+        self.deadline_minute_input.setAccessibleName("截止分钟")
 
         self.progress_slider = NoWheelSlider(Qt.Horizontal)
         self.progress_slider.setRange(0, 100)
+        self.progress_slider.setToolTip("拖动调整任务完成进度")
+        self.progress_slider.setAccessibleName("手动进度滑条")
         self.progress_value_input = NoWheelSpinBox()
         self.progress_value_input.setRange(0, 100)
         self.progress_value_input.setSuffix("%")
         self.progress_value_input.setAlignment(Qt.AlignCenter)
         self.progress_value_input.setFixedWidth(62)
         self.progress_value_input.setFixedHeight(26)
+        self.progress_value_input.setToolTip("输入百分比，或用右侧箭头微调 1%")
+        self.progress_value_input.setAccessibleName("手动进度百分比")
         self.progress_input = self.progress_value_input
         self.progress_spin = self.progress_value_input
         self.deadline_input = DeadlineInputAdapter(self)
@@ -130,15 +144,25 @@ class TaskDialog(QDialog):
         form.setSpacing(12)
         form.addRow("任务名称", self.title_input)
         form.addRow("优先级", self.priority_input)
+        self.priority_hint_label = _hint_label("P1 最优先，P2 普通，P3 较低；只影响排序和优先级颜色。")
+        form.addRow("", self.priority_hint_label)
         form.addRow("预计工作量", self.effort_input)
+        self.effort_hint_label = _hint_label("右侧箭头可增减时间；每次 15 分钟。修改后会同步推算截止时间。")
+        form.addRow("", self.effort_hint_label)
 
-        deadline_layout = QHBoxLayout()
-        deadline_layout.setSpacing(8)
-        deadline_layout.addWidget(self.deadline_date_input, 1)
-        deadline_layout.addWidget(self.deadline_hour_input)
-        deadline_layout.addWidget(QLabel("时"))
-        deadline_layout.addWidget(self.deadline_minute_input)
-        deadline_layout.addWidget(QLabel("分"))
+        deadline_layout = QVBoxLayout()
+        deadline_layout.setSpacing(6)
+        deadline_fields = QHBoxLayout()
+        deadline_fields.setSpacing(8)
+        deadline_fields.addWidget(_inline_label("日期"))
+        deadline_fields.addWidget(self.deadline_date_input, 1)
+        deadline_fields.addWidget(_inline_label("小时"))
+        deadline_fields.addWidget(self.deadline_hour_input)
+        deadline_fields.addWidget(_inline_label("分钟"))
+        deadline_fields.addWidget(self.deadline_minute_input)
+        self.deadline_hint_label = _hint_label("选择日期、小时和分钟；工作量变化时会自动带动这里更新。")
+        deadline_layout.addLayout(deadline_fields)
+        deadline_layout.addWidget(self.deadline_hint_label)
         form.addRow("截止时间", deadline_layout)
 
         progress_layout = QHBoxLayout()
@@ -147,6 +171,8 @@ class TaskDialog(QDialog):
         self.progress_value_input.setStyleSheet(_progress_input_style())
         progress_layout.addWidget(self.progress_value_input)
         form.addRow("手动进度", progress_layout)
+        self.progress_hint_label = _hint_label("可拖动滑条，也可以直接输入百分比；进度输入框右侧箭头每次增减 1%。")
+        form.addRow("", self.progress_hint_label)
         form.addRow("备注", self.notes_input)
         layout.addWidget(panel)
 
@@ -281,3 +307,32 @@ def _progress_input_style() -> str:
         "border: none;"
         "}"
     )
+
+
+def _hint_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setObjectName("taskDialogHint")
+    label.setStyleSheet(
+        "color: #8FA7B8;"
+        "background: transparent;"
+        "font-size: 12px;"
+        "font-weight: 600;"
+        "padding: 0 4px;"
+    )
+    return label
+
+
+def _inline_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("taskDialogInlineLabel")
+    label.setAlignment(Qt.AlignCenter)
+    label.setStyleSheet(
+        "color: #CDE5F6;"
+        "background: #101A27;"
+        "border: none;"
+        "border-radius: 8px;"
+        "padding: 6px 8px;"
+        "font-weight: 800;"
+    )
+    return label

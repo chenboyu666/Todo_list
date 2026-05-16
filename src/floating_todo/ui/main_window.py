@@ -33,7 +33,12 @@ from floating_todo.ui.backdrop import AnimatedBackdrop
 from floating_todo.ui.completion_dialog import CompletionDialog
 from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
 from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
-from floating_todo.ui.effects import apply_soft_shadow, install_global_interaction_effects, prepare_window_entrance
+from floating_todo.ui.effects import (
+    animate_content_swap,
+    apply_soft_shadow,
+    install_global_interaction_effects,
+    prepare_window_entrance,
+)
 from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
@@ -917,9 +922,11 @@ class MainWindow(QMainWindow):
             self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
             countdown_pulse = now.second % 2 == 0
-            self.focus_countdown_label.setText(
-                _countdown_display(countdown_label(focus_task.deadline, now), countdown_pulse)
-            )
+            countdown_text = _countdown_display(countdown_label(focus_task.deadline, now), countdown_pulse)
+            if self.focus_countdown_label.text() != countdown_text:
+                self.focus_countdown_label.setText(countdown_text)
+                if self.isVisible():
+                    animate_content_swap(self.focus_countdown_label, duration=150)
             self.focus_countdown_label.setStyleSheet(_countdown_label_style(urgency, pulse=countdown_pulse))
             self.focus_urgency_label.setText(urgency_label)
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
