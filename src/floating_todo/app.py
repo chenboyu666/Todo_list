@@ -52,6 +52,9 @@ def main() -> int:
         window.tray_controller = TrayController(window, icon)
     except Exception:
         window.tray_controller = None
+    apply_window_behavior_settings = getattr(window, "apply_window_behavior_settings", None)
+    if callable(apply_window_behavior_settings):
+        apply_window_behavior_settings()
     prepare_window_entrance(window, target_opacity=settings.opacity, slide=0, duration=260)
     window.show()
     return app.exec()

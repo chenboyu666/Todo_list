@@ -12,6 +12,7 @@ DEFAULT_GEOMETRY = {"x": 1200, "y": 120, "width": 410, "height": 620}
 @dataclass(frozen=True)
 class AppSettings:
     always_on_top: bool = True
+    mouse_passthrough: bool = False
     lock_position: bool = False
     close_to_tray: bool = True
     launch_on_startup: bool = False
@@ -79,6 +80,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
     raw_background_path = data.get("background_image_path", "")
     return AppSettings(
         always_on_top=_coerce_bool(data.get("always_on_top", True), True),
+        mouse_passthrough=_coerce_bool(data.get("mouse_passthrough", False), False),
         lock_position=_coerce_bool(data.get("lock_position", False), False),
         close_to_tray=_coerce_bool(data.get("close_to_tray", True), True),
         launch_on_startup=_coerce_bool(data.get("launch_on_startup", False), False),
@@ -98,6 +100,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
 def settings_to_dict(settings: AppSettings) -> dict[str, object]:
     return {
         "always_on_top": settings.always_on_top,
+        "mouse_passthrough": settings.mouse_passthrough,
         "lock_position": settings.lock_position,
         "close_to_tray": settings.close_to_tray,
         "launch_on_startup": settings.launch_on_startup,

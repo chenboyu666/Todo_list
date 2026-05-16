@@ -21,6 +21,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
 
     settings = AppSettings(
         always_on_top=False,
+        mouse_passthrough=True,
         lock_position=True,
         close_to_tray=False,
         launch_on_startup=True,
@@ -33,6 +34,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
 
     assert dialog.windowTitle() == "设置"
     assert dialog.always_on_top_checkbox.isChecked() is False
+    assert dialog.mouse_passthrough_checkbox.isChecked() is False
+    assert dialog.mouse_passthrough_checkbox.isEnabled() is False
     assert dialog.lock_position_checkbox.isChecked() is True
     assert dialog.close_to_tray_checkbox.isChecked() is False
     assert dialog.launch_on_startup_checkbox.isChecked() is True
@@ -53,6 +56,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     )
     for label in (
         "窗口始终置顶",
+        "鼠标穿透",
+        "穿透后无法直接点击浮窗",
         "锁定位置",
         "关闭时进入托盘",
         "Windows 开机启动",
@@ -72,6 +77,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     settings = AppSettings(window_geometry={"x": 9, "y": 8, "width": 500, "height": 400}, theme="custom")
     dialog = SettingsWindow(settings)
     dialog.always_on_top_checkbox.setChecked(False)
+    dialog.mouse_passthrough_checkbox.setChecked(True)
     dialog.lock_position_checkbox.setChecked(True)
     dialog.close_to_tray_checkbox.setChecked(False)
     dialog.launch_on_startup_checkbox.setChecked(True)
@@ -84,6 +90,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
 
     assert updated is not settings
     assert updated.always_on_top is False
+    assert updated.mouse_passthrough is False
     assert updated.lock_position is True
     assert updated.close_to_tray is False
     assert updated.launch_on_startup is True
@@ -93,6 +100,23 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.notification_repeat_minutes == 9
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
     assert updated.theme == "custom"
+
+    dialog.close()
+
+
+def test_mouse_passthrough_requires_topmost_setting(qapp: QApplication) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    dialog = SettingsWindow(AppSettings(always_on_top=True, mouse_passthrough=True))
+
+    assert dialog.mouse_passthrough_checkbox.isChecked() is True
+    assert dialog.build_settings().mouse_passthrough is True
+
+    dialog.always_on_top_checkbox.setChecked(False)
+
+    assert dialog.mouse_passthrough_checkbox.isChecked() is False
+    assert dialog.mouse_passthrough_checkbox.isEnabled() is False
+    assert dialog.build_settings().mouse_passthrough is False
 
     dialog.close()
 

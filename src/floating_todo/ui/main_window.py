@@ -90,6 +90,12 @@ class TitleBar(QFrame):
         drag_hint = QLabel("拖动")
         drag_hint.setStyleSheet(f"color: {THEME_COLORS['accent_secondary']}; font-weight: 700;")
         layout.addWidget(drag_hint)
+        window.passthrough_hint_label = QLabel("穿透中 · 右键托盘恢复")
+        window.passthrough_hint_label.setObjectName("passthroughHint")
+        window.passthrough_hint_label.setStyleSheet(
+            "color: #ECFEFF; background: #155E75; border-radius: 8px; padding: 3px 8px; font-weight: 800;"
+        )
+        layout.addWidget(window.passthrough_hint_label)
         layout.addStretch(1)
         layout.addWidget(window.clock_label)
         window.settings_button.setText("设置")
@@ -638,6 +644,46 @@ class MainWindow(QMainWindow):
     def apply_window_behavior_settings(self) -> None:
         self.setWindowOpacity(self.settings.opacity)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.settings.always_on_top)
+        self.setWindowFlag(Qt.WindowTransparentForInput, self.mouse_passthrough_active())
+        self.setWindowTitle("FloatingTodo · 穿透模式" if self.mouse_passthrough_active() else "FloatingTodo")
+        self._update_passthrough_hint()
+        self._sync_tray_actions()
+
+    def mouse_passthrough_active(self) -> bool:
+        return bool(
+            self.settings.always_on_top and self.settings.mouse_passthrough and self._mouse_passthrough_can_be_restored()
+        )
+
+    def _mouse_passthrough_can_be_restored(self) -> bool:
+        tray_controller = self.tray_controller
+        if tray_controller is None:
+            return False
+        is_available = getattr(tray_controller, "is_available", None)
+        return not callable(is_available) or bool(is_available())
+
+    def set_mouse_passthrough(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled:
+            self.settings = replace(self.settings, always_on_top=True, mouse_passthrough=True)
+        else:
+            self.settings = replace(self.settings, mouse_passthrough=False)
+        self._save_settings()
+        self.apply_window_behavior_settings()
+        self.show()
+
+    def toggle_mouse_passthrough(self) -> None:
+        self.set_mouse_passthrough(not self.mouse_passthrough_active())
+
+    def _update_passthrough_hint(self) -> None:
+        hint = getattr(self, "passthrough_hint_label", None)
+        if hint is not None:
+            hint.setVisible(self.mouse_passthrough_active())
+
+    def _sync_tray_actions(self) -> None:
+        tray_controller = self.tray_controller
+        sync_actions = getattr(tray_controller, "sync_actions", None)
+        if callable(sync_actions):
+            sync_actions()
 
     def apply_background_settings(self) -> None:
         self.root_widget.set_background_settings(
@@ -682,6 +728,8 @@ class MainWindow(QMainWindow):
             self.restore_settings_preview(previous_settings)
             return
         updated_settings = dialog.build_settings()
+        if updated_settings.mouse_passthrough and not updated_settings.always_on_top:
+            updated_settings = replace(updated_settings, mouse_passthrough=False)
         if updated_settings.launch_on_startup != self.settings.launch_on_startup:
             try:
                 set_launch_on_startup("FloatingTodo", current_startup_command(), updated_settings.launch_on_startup)
@@ -690,6 +738,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
                 return
 
+        if updated_settings.mouse_passthrough and not previous_settings.mouse_passthrough:
+            self.show_mouse_passthrough_notice()
         self.settings = updated_settings
         self._save_settings()
         self._restoring_geometry = True
@@ -702,6 +752,13 @@ class MainWindow(QMainWindow):
             self.show()
         finally:
             self._restoring_geometry = False
+
+    def show_mouse_passthrough_notice(self) -> None:
+        QMessageBox.information(
+            self,
+            "鼠标穿透已开启",
+            "浮窗会继续置顶显示，但鼠标点击会落到后方窗口。\n\n需要恢复时，请右键托盘图标，选择“退出鼠标穿透”。",
+        )
 
     def can_close_to_tray(self) -> bool:
         tray_controller = self.tray_controller
@@ -916,7 +973,7 @@ class MainWindow(QMainWindow):
         deadline.setStyleSheet(_deadline_label_style(urgency))
         compact_row.addWidget(deadline, 1)
         focus_button = QPushButton("进行中" if is_focused else "置顶")
-        focus_button.setToolTip("设为当前置顶任务")
+        focus_button.setToolTip("设为当前置顶任务；之后点击其它任务的置顶即可替换")
         if is_focused:
             focus_button.setObjectName("currentTaskButton")
         focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))

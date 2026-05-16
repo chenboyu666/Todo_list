@@ -26,7 +26,9 @@ class TrayController:
         self.show_hide_action = self._add_action(action_cls, "显示/隐藏", self.toggle_window)
         self.quick_add_action = self._add_action(action_cls, "快速新增任务", self.window.add_task)
         self.settings_action = self._add_action(action_cls, "设置", self.window.open_settings)
+        self.passthrough_action = self._add_action(action_cls, "启用鼠标穿透", self.window.toggle_mouse_passthrough)
         self.quit_action = self._add_action(action_cls, "退出", self._quit_application)
+        self.sync_actions()
 
         self.tray.setContextMenu(self.menu)
         self.tray.show()
@@ -45,6 +47,14 @@ class TrayController:
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+
+    def sync_actions(self) -> None:
+        active = bool(getattr(self.window, "mouse_passthrough_active", lambda: False)())
+        label = "退出鼠标穿透" if active else "启用鼠标穿透"
+        if hasattr(self.passthrough_action, "setText"):
+            self.passthrough_action.setText(label)
+        else:
+            self.passthrough_action.label = label
 
     def is_available(self) -> bool:
         return bool(self.tray.isSystemTrayAvailable())

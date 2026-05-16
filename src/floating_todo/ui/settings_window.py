@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QSlider,
@@ -31,6 +32,13 @@ class SettingsWindow(QDialog):
         self.always_on_top = QCheckBox()
         self.always_on_top.setChecked(settings.always_on_top)
         self.always_on_top_checkbox = self.always_on_top
+        self.mouse_passthrough = QCheckBox()
+        self.mouse_passthrough.setChecked(settings.mouse_passthrough and settings.always_on_top)
+        self.mouse_passthrough.setToolTip("开启后窗口仍显示在最上层，但鼠标点击会落到后方窗口。")
+        self.mouse_passthrough_checkbox = self.mouse_passthrough
+        self.passthrough_hint = QLabel("穿透后无法直接点击浮窗；右键托盘图标，选择“退出鼠标穿透”即可恢复普通模式。")
+        self.passthrough_hint.setWordWrap(True)
+        self.passthrough_hint.setStyleSheet("color: #8FA7B8; font-weight: 600;")
         self.lock_position = QCheckBox()
         self.lock_position.setChecked(settings.lock_position)
         self.lock_position_checkbox = self.lock_position
@@ -70,6 +78,8 @@ class SettingsWindow(QDialog):
 
         form = QFormLayout()
         form.addRow("窗口始终置顶", self.always_on_top)
+        form.addRow("鼠标穿透", self.mouse_passthrough)
+        form.addRow("", self.passthrough_hint)
         form.addRow("锁定位置", self.lock_position)
         form.addRow("关闭时进入托盘", self.close_to_tray)
         form.addRow("Windows 开机启动", self.launch_on_startup)
@@ -94,6 +104,7 @@ class SettingsWindow(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
         self._preview_ready = True
+        self._sync_passthrough_availability()
         self._connect_preview_signals()
 
     def choose_background(self) -> None:
@@ -108,10 +119,18 @@ class SettingsWindow(QDialog):
             self.background_enabled.setChecked(True)
 
     def _connect_preview_signals(self) -> None:
+        self.always_on_top.toggled.connect(self._sync_passthrough_availability)
         self.opacity.valueChanged.connect(self._emit_preview)
         self.background_enabled.toggled.connect(self._emit_preview)
         self.background_path.textChanged.connect(self._emit_preview)
         self.background_overlay.valueChanged.connect(self._emit_preview)
+
+    def _sync_passthrough_availability(self, *args) -> None:
+        enabled = self.always_on_top.isChecked()
+        self.mouse_passthrough.setEnabled(enabled)
+        self.passthrough_hint.setEnabled(enabled)
+        if not enabled:
+            self.mouse_passthrough.setChecked(False)
 
     def _emit_preview(self, *args) -> None:
         if not self._preview_ready:
@@ -124,6 +143,7 @@ class SettingsWindow(QDialog):
         return replace(
             self.settings,
             always_on_top=self.always_on_top.isChecked(),
+            mouse_passthrough=self.mouse_passthrough.isChecked() and self.always_on_top.isChecked(),
             lock_position=self.lock_position.isChecked(),
             close_to_tray=self.close_to_tray.isChecked(),
             launch_on_startup=self.launch_on_startup.isChecked(),
