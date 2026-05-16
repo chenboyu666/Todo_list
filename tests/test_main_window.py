@@ -80,7 +80,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
 
     window = MainWindow(MemoryStore([]))
 
-    assert window.windowTitle() == "FloatingTodo"
+    assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
     assert window.minimumWidth() >= 410
     assert not window.empty_state_widget.isHidden()
@@ -484,7 +484,7 @@ def test_mouse_passthrough_applies_only_when_window_is_topmost(qapp: QApplicatio
     assert window.mouse_passthrough_active() is True
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
     assert window.windowFlags() & Qt.WindowTransparentForInput
-    assert window.windowTitle() == "FloatingTodo · 穿透模式"
+    assert window.windowTitle() == "Todo list · 穿透模式"
     assert window.passthrough_hint_label.isHidden() is False
 
     window.set_mouse_passthrough(False)
@@ -604,7 +604,7 @@ def test_settings_button_acceptance_saves_applies_and_updates_startup(
     assert window.settings == updated
     assert window.windowOpacity() == pytest.approx(0.67, abs=0.01)
     assert not window.windowFlags() & Qt.WindowStaysOnTopHint
-    assert captured["startup"] == ("FloatingTodo", '"E:/Python/python.exe" -m floating_todo', True)
+    assert captured["startup"] == ("Todo list", '"E:/Python/python.exe" -m floating_todo', True)
     assert settings_path.exists()
     saved_settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings_to_dict(updated).items() <= saved_settings.items()

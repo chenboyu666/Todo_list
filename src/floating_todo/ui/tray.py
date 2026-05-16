@@ -56,6 +56,13 @@ class TrayController:
         else:
             self.passthrough_action.label = label
 
+    def sync_icon(self, icon: QIcon) -> None:
+        set_icon = getattr(self.tray, "setIcon", None)
+        if callable(set_icon):
+            set_icon(icon)
+        else:
+            self.tray.icon = icon
+
     def is_available(self) -> bool:
         return bool(self.tray.isSystemTrayAvailable())
 

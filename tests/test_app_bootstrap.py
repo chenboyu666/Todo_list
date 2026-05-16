@@ -59,6 +59,7 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
 
         def setApplicationName(self, name):
             self.application_name = name
+            captured["application_name"] = name
 
         def setStyleSheet(self, qss):
             self.style_sheet = qss
@@ -94,6 +95,7 @@ def test_main_loads_settings_json_and_passes_settings_path(monkeypatch, tmp_path
     assert settings_to_dict(captured["settings"])["always_on_top"] is False
     assert settings_to_dict(captured["settings"])["opacity"] == 0.7
     assert isinstance(captured["notification_sender"], FakeNotificationSender)
+    assert captured["application_name"] == "Todo list"
     assert captured["shown"] is True
 
 
@@ -102,6 +104,11 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
     import floating_todo.ui.main_window as main_window_module
 
     captured = {}
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    custom_icon = tmp_path / "custom-icon.svg"
+    custom_icon.write_text("<svg />", encoding="utf-8")
+    (data_dir / "settings.json").write_text(f'{{"icon_path": "{custom_icon.as_posix()}"}}', encoding="utf-8")
 
     class FakeApplication:
         def __init__(self, argv):
@@ -137,7 +144,7 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
     monkeypatch.setattr(app_module, "QIcon", FakeIcon)
     monkeypatch.setattr(app_module, "TrayController", FakeTrayController)
     monkeypatch.setattr(app_module, "NotificationSender", lambda: object())
-    monkeypatch.setattr(app_module, "ensure_data_files", lambda: tmp_path / "data")
+    monkeypatch.setattr(app_module, "ensure_data_files", lambda: data_dir)
     monkeypatch.setattr(main_window_module, "MainWindow", FakeMainWindow)
 
     assert app_module.main() == 0
@@ -145,7 +152,7 @@ def test_main_wires_tray_controller_before_showing_window(monkeypatch, tmp_path)
     assert captured["shown"] is True
     assert isinstance(captured["tray_before_show"], FakeTrayController)
     assert captured["tray_before_show"] is captured["window"].tray_controller
-    assert captured["icon"].path == str(app_module.app_icon_path())
+    assert captured["icon"].path == str(custom_icon)
 
 
 def test_main_continues_without_tray_controller_when_tray_creation_fails(monkeypatch, tmp_path):

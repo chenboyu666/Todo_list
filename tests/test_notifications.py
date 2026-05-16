@@ -22,7 +22,7 @@ def test_notification_sender_builds_and_shows_winotify_notification(monkeypatch)
     assert NotificationSender().send("Deadline", "Ship it") is None
 
     assert created["args"] == {
-        "app_id": "FloatingTodo",
+        "app_id": "Todo list",
         "title": "Deadline",
         "msg": "Ship it",
     }

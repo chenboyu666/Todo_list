@@ -39,13 +39,21 @@ class FakeWinreg:
 
 
 def test_settings_round_trip_with_defaults():
-    settings = settings_from_dict({"opacity": 0.5, "window_geometry": {"x": 10, "y": 20, "width": 410, "height": 620}})
+    settings = settings_from_dict(
+        {
+            "opacity": 0.5,
+            "window_geometry": {"x": 10, "y": 20, "width": 410, "height": 620},
+            "icon_path": r"C:\Icons\todo.ico",
+        }
+    )
 
     assert settings.opacity == 0.5
     assert settings.close_to_tray is True
     assert settings.mouse_passthrough is False
+    assert settings.icon_path == r"C:\Icons\todo.ico"
     assert settings.window_geometry["x"] == 10
     assert settings_to_dict(settings)["theme"] == "calm-tech-dark"
+    assert settings_to_dict(settings)["icon_path"] == r"C:\Icons\todo.ico"
 
 
 def test_opacity_is_clamped():
@@ -110,27 +118,27 @@ def test_boolean_strings_parse_predictably():
 def test_launch_on_startup_writes_registry_value():
     fake = FakeWinreg()
 
-    set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", True, winreg_module=fake)
+    set_launch_on_startup("Todo list", r"C:\Apps\Todo list.exe", True, winreg_module=fake)
 
-    assert fake.values["FloatingTodo"] == r'"C:\Apps\FloatingTodo.exe"'
+    assert fake.values["Todo list"] == r'"C:\Apps\Todo list.exe"'
 
 
 def test_launch_on_startup_preserves_quoted_command_with_args():
     fake = FakeWinreg()
 
     set_launch_on_startup(
-        "FloatingTodo",
+        "Todo list",
         r'"C:\Python312\python.exe" -m floating_todo',
         True,
         winreg_module=fake,
     )
 
-    assert fake.values["FloatingTodo"] == r'"C:\Python312\python.exe" -m floating_todo'
+    assert fake.values["Todo list"] == r'"C:\Python312\python.exe" -m floating_todo'
 
 
 def test_current_startup_command_uses_packaged_executable_when_frozen(monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", r"C:\Apps\FloatingTodo.exe")
+    monkeypatch.setattr(sys, "executable", r"C:\Apps\Todo list.exe")
 
     command = platform_windows.current_startup_command()
 
@@ -149,9 +157,9 @@ def test_current_startup_command_uses_python_module_when_unfrozen(monkeypatch):
 def test_launch_on_startup_deletes_registry_value():
     fake = FakeWinreg()
 
-    set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", False, winreg_module=fake)
+    set_launch_on_startup("Todo list", r"C:\Apps\Todo list.exe", False, winreg_module=fake)
 
-    assert fake.deleted == ["FloatingTodo"]
+    assert fake.deleted == ["Todo list"]
 
 
 def test_launch_on_startup_closes_registry_key_when_write_fails():
@@ -159,7 +167,7 @@ def test_launch_on_startup_closes_registry_key_when_write_fails():
     fake.raise_on_set = True
 
     with pytest.raises(RuntimeError):
-        set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", True, winreg_module=fake)
+        set_launch_on_startup("Todo list", r"C:\Apps\Todo list.exe", True, winreg_module=fake)
 
     assert len(fake.closed) == 1
 
@@ -168,7 +176,7 @@ def test_launch_on_startup_ignores_missing_value_and_closes_key():
     fake = FakeWinreg()
     fake.missing_on_delete = True
 
-    set_launch_on_startup("FloatingTodo", r"C:\Apps\FloatingTodo.exe", False, winreg_module=fake)
+    set_launch_on_startup("Todo list", r"C:\Apps\Todo list.exe", False, winreg_module=fake)
 
-    assert fake.deleted == ["FloatingTodo"]
+    assert fake.deleted == ["Todo list"]
     assert len(fake.closed) == 1

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from PySide6.QtCore import QMimeData, QPoint, QRect, QTimer, Qt
-from PySide6.QtGui import QDrag
+from PySide6.QtGui import QDrag, QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from floating_todo.app_identity import APP_DISPLAY_NAME, APP_STARTUP_NAME, resolved_icon_path
 from floating_todo.domain import Task, select_focus_task
 from floating_todo.platform_windows import current_startup_command, set_launch_on_startup
 from floating_todo.reminders import mark_event_sent, reminder_events
@@ -83,7 +84,7 @@ class TitleBar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 8, 6)
         layout.setSpacing(8)
-        title = QLabel("FloatingTodo")
+        title = QLabel(APP_DISPLAY_NAME)
         title.setObjectName("windowTitleLabel")
         title.setStyleSheet("font-size: 18px; font-weight: 700;")
         layout.addWidget(title)
@@ -281,9 +282,10 @@ class MainWindow(QMainWindow):
         self.expanded_task_ids: set[str] = set()
         self.tasks = self.store.load_tasks()
 
-        self.setWindowTitle("FloatingTodo")
+        self.setWindowTitle(APP_DISPLAY_NAME)
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.apply_window_behavior_settings()
+        self.apply_icon_settings()
         self.setMinimumSize(430, 420)
         self.apply_saved_geometry()
 
@@ -645,9 +647,20 @@ class MainWindow(QMainWindow):
         self.setWindowOpacity(self.settings.opacity)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.settings.always_on_top)
         self.setWindowFlag(Qt.WindowTransparentForInput, self.mouse_passthrough_active())
-        self.setWindowTitle("FloatingTodo · 穿透模式" if self.mouse_passthrough_active() else "FloatingTodo")
+        self.setWindowTitle(f"{APP_DISPLAY_NAME} · 穿透模式" if self.mouse_passthrough_active() else APP_DISPLAY_NAME)
         self._update_passthrough_hint()
         self._sync_tray_actions()
+
+    def apply_icon_settings(self) -> None:
+        self._apply_icon_for_settings(self.settings)
+
+    def _apply_icon_for_settings(self, settings: AppSettings) -> None:
+        icon = QIcon(str(resolved_icon_path(settings.icon_path)))
+        self.setWindowIcon(icon)
+        tray_controller = self.tray_controller
+        sync_icon = getattr(tray_controller, "sync_icon", None)
+        if callable(sync_icon):
+            sync_icon(icon)
 
     def mouse_passthrough_active(self) -> bool:
         return bool(
@@ -694,6 +707,7 @@ class MainWindow(QMainWindow):
 
     def preview_settings(self, settings: AppSettings) -> None:
         self.setWindowOpacity(settings.opacity)
+        self._apply_icon_for_settings(settings)
         self.root_widget.set_background_settings(
             settings.background_enabled,
             settings.background_image_path,
@@ -702,6 +716,7 @@ class MainWindow(QMainWindow):
 
     def restore_settings_preview(self, settings: AppSettings) -> None:
         self.setWindowOpacity(settings.opacity)
+        self._apply_icon_for_settings(settings)
         self.root_widget.set_background_settings(
             settings.background_enabled,
             settings.background_image_path,
@@ -732,7 +747,7 @@ class MainWindow(QMainWindow):
             updated_settings = replace(updated_settings, mouse_passthrough=False)
         if updated_settings.launch_on_startup != self.settings.launch_on_startup:
             try:
-                set_launch_on_startup("FloatingTodo", current_startup_command(), updated_settings.launch_on_startup)
+                set_launch_on_startup(APP_STARTUP_NAME, current_startup_command(), updated_settings.launch_on_startup)
             except OSError as exc:
                 self.restore_settings_preview(previous_settings)
                 QMessageBox.warning(self, "启动设置失败", f"无法更新开机启动设置：{exc}")
@@ -745,6 +760,7 @@ class MainWindow(QMainWindow):
         self._restoring_geometry = True
         try:
             self.apply_window_behavior_settings()
+            self.apply_icon_settings()
             self.apply_background_settings()
             self.apply_low_distraction_settings()
             if self.settings.lock_position:

@@ -1,1 +1,1 @@
-"""User interface components for FloatingTodo."""
+"""User interface components for Todo list."""

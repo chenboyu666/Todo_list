@@ -29,6 +29,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         low_distraction_mode=True,
         notification_lead_minutes=45,
         notification_repeat_minutes=12,
+        icon_path=r"C:\Icons\todo.ico",
     )
     dialog = SettingsWindow(settings)
 
@@ -49,6 +50,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.repeat_minutes_spinbox.minimum() == 1
     assert dialog.repeat_minutes_spinbox.maximum() == 240
     assert dialog.repeat_minutes_spinbox.value() == 12
+    assert dialog.icon_path_edit.text() == r"C:\Icons\todo.ico"
 
     visible_text = "\n".join(
         [widget.text() for widget in dialog.findChildren(QCheckBox)]
@@ -65,6 +67,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         "透明度",
         "提前提醒分钟",
         "重复提醒间隔分钟",
+        "程序图标",
     ):
         assert label in visible_text
 
@@ -85,6 +88,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     dialog.opacity_slider.setValue(64)
     dialog.lead_minutes_spinbox.setValue(33)
     dialog.repeat_minutes_spinbox.setValue(9)
+    dialog.icon_path_edit.setText(r"C:\Icons\new-todo.ico")
 
     updated = dialog.build_settings()
 
@@ -98,6 +102,7 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.opacity == 0.64
     assert updated.notification_lead_minutes == 33
     assert updated.notification_repeat_minutes == 9
+    assert updated.icon_path == r"C:\Icons\new-todo.ico"
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
     assert updated.theme == "custom"
 
@@ -128,18 +133,21 @@ def test_settings_window_previews_opacity_and_background(qapp: QApplication, tmp
     previews: list[AppSettings] = []
     parent.preview_settings = lambda settings: previews.append(settings)
     image_path = tmp_path / "preview.png"
+    icon_path = tmp_path / "icon.png"
 
     dialog = SettingsWindow(AppSettings(opacity=0.72), parent)
     dialog.opacity_slider.setValue(58)
     dialog.background_path.setText(str(image_path))
     dialog.background_enabled.setChecked(True)
     dialog.background_overlay.setValue(45)
+    dialog.icon_path_edit.setText(str(icon_path))
 
     assert previews
     assert previews[-1].opacity == 0.58
     assert previews[-1].background_image_path == str(image_path)
     assert previews[-1].background_enabled is True
     assert previews[-1].background_overlay == 0.45
+    assert previews[-1].icon_path == str(icon_path)
 
     dialog.close()
     parent.close()
@@ -165,5 +173,31 @@ def test_settings_window_background_picker_accepts_gif(
     assert "*.gif" in captured["filter"]
     assert dialog.background_path.text() == str(gif_path)
     assert dialog.background_enabled.isChecked() is True
+
+    dialog.close()
+
+
+def test_settings_window_icon_picker_accepts_icon_files(
+    qapp: QApplication, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    captured: dict[str, str] = {}
+    icon_path = tmp_path / "todo.ico"
+
+    def fake_get_open_file_name(parent, title, directory, file_filter):
+        captured["title"] = title
+        captured["filter"] = file_filter
+        return str(icon_path), ""
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", fake_get_open_file_name)
+    dialog = SettingsWindow(AppSettings())
+
+    dialog.choose_icon()
+
+    assert captured["title"] == "选择程序图标"
+    assert "*.ico" in captured["filter"]
+    assert "*.svg" in captured["filter"]
+    assert dialog.icon_path_edit.text() == str(icon_path)
 
     dialog.close()
