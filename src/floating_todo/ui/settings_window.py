@@ -61,11 +61,15 @@ class SettingsWindow(QDialog):
         self.lead_minutes = QSpinBox()
         self.lead_minutes.setRange(1, 240)
         self.lead_minutes.setValue(settings.notification_lead_minutes)
+        self.lead_minutes.setSuffix(" 分钟")
+        self.lead_minutes.setToolTip("右侧 ↑ 增加、↓ 减少；每次调整 1 分钟")
         self.lead_minutes_spin = self.lead_minutes
         self.lead_minutes_spinbox = self.lead_minutes
         self.repeat_minutes = QSpinBox()
         self.repeat_minutes.setRange(1, 240)
         self.repeat_minutes.setValue(settings.notification_repeat_minutes)
+        self.repeat_minutes.setSuffix(" 分钟")
+        self.repeat_minutes.setToolTip("右侧 ↑ 增加、↓ 减少；每次调整 1 分钟")
         self.repeat_minutes_spin = self.repeat_minutes
         self.repeat_minutes_spinbox = self.repeat_minutes
 
@@ -74,6 +78,7 @@ class SettingsWindow(QDialog):
         self.background_resource = QComboBox()
         self.background_resource_combo = self.background_resource
         self._populate_resource_combo(self.background_resource, "选择内置背景")
+        self.background_resource.setToolTip("右侧 ▼ 展开内置背景列表")
         self.background_path = QLineEdit(settings.background_image_path)
         self.background_path.setPlaceholderText("选择背景图片")
         browse_button = QPushButton("选择")
@@ -87,6 +92,7 @@ class SettingsWindow(QDialog):
         self.icon_resource = QComboBox()
         self.icon_resource_combo = self.icon_resource
         self._populate_resource_combo(self.icon_resource, "选择内置图标")
+        self.icon_resource.setToolTip("右侧 ▼ 展开内置图标列表")
         icon_browse_button = QPushButton("选择")
         icon_browse_button.clicked.connect(self.choose_icon)
 
@@ -110,8 +116,10 @@ class SettingsWindow(QDialog):
         form.addRow("Windows 开机启动", self.launch_on_startup)
         form.addRow("低干扰模式", self.low_distraction)
         form.addRow("透明度", self.opacity)
-        form.addRow("提前提醒分钟", self.lead_minutes)
-        form.addRow("重复提醒间隔分钟", self.repeat_minutes)
+        self.lead_minutes_step_hint = _step_hint_label("右侧 ↑ 增加 / ↓ 减少")
+        form.addRow("提前提醒分钟", _with_hint(self.lead_minutes, self.lead_minutes_step_hint))
+        self.repeat_minutes_step_hint = _step_hint_label("右侧 ↑ 增加 / ↓ 减少")
+        form.addRow("重复提醒间隔分钟", _with_hint(self.repeat_minutes, self.repeat_minutes_step_hint))
         form.addRow("启用背景图片", self.background_enabled)
         form.addRow("内置背景", self.background_resource)
 
@@ -242,3 +250,29 @@ class SettingsWindow(QDialog):
             background_overlay=self.background_overlay.value() / 100,
             icon_path=self.icon_path.text().strip(),
         )
+
+
+def _with_hint(control, hint: QLabel) -> QHBoxLayout:
+    layout = QHBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+    layout.addWidget(control, 1)
+    layout.addWidget(hint)
+    return layout
+
+
+def _step_hint_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("settingsStepHintLabel")
+    label.setAlignment(Qt.AlignCenter)
+    label.setToolTip("说明右侧灰色箭头控制区的含义")
+    label.setStyleSheet(
+        "color: #BAE6FD;"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #102033, stop:1 #103A3D);"
+        "border: none;"
+        "border-radius: 8px;"
+        "font-size: 12px;"
+        "font-weight: 900;"
+        "padding: 6px 8px;"
+    )
+    return label

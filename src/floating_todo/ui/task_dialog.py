@@ -75,7 +75,7 @@ class TaskDialog(QDialog):
         self.effort_input = QSpinBox()
         self.effort_input.setRange(0, 24 * 60)
         self.effort_input.setSingleStep(15)
-        self.effort_input.setSuffix(" min")
+        self.effort_input.setSuffix(" 分钟")
         self.effort_input.setToolTip("右侧箭头每次增减 15 分钟；修改后会按当前时间同步截止时间")
         self.effort_input.setAccessibleName("预计工作量分钟")
         self.effort_spin = self.effort_input
@@ -103,7 +103,7 @@ class TaskDialog(QDialog):
         self.progress_value_input.setAlignment(Qt.AlignCenter)
         self.progress_value_input.setFixedWidth(62)
         self.progress_value_input.setFixedHeight(26)
-        self.progress_value_input.setToolTip("输入百分比，或用右侧箭头微调 1%")
+        self.progress_value_input.setToolTip("输入百分比；可用键盘 ↑ / ↓ 每次微调 1%")
         self.progress_value_input.setAccessibleName("手动进度百分比")
         self.progress_input = self.progress_value_input
         self.progress_spin = self.progress_value_input
@@ -146,8 +146,13 @@ class TaskDialog(QDialog):
         form.addRow("优先级", self.priority_input)
         self.priority_hint_label = _hint_label("P1 最优先，P2 普通，P3 较低；只影响排序和优先级颜色。")
         form.addRow("", self.priority_hint_label)
-        form.addRow("预计工作量", self.effort_input)
-        self.effort_hint_label = _hint_label("右侧箭头可增减时间；每次 15 分钟。修改后会同步推算截止时间。")
+        effort_layout = QHBoxLayout()
+        effort_layout.setSpacing(8)
+        effort_layout.addWidget(self.effort_input, 1)
+        self.effort_step_hint_label = _step_hint_label("↑ 增加 15 分钟  ↓ 减少 15 分钟")
+        effort_layout.addWidget(self.effort_step_hint_label)
+        form.addRow("预计工作量", effort_layout)
+        self.effort_hint_label = _hint_label("右侧 ↑ 增加、↓ 减少；每次 15 分钟。修改后会同步推算截止时间。")
         form.addRow("", self.effort_hint_label)
 
         deadline_layout = QVBoxLayout()
@@ -170,8 +175,10 @@ class TaskDialog(QDialog):
         progress_layout.addWidget(self.progress_slider, 1)
         self.progress_value_input.setStyleSheet(_progress_input_style())
         progress_layout.addWidget(self.progress_value_input)
+        self.progress_step_hint_label = _step_hint_label("键盘 ↑ +1%  ↓ -1%")
+        progress_layout.addWidget(self.progress_step_hint_label)
         form.addRow("手动进度", progress_layout)
-        self.progress_hint_label = _hint_label("可拖动滑条，也可以直接输入百分比；进度输入框右侧箭头每次增减 1%。")
+        self.progress_hint_label = _hint_label("可拖动滑条，也可以直接输入百分比；键盘 ↑ / ↓ 每次增减 1%。")
         form.addRow("", self.progress_hint_label)
         form.addRow("备注", self.notes_input)
         layout.addWidget(panel)
@@ -334,5 +341,22 @@ def _inline_label(text: str) -> QLabel:
         "border-radius: 8px;"
         "padding: 6px 8px;"
         "font-weight: 800;"
+    )
+    return label
+
+
+def _step_hint_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("stepHintLabel")
+    label.setAlignment(Qt.AlignCenter)
+    label.setToolTip("说明右侧灰色箭头控制区的增减含义")
+    label.setStyleSheet(
+        "color: #BAE6FD;"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #102033, stop:1 #103A3D);"
+        "border: none;"
+        "border-radius: 8px;"
+        "font-size: 12px;"
+        "font-weight: 900;"
+        "padding: 6px 8px;"
     )
     return label

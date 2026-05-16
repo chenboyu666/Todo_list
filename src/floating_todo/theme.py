@@ -1,3 +1,10 @@
+from pathlib import Path
+
+
+def _asset_url(filename: str) -> str:
+    return (Path(__file__).resolve().parent / "assets" / "ui" / filename).as_posix()
+
+
 THEME_COLORS = {
     "background": "#080A0F",
     "surface": "#121722",
@@ -123,10 +130,41 @@ QComboBox::drop-down, QDateTimeEdit::drop-down, QDateEdit::drop-down {{
   border-top-right-radius: {THEME_RADIUS["control"]};
   border-bottom-right-radius: {THEME_RADIUS["control"]};
 }}
+QComboBox::down-arrow, QDateTimeEdit::down-arrow, QDateEdit::down-arrow {{
+  image: url("{_asset_url("chevron-down.svg")}");
+  width: 14px;
+  height: 14px;
+}}
+QComboBox::drop-down:hover, QDateTimeEdit::drop-down:hover, QDateEdit::drop-down:hover {{
+  background: #203242;
+}}
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
   border: none;
   background: {THEME_COLORS["surface_alt"]};
   width: 24px;
+}}
+QAbstractSpinBox::up-button {{
+  subcontrol-origin: border;
+  subcontrol-position: top right;
+  border-top-right-radius: {THEME_RADIUS["control"]};
+}}
+QAbstractSpinBox::down-button {{
+  subcontrol-origin: border;
+  subcontrol-position: bottom right;
+  border-bottom-right-radius: {THEME_RADIUS["control"]};
+}}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{
+  background: #203242;
+}}
+QAbstractSpinBox::up-arrow {{
+  image: url("{_asset_url("step-up.svg")}");
+  width: 10px;
+  height: 7px;
+}}
+QAbstractSpinBox::down-arrow {{
+  image: url("{_asset_url("step-down.svg")}");
+  width: 10px;
+  height: 7px;
 }}
 QProgressBar {{
   background: #0A0E15;
