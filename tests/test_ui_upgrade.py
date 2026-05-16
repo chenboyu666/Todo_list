@@ -242,6 +242,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
     assert window.focus_priority_label.text() == "P1"
+    assert "font-size: 23px" in window.focus_title_label.styleSheet()
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_progress_label.text() == "10%"
@@ -251,6 +252,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     window.focus_progress.setSliderDown(False)
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
     assert current_buttons[0].objectName() == "currentTaskButton"
+    task_titles = window.task_rows_container.findChildren(QLabel, "activeTaskTitle")
+    assert task_titles
+    assert task_titles[0].minimumHeight() >= 38
+    assert task_titles[0].toolTip() == "临近任务"
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
     expand_button.click()
     qapp.processEvents()
