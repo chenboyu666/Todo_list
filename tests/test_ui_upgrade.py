@@ -202,7 +202,14 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
 
 
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow, TaskDragHandle, _card_style, _countdown_display, _countdown_label_style
+    from floating_todo.ui.main_window import (
+        MainWindow,
+        TaskDragHandle,
+        _card_style,
+        _countdown_display,
+        _countdown_label_style,
+        _priority_chip_style,
+    )
 
     task = make_task("临近任务", "task-1", notes="先确认接口，再整理交付材料")
     store = MemoryStore([task])
@@ -231,6 +238,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert window.focus_delete_button.isEnabled()
     assert "|" in _countdown_display("00:00:01", True)
     assert "font-size: 28px" in _countdown_label_style("normal", pulse=True)
+    assert "#0A2740" in _countdown_label_style("normal", pulse=False)
+    assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
+    assert "#5A2D12" in _priority_chip_style("P1")
+    assert window.focus_priority_label.text() == "P1"
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_progress_label.text() == "10%"
@@ -414,9 +425,12 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
 
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
-    assert window.priority_mix_label.text() == "P1 1 · P2 1 · P3 0"
+    assert window.priority_p1_label.text() == "P1 1"
+    assert window.priority_p2_label.text() == "P2 1"
+    assert window.priority_p3_label.text() == "P3 0"
     assert window.review_metric_label.text() == "复盘 1/2"
     assert window.findChildren(QProgressBar, "historyInlineProgress")
+    assert window.export_button.text() == "导出 CSV"
 
     labels = rendered_history_text()
     assert "已复盘" in labels
@@ -449,6 +463,33 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "按等级 · 1-2/2 条 · 1/1 页" in window.date_page_label.text()
     assert "P1 · 1 条" in labels
     assert "P2 · 1 条" in labels
+
+    window.close()
+
+
+def test_history_window_exports_filtered_records_as_csv(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    first = replace(
+        make_task("完成任务", "done-1", status="done", notes="交付前确认备注"),
+        reflection="下次提前拆分",
+    )
+    second = replace(make_task("另一条记录", "done-2", status="done"), priority="P2")
+    store = MemoryStore([first, second])
+    window = HistoryWindow([first, second], store)
+    window.search_input.setText("完成")
+    qapp.processEvents()
+
+    export_path = tmp_path / "history.csv"
+    count = window.export_history_to_path(export_path)
+
+    assert count == 1
+    exported = export_path.read_text(encoding="utf-8-sig")
+    assert "任务ID,标题,优先级" in exported
+    assert "done-1,完成任务,P1" in exported
+    assert "交付前确认备注" in exported
+    assert "下次提前拆分" in exported
+    assert "done-2" not in exported
 
     window.close()
 

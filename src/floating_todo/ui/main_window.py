@@ -298,6 +298,10 @@ class MainWindow(QMainWindow):
         self.focus_countdown_label = QLabel("--:--:--")
         self.focus_countdown_label.setObjectName("focusCountdownLabel")
         self.focus_countdown_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.focus_priority_label = QLabel("--")
+        self.focus_priority_label.setObjectName("focusPriorityLabel")
+        self.focus_priority_label.setAlignment(Qt.AlignCenter)
+        self.focus_priority_label.setFixedHeight(24)
         self.focus_urgency_label = QLabel("等待")
         self.focus_progress = NoWheelSlider(Qt.Horizontal)
         self.focus_progress.setObjectName("focusProgress")
@@ -367,6 +371,7 @@ class MainWindow(QMainWindow):
         self.focus_title_prefix = QLabel("进行中")
         self.focus_title_prefix.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
         focus_top.addWidget(self.focus_title_prefix)
+        focus_top.addWidget(self.focus_priority_label)
         self.focus_urgency_label.setAlignment(Qt.AlignCenter)
         self.focus_urgency_label.setFixedHeight(24)
         focus_top.addWidget(self.focus_urgency_label)
@@ -890,6 +895,8 @@ class MainWindow(QMainWindow):
             self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
             self.focus_countdown_label.setText("--:--:--")
             self.focus_countdown_label.setStyleSheet(_countdown_label_style("none", pulse=False))
+            self.focus_priority_label.setText("--")
+            self.focus_priority_label.setStyleSheet(_priority_chip_style("none"))
             self.focus_urgency_label.setText("等待")
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
@@ -902,6 +909,8 @@ class MainWindow(QMainWindow):
             self.focus_title_label.setText(focus_task.title)
             self.focus_meta_label.setText(f"{focus_task.priority} · 工作量 {focus_task.effort_minutes} min")
             self._set_focus_notes(focus_task.notes)
+            self.focus_priority_label.setText(focus_task.priority)
+            self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
             self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
             countdown_pulse = now.second % 2 == 0
@@ -974,11 +983,7 @@ class MainWindow(QMainWindow):
         priority.setAlignment(Qt.AlignCenter)
         priority.setFixedHeight(24)
         priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        priority.setStyleSheet(
-            "font-weight: 700; padding: 2px 8px; border-radius: 7px; "
-            f"background: {_priority_chip_background(str(row['priority']))}; "
-            f"color: {_priority_chip_text(str(row['priority']))};"
-        )
+        priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
         top.addWidget(priority)
         urgency_chip = QLabel(str(row["urgency_label"]))
         urgency_chip.setAlignment(Qt.AlignCenter)
@@ -1195,28 +1200,18 @@ def _urgency_chip_style(urgency: str) -> str:
 
 
 def _deadline_label_style(urgency: str) -> str:
-    return f"color: {_urgency_style(urgency)['accent']}; font-weight: 800; font-size: 13px;"
+    return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: 13px;"
 
 
 def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
-    style = _urgency_style(urgency)
-    glow = style["accent"]
-    if urgency == "overdue":
-        background = "#421923" if pulse else "#331520"
-        color = "#FFE0E5"
-    elif urgency == "soon":
-        background = "#3C2A16" if pulse else "#2B2115"
-        color = "#FFF0C7"
-    elif urgency == "normal":
-        background = "#123047" if pulse else "#0D2536"
-        color = "#DFF7FF"
-    else:
-        background = "#151C28"
-        color = THEME_COLORS["muted"]
-        glow = THEME_COLORS["muted"]
+    style = _countdown_style(urgency)
+    start = style["start_pulse"] if pulse else style["start"]
+    end = style["end_pulse"] if pulse else style["end"]
     return (
-        f"color: {color};"
-        f"background: {background};"
+        f"color: {style['text']};"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        f" stop:0 {start},"
+        f" stop:1 {end});"
         "border: none;"
         "border-radius: 8px;"
         "padding: 5px 12px;"
@@ -1225,7 +1220,7 @@ def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
         "font-size: 28px;"
         "font-weight: 900;"
         'font-family: "Cascadia Mono", "JetBrains Mono", "Segoe UI Variable", "Microsoft YaHei UI";'
-        f"selection-background-color: {glow};"
+        f"selection-background-color: {style['accent']};"
     )
 
 
@@ -1297,17 +1292,77 @@ def _note_preview(notes: str, *, limit: int = 72) -> str:
     return f"{text[:limit]}..."
 
 
-def _priority_chip_background(priority: str) -> str:
-    return {
-        "P1": "#4A2B16",
-        "P2": "#123047",
-        "P3": "#12362D",
-    }.get(priority, "#1A1F2B")
+PRIORITY_STYLES = {
+    "P1": {"background": "#5A2D12", "text": "#FFE1A6"},
+    "P2": {"background": "#1B2F69", "text": "#DCE7FF"},
+    "P3": {"background": "#123B34", "text": "#D9FBE8"},
+    "none": {"background": "#202838", "text": "#C9D2E4"},
+}
 
 
-def _priority_chip_text(priority: str) -> str:
-    return {
-        "P1": THEME_COLORS["warning"],
-        "P2": THEME_COLORS["accent"],
-        "P3": THEME_COLORS["accent_secondary"],
-    }.get(priority, THEME_COLORS["text"])
+COUNTDOWN_STYLES = {
+    "none": {
+        "start": "#151C28",
+        "end": "#1B2432",
+        "start_pulse": "#1A2331",
+        "end_pulse": "#222D3F",
+        "accent": THEME_COLORS["muted"],
+        "text": "#C9D2E4",
+    },
+    "normal": {
+        "start": "#0A2740",
+        "end": "#0B4A60",
+        "start_pulse": "#0D3454",
+        "end_pulse": "#0E6074",
+        "accent": "#7DD3FC",
+        "text": "#DFF7FF",
+    },
+    "soon": {
+        "start": "#0B3D47",
+        "end": "#145B4D",
+        "start_pulse": "#0E4D59",
+        "end_pulse": "#18705C",
+        "accent": "#A7F3D0",
+        "text": "#E7FFF7",
+    },
+    "urgent": {
+        "start": "#4A3114",
+        "end": "#7A4515",
+        "start_pulse": "#654019",
+        "end_pulse": "#985C1C",
+        "accent": "#F6C177",
+        "text": "#FFF0CC",
+    },
+    "critical": {
+        "start": "#5A2417",
+        "end": "#9A3B18",
+        "start_pulse": "#74301B",
+        "end_pulse": "#BA4A1C",
+        "accent": "#FDBA74",
+        "text": "#FFE5D0",
+    },
+    "overdue": {
+        "start": "#4B1422",
+        "end": "#8B1D35",
+        "start_pulse": "#64192D",
+        "end_pulse": "#A52542",
+        "accent": "#FCA5A5",
+        "text": "#FFE0E7",
+    },
+}
+
+
+def _priority_style(priority: str) -> dict[str, str]:
+    return PRIORITY_STYLES.get(priority, PRIORITY_STYLES["none"])
+
+
+def _priority_chip_style(priority: str) -> str:
+    style = _priority_style(priority)
+    return (
+        "font-weight: 900; padding: 2px 8px; border-radius: 7px; "
+        f"background: {style['background']}; color: {style['text']};"
+    )
+
+
+def _countdown_style(urgency: str) -> dict[str, str]:
+    return COUNTDOWN_STYLES.get(urgency, COUNTDOWN_STYLES["normal"])
