@@ -90,6 +90,17 @@ class SettingsWindow(QDialog):
         icon_browse_button = QPushButton("选择")
         icon_browse_button.clicked.connect(self.choose_icon)
 
+        for checkbox in (
+            self.always_on_top,
+            self.mouse_passthrough,
+            self.lock_position,
+            self.close_to_tray,
+            self.launch_on_startup,
+            self.low_distraction,
+            self.background_enabled,
+        ):
+            self._configure_toggle(checkbox)
+
         form = QFormLayout()
         form.addRow("窗口始终置顶", self.always_on_top)
         form.addRow("鼠标穿透", self.mouse_passthrough)
@@ -134,6 +145,15 @@ class SettingsWindow(QDialog):
         combo.addItem(placeholder, "")
         for resource in BUILTIN_RESOURCES:
             combo.addItem(resource.label, resource.value)
+
+    def _configure_toggle(self, checkbox: QCheckBox) -> None:
+        checkbox.setObjectName("settingsToggle")
+        checkbox.setCursor(Qt.PointingHandCursor)
+        checkbox.toggled.connect(lambda checked, control=checkbox: self._update_toggle_text(control, checked))
+        self._update_toggle_text(checkbox, checkbox.isChecked())
+
+    def _update_toggle_text(self, checkbox: QCheckBox, checked: bool) -> None:
+        checkbox.setText("开启" if checked else "关闭")
 
     def choose_background(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

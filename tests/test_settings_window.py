@@ -35,11 +35,13 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
 
     assert dialog.windowTitle() == "设置"
     assert dialog.always_on_top_checkbox.isChecked() is False
+    assert dialog.always_on_top_checkbox.text() == "关闭"
     assert dialog.mouse_passthrough_checkbox.isChecked() is False
     assert dialog.mouse_passthrough_checkbox.isEnabled() is False
     assert dialog.lock_position_checkbox.isChecked() is True
     assert dialog.close_to_tray_checkbox.isChecked() is False
     assert dialog.launch_on_startup_checkbox.isChecked() is True
+    assert dialog.launch_on_startup_checkbox.text() == "开启"
     assert dialog.low_distraction_checkbox.isChecked() is True
     assert dialog.opacity_slider.minimum() == 30
     assert dialog.opacity_slider.maximum() == 100

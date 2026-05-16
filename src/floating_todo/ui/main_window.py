@@ -295,6 +295,9 @@ class MainWindow(QMainWindow):
         self.focus_title_label = QLabel("没有进行中的任务")
         self.focus_meta_label = QLabel("工作量 --")
         self.focus_deadline_label = QLabel("截止 --:--:--")
+        self.focus_countdown_label = QLabel("--:--:--")
+        self.focus_countdown_label.setObjectName("focusCountdownLabel")
+        self.focus_countdown_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.focus_urgency_label = QLabel("等待")
         self.focus_progress = NoWheelSlider(Qt.Horizontal)
         self.focus_progress.setObjectName("focusProgress")
@@ -368,7 +371,13 @@ class MainWindow(QMainWindow):
         self.focus_urgency_label.setFixedHeight(24)
         focus_top.addWidget(self.focus_urgency_label)
         focus_top.addStretch(1)
-        focus_top.addWidget(self.focus_deadline_label)
+        deadline_stack = QVBoxLayout()
+        deadline_stack.setContentsMargins(0, 0, 0, 0)
+        deadline_stack.setSpacing(2)
+        self.focus_deadline_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        deadline_stack.addWidget(self.focus_deadline_label)
+        deadline_stack.addWidget(self.focus_countdown_label)
+        focus_top.addLayout(deadline_stack)
         focus_layout.addLayout(focus_top)
 
         self.focus_title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
@@ -879,6 +888,8 @@ class MainWindow(QMainWindow):
             self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
+            self.focus_countdown_label.setText("--:--:--")
+            self.focus_countdown_label.setStyleSheet(_countdown_label_style("none", pulse=False))
             self.focus_urgency_label.setText("等待")
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
@@ -891,10 +902,13 @@ class MainWindow(QMainWindow):
             self.focus_title_label.setText(focus_task.title)
             self.focus_meta_label.setText(f"{focus_task.priority} · 工作量 {focus_task.effort_minutes} min")
             self._set_focus_notes(focus_task.notes)
-            self.focus_deadline_label.setText(
-                f"截止 {deadline_at_label(focus_task.deadline)} · {countdown_label(focus_task.deadline, now)}"
-            )
+            self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
+            countdown_pulse = now.second % 2 == 0
+            self.focus_countdown_label.setText(
+                _countdown_display(countdown_label(focus_task.deadline, now), countdown_pulse)
+            )
+            self.focus_countdown_label.setStyleSheet(_countdown_label_style(urgency, pulse=countdown_pulse))
             self.focus_urgency_label.setText(urgency_label)
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
@@ -1181,7 +1195,42 @@ def _urgency_chip_style(urgency: str) -> str:
 
 
 def _deadline_label_style(urgency: str) -> str:
-    return f"color: {_urgency_style(urgency)['accent']}; font-weight: 700;"
+    return f"color: {_urgency_style(urgency)['accent']}; font-weight: 800; font-size: 13px;"
+
+
+def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
+    style = _urgency_style(urgency)
+    glow = style["accent"]
+    if urgency == "overdue":
+        background = "#421923" if pulse else "#331520"
+        color = "#FFE0E5"
+    elif urgency == "soon":
+        background = "#3C2A16" if pulse else "#2B2115"
+        color = "#FFF0C7"
+    elif urgency == "normal":
+        background = "#123047" if pulse else "#0D2536"
+        color = "#DFF7FF"
+    else:
+        background = "#151C28"
+        color = THEME_COLORS["muted"]
+        glow = THEME_COLORS["muted"]
+    return (
+        f"color: {color};"
+        f"background: {background};"
+        "border: none;"
+        "border-radius: 8px;"
+        "padding: 5px 12px;"
+        "min-height: 34px;"
+        "min-width: 154px;"
+        "font-size: 28px;"
+        "font-weight: 900;"
+        'font-family: "Cascadia Mono", "JetBrains Mono", "Segoe UI Variable", "Microsoft YaHei UI";'
+        f"selection-background-color: {glow};"
+    )
+
+
+def _countdown_display(text: str, pulse: bool) -> str:
+    return f"{text} {'|' if pulse else ' '}"
 
 
 def _progress_value_style(*, selected: bool = False) -> str:

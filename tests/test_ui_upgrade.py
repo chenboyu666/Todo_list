@@ -7,7 +7,7 @@ import os
 import pytest
 from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QProgressBar, QPushButton
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -202,7 +202,7 @@ def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> No
 
 
 def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow, TaskDragHandle, _card_style
+    from floating_todo.ui.main_window import MainWindow, TaskDragHandle, _card_style, _countdown_display, _countdown_label_style
 
     task = make_task("临近任务", "task-1", notes="先确认接口，再整理交付材料")
     store = MemoryStore([task])
@@ -229,6 +229,8 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(qapp: QApplicatio
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
+    assert "|" in _countdown_display("00:00:01", True)
+    assert "font-size: 28px" in _countdown_label_style("normal", pulse=True)
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_progress_label.text() == "10%"
@@ -412,8 +414,12 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
 
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
+    assert window.priority_mix_label.text() == "P1 1 · P2 1 · P3 0"
+    assert window.review_metric_label.text() == "复盘 1/2"
+    assert window.findChildren(QProgressBar, "historyInlineProgress")
 
     labels = rendered_history_text()
+    assert "已复盘" in labels
     assert "2026-05-12 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
     assert "完成任务" in labels
     assert "任务备注：交付前确认了备注" in labels
