@@ -39,7 +39,7 @@ Remove-ProjectDirectory -RelativePath "dist"
     "--onedir",
     "--windowed",
     "--name",
-    "FloatingTodo",
+    "Todo list",
     "--add-data",
     "src/floating_todo/assets;floating_todo/assets",
     "--hidden-import",
@@ -67,5 +67,5 @@ Remove-ProjectDirectory -RelativePath "dist"
     "src/floating_todo/__main__.py"
 )
 
-New-Item -ItemType Directory -Force -Path "dist/FloatingTodo/data" | Out-Null
-Write-Host "Build complete: dist/FloatingTodo/FloatingTodo.exe"
+New-Item -ItemType Directory -Force -Path "dist/Todo list/data" | Out-Null
+Write-Host "Build complete: dist/Todo list/Todo list.exe"

@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from floating_todo.app_identity import APP_DISPLAY_NAME, resolved_icon_path
 from floating_todo.notifications import NotificationSender
 from floating_todo.settings import settings_from_dict
 from floating_todo.store import JsonTaskStore, load_json_object
@@ -31,12 +32,12 @@ def ensure_data_files(base_path: Path | None = None) -> Path:
 
 
 def app_icon_path() -> Path:
-    return Path(__file__).resolve().parent / "assets" / "app_icon.svg"
+    return resolved_icon_path()
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("FloatingTodo")
+    app.setApplicationName(APP_DISPLAY_NAME)
     app.setStyleSheet(CALM_TECH_QSS)
     install_global_interaction_effects(app)
     data_dir = ensure_data_files()
@@ -47,7 +48,7 @@ def main() -> int:
     from floating_todo.ui.main_window import MainWindow
 
     window = MainWindow(store, settings, settings_path, notification_sender)
-    icon = QIcon(str(app_icon_path()))
+    icon = QIcon(str(resolved_icon_path(settings.icon_path)))
     try:
         window.tray_controller = TrayController(window, icon)
     except Exception:

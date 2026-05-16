@@ -26,6 +26,7 @@ class AppSettings:
     background_image_path: str = ""
     background_enabled: bool = False
     background_overlay: float = 0.68
+    icon_path: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "window_geometry", MappingProxyType(dict(self.window_geometry)))
@@ -78,6 +79,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
     background_overlay = max(0.25, min(0.95, background_overlay))
     raw_focus_task_id = data.get("focus_task_id")
     raw_background_path = data.get("background_image_path", "")
+    raw_icon_path = data.get("icon_path", "")
     return AppSettings(
         always_on_top=_coerce_bool(data.get("always_on_top", True), True),
         mouse_passthrough=_coerce_bool(data.get("mouse_passthrough", False), False),
@@ -94,6 +96,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         background_image_path=str(raw_background_path) if raw_background_path else "",
         background_enabled=_coerce_bool(data.get("background_enabled", False), False),
         background_overlay=background_overlay,
+        icon_path=str(raw_icon_path) if raw_icon_path else "",
     )
 
 
@@ -114,4 +117,5 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "background_image_path": settings.background_image_path,
         "background_enabled": settings.background_enabled,
         "background_overlay": settings.background_overlay,
+        "icon_path": settings.icon_path,
     }

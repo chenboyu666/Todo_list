@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from floating_todo.app_identity import ICON_FILE_FILTER
 from floating_todo.settings import AppSettings
 
 
@@ -75,6 +76,11 @@ class SettingsWindow(QDialog):
         self.background_overlay = QSlider(Qt.Horizontal)
         self.background_overlay.setRange(25, 95)
         self.background_overlay.setValue(round(settings.background_overlay * 100))
+        self.icon_path = QLineEdit(settings.icon_path)
+        self.icon_path.setPlaceholderText("选择程序图标")
+        self.icon_path_edit = self.icon_path
+        icon_browse_button = QPushButton("选择")
+        icon_browse_button.clicked.connect(self.choose_icon)
 
         form = QFormLayout()
         form.addRow("窗口始终置顶", self.always_on_top)
@@ -94,6 +100,11 @@ class SettingsWindow(QDialog):
         background_layout.addWidget(browse_button)
         form.addRow("背景图片", background_layout)
         form.addRow("背景遮罩", self.background_overlay)
+
+        icon_layout = QHBoxLayout()
+        icon_layout.addWidget(self.icon_path, 1)
+        icon_layout.addWidget(icon_browse_button)
+        form.addRow("程序图标", icon_layout)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -118,12 +129,23 @@ class SettingsWindow(QDialog):
             self.background_path.setText(path)
             self.background_enabled.setChecked(True)
 
+    def choose_icon(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择程序图标",
+            self.icon_path.text(),
+            ICON_FILE_FILTER,
+        )
+        if path:
+            self.icon_path.setText(path)
+
     def _connect_preview_signals(self) -> None:
         self.always_on_top.toggled.connect(self._sync_passthrough_availability)
         self.opacity.valueChanged.connect(self._emit_preview)
         self.background_enabled.toggled.connect(self._emit_preview)
         self.background_path.textChanged.connect(self._emit_preview)
         self.background_overlay.valueChanged.connect(self._emit_preview)
+        self.icon_path.textChanged.connect(self._emit_preview)
 
     def _sync_passthrough_availability(self, *args) -> None:
         enabled = self.always_on_top.isChecked()
@@ -154,4 +176,5 @@ class SettingsWindow(QDialog):
             background_enabled=self.background_enabled.isChecked(),
             background_image_path=self.background_path.text().strip(),
             background_overlay=self.background_overlay.value() / 100,
+            icon_path=self.icon_path.text().strip(),
         )

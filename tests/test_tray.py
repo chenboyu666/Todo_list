@@ -49,6 +49,9 @@ class FakeTrayIcon:
     def setContextMenu(self, menu: FakeMenu) -> None:
         self.menu = menu
 
+    def setIcon(self, icon) -> None:
+        self.icon = icon
+
     def show(self) -> None:
         self.shown = True
 
@@ -147,6 +150,14 @@ def test_tray_passthrough_action_label_reflects_window_state() -> None:
     controller.sync_actions()
 
     assert controller.passthrough_action.label == "退出鼠标穿透"
+
+
+def test_tray_icon_can_be_updated() -> None:
+    controller = make_controller(FakeWindow())
+
+    controller.sync_icon("new-icon")
+
+    assert controller.tray.icon == "new-icon"
 
 
 def test_tray_toggle_hides_visible_window() -> None:
