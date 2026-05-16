@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from math import sin
-from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QTimer, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QMovie, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from floating_todo.app_resources import resolve_resource_path
 from floating_todo.theme import THEME_COLORS
 
 
@@ -28,7 +28,7 @@ class AnimatedBackdrop(QWidget):
         self.background_enabled = enabled
         self.background_image_path = image_path
         self.background_overlay = max(0.25, min(0.95, overlay))
-        path = Path(image_path)
+        path = resolve_resource_path(image_path)
         self._stop_movie()
         self._pixmap = QPixmap()
         if enabled and path.exists():
