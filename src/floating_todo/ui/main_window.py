@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from math import sin
 from pathlib import Path
 from typing import Protocol
 
-from PySide6.QtCore import QMimeData, QPoint, QRect, QTimer, Qt
-from PySide6.QtGui import QDrag, QIcon
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -67,6 +68,67 @@ class NotificationSenderProtocol(Protocol):
         """Send a user-visible notification."""
 
 
+class ClockDisplay(QLabel):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._phase = 0
+        self.setObjectName("clockLabel")
+        self.setAlignment(Qt.AlignCenter)
+        self.setMinimumSize(92, 38)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.setStyleSheet(
+            "QLabel#clockLabel {"
+            "color: #F8FBFF;"
+            "background: transparent;"
+            "font-size: 15px;"
+            "font-weight: 900;"
+            'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
+            "padding: 0 12px;"
+            "}"
+        )
+
+    def setText(self, text: str) -> None:
+        self._phase = (self._phase + 1) % 360
+        super().setText(text)
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(rect, 10, 10)
+
+        fill = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        fill.setColorAt(0, QColor(9, 20, 33, 228))
+        fill.setColorAt(0.52, QColor(13, 48, 66, 232))
+        fill.setColorAt(1, QColor(22, 78, 73, 226))
+        painter.fillPath(path, fill)
+        painter.setClipPath(path)
+        self._draw_clock_stars(painter, rect)
+        painter.setClipping(False)
+        painter.setPen(QPen(QColor(125, 211, 252, 90), 1.1))
+        painter.drawPath(path)
+        painter.end()
+        super().paintEvent(event)
+
+    def _draw_clock_stars(self, painter: QPainter, rect: QRectF) -> None:
+        painter.setPen(Qt.NoPen)
+        for index in range(10):
+            x = rect.left() + 10 + ((index * 23 + self._phase * 0.7) % max(1, int(rect.width() - 20)))
+            y = rect.top() + 7 + ((index * 17 + self._phase * 0.35) % max(1, int(rect.height() - 14)))
+            twinkle = (sin((self._phase + index * 31) / 18) + 1) / 2
+            alpha = 42 + int(twinkle * 82)
+            radius = 0.9 + (index % 3) * 0.28
+            painter.setBrush(QColor(186, 230, 253, alpha))
+            painter.drawEllipse(QPointF(float(x), float(y)), radius, radius)
+            if index % 4 == 0:
+                painter.setPen(QPen(QColor(167, 243, 208, alpha), 0.8))
+                painter.drawLine(QPointF(float(x - 3), float(y)), QPointF(float(x + 3), float(y)))
+                painter.drawLine(QPointF(float(x), float(y - 3)), QPointF(float(x), float(y + 3)))
+                painter.setPen(Qt.NoPen)
+
+
 class TitleBar(QFrame):
     def __init__(self, window: "MainWindow") -> None:
         super().__init__(window)
@@ -74,24 +136,31 @@ class TitleBar(QFrame):
         self._drag_start: QPoint | None = None
         self.setObjectName("titleBar")
         self.setCursor(Qt.OpenHandCursor)
-        self.setMinimumHeight(46)
+        self.setMinimumHeight(58)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setStyleSheet(
             "QFrame#titleBar {"
             "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
             " stop:0 #10263A,"
             " stop:0.48 #132F3C,"
             " stop:1 #142A33);"
-            "border: 1px solid #2C5365;"
+            "border: none;"
+            "border-radius: 10px;"
+            "}"
+            "QFrame#titleActionDock {"
+            "background: rgba(7, 13, 23, 118);"
+            "border: none;"
             "border-radius: 10px;"
             "}"
         )
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 6, 8, 6)
+        layout.setContentsMargins(12, 7, 8, 7)
         layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignVCenter)
         title = QLabel(APP_DISPLAY_NAME)
         title.setObjectName("windowTitleLabel")
-        title.setStyleSheet("font-size: 18px; font-weight: 700;")
+        title.setStyleSheet("font-size: 21px; font-weight: 900;")
         layout.addWidget(title)
         drag_hint = QLabel("拖动")
         drag_hint.setStyleSheet(f"color: {THEME_COLORS['accent_secondary']}; font-weight: 700;")
@@ -103,21 +172,34 @@ class TitleBar(QFrame):
         )
         layout.addWidget(window.passthrough_hint_label)
         layout.addStretch(1)
-        layout.addWidget(window.clock_label)
+        action_dock = QFrame()
+        action_dock.setObjectName("titleActionDock")
+        action_dock.setFixedHeight(46)
+        action_layout = QHBoxLayout(action_dock)
+        action_layout.setContentsMargins(7, 4, 7, 4)
+        action_layout.setSpacing(8)
+        action_layout.setAlignment(Qt.AlignVCenter)
+        action_layout.addWidget(window.clock_label, 0, Qt.AlignVCenter)
         window.settings_button.setText("设置")
         window.settings_button.setToolTip("打开设置")
         window.settings_button.setCursor(Qt.PointingHandCursor)
-        layout.addWidget(window.settings_button)
+        window.settings_button.setFixedHeight(38)
+        window.settings_button.setMinimumWidth(62)
+        action_layout.addWidget(window.settings_button, 0, Qt.AlignVCenter)
         window.minimize_button = QPushButton("–")
         window.minimize_button.setToolTip("最小化")
         window.minimize_button.setCursor(Qt.PointingHandCursor)
+        window.minimize_button.setFixedSize(42, 38)
         window.minimize_button.clicked.connect(window.showMinimized)
-        layout.addWidget(window.minimize_button)
+        action_layout.addWidget(window.minimize_button, 0, Qt.AlignVCenter)
         window.close_button = QPushButton("×")
         window.close_button.setToolTip("关闭")
         window.close_button.setCursor(Qt.PointingHandCursor)
+        window.close_button.setFixedSize(42, 38)
         window.close_button.clicked.connect(window.close)
-        layout.addWidget(window.close_button)
+        action_layout.addWidget(window.close_button, 0, Qt.AlignVCenter)
+        window.title_action_dock = action_dock
+        layout.addWidget(action_dock, 0, Qt.AlignRight | Qt.AlignVCenter)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -294,7 +376,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(430, 420)
         self.apply_saved_geometry()
 
-        self.clock_label = QLabel()
+        self.clock_label = ClockDisplay()
         self.today_completion_label = QLabel("0%")
         self.active_count_label = QLabel("0")
         self.focus_title_label = QLabel("没有进行中的任务")

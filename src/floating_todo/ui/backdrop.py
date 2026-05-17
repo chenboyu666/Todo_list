@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from math import sin
+from math import cos, pi, sin
 
-from PySide6.QtCore import QPoint, QPointF, QTimer, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QMovie, QPainter, QPen, QPixmap
+from PySide6.QtCore import QPoint, QPointF, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QMovie, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
 from floating_todo.app_resources import resolve_resource_path
@@ -77,11 +77,27 @@ class AnimatedBackdrop(QWidget):
             base.setColorAt(1, QColor("#0B1117"))
             painter.fillRect(rect, base)
 
+        self._draw_nebula(painter, rect.width(), rect.height())
+        self._draw_starfield(painter, rect.width(), rect.height())
         self._draw_grid(painter, rect.width(), rect.height())
         self._draw_particles(painter, rect.width(), rect.height())
         self._draw_click_pulses(painter)
+        self._draw_meteors(painter, rect.width(), rect.height())
         self._draw_scan(painter, rect.width(), rect.height())
         painter.end()
+
+    def _draw_nebula(self, painter: QPainter, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+        cx = width * (0.28 + 0.08 * sin(self._phase / 170))
+        cy = height * (0.26 + 0.06 * cos(self._phase / 150))
+        gradient = QRadialGradient(QPointF(cx, cy), max(width, height) * 0.58)
+        gradient.setColorAt(0, QColor(125, 211, 252, 44))
+        gradient.setColorAt(0.38, QColor(52, 211, 153, 18))
+        gradient.setColorAt(1, QColor(8, 10, 15, 0))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(QRectF(-width * 0.18, -height * 0.12, width * 0.92, height * 0.72))
 
     def _draw_grid(self, painter: QPainter, width: int, height: int) -> None:
         spacing = 28
@@ -91,6 +107,25 @@ class AnimatedBackdrop(QWidget):
             painter.drawLine(x, 0, x, height)
         for y in range(-offset, height + spacing, spacing):
             painter.drawLine(0, y, width, y)
+
+    def _draw_starfield(self, painter: QPainter, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+        painter.setPen(Qt.NoPen)
+        for index in range(64):
+            seed = index * 97 + 23
+            x = (seed * 37 + self._phase * (0.02 + (index % 5) * 0.012)) % width
+            y = (seed * 61 + self._phase * (0.012 + (index % 4) * 0.01)) % height
+            twinkle = (sin((self._phase + seed) / 19) + 1) / 2
+            alpha = 34 + int(twinkle * 84)
+            radius = 0.7 + (index % 4) * 0.28
+            painter.setBrush(QColor(219, 242, 255, alpha))
+            painter.drawEllipse(QPointF(float(x), float(y)), radius, radius)
+            if index % 11 == 0:
+                painter.setPen(QPen(QColor(125, 211, 252, alpha), 0.8))
+                painter.drawLine(QPointF(float(x - 4), float(y)), QPointF(float(x + 4), float(y)))
+                painter.drawLine(QPointF(float(x), float(y - 4)), QPointF(float(x), float(y + 4)))
+                painter.setPen(Qt.NoPen)
 
     def _draw_particles(self, painter: QPainter, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
@@ -124,6 +159,41 @@ class AnimatedBackdrop(QWidget):
             painter.drawEllipse(point, radius, radius)
             painter.setPen(QPen(mint, 1.0))
             painter.drawEllipse(point, radius * 0.62, radius * 0.62)
+            self._draw_click_starburst(painter, point, radius, progress)
+
+    def _draw_click_starburst(self, painter: QPainter, point: QPointF, radius: float, progress: float) -> None:
+        fade = max(0.0, 1 - progress)
+        for index in range(12):
+            angle = (pi * 2 / 12) * index + progress * 0.8
+            inner = radius * (0.12 + 0.08 * progress)
+            outer = radius * (0.28 + 0.18 * progress)
+            start = QPointF(point.x() + cos(angle) * inner, point.y() + sin(angle) * inner)
+            end = QPointF(point.x() + cos(angle) * outer, point.y() + sin(angle) * outer)
+            alpha = int((120 if index % 2 == 0 else 76) * fade)
+            painter.setPen(QPen(QColor(186, 230, 253, alpha), 1.15 if index % 2 == 0 else 0.85))
+            painter.drawLine(start, end)
+        painter.setBrush(QColor(246, 193, 119, int(130 * fade)))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(point, 2.0 + progress * 2.0, 2.0 + progress * 2.0)
+
+    def _draw_meteors(self, painter: QPainter, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+        for index, offset in enumerate((0, 138)):
+            cycle = 260
+            local = (self._phase + offset) % cycle
+            if local > 54:
+                continue
+            progress = local / 54
+            x = width * (0.86 - progress * 0.92)
+            y = height * (0.12 + index * 0.26 + progress * 0.26)
+            alpha = int(110 * sin(progress * pi))
+            tail = QPointF(float(x + 72), float(y - 28))
+            head = QPointF(float(x), float(y))
+            painter.setPen(QPen(QColor(186, 230, 253, alpha), 1.4))
+            painter.drawLine(tail, head)
+            painter.setPen(QPen(QColor(167, 243, 208, int(alpha * 0.7)), 0.9))
+            painter.drawLine(QPointF(tail.x() + 18, tail.y() - 7), head)
 
     def _draw_scan(self, painter: QPainter, width: int, height: int) -> None:
         if height <= 0:

@@ -6,7 +6,7 @@ import os
 
 import pytest
 from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QProgressBar, QPushButton
 
 from floating_todo.domain import Task
@@ -53,7 +53,7 @@ def make_task(title: str, task_id: str, *, status: str = "active", notes: str = 
 
 
 def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import CornerResizeGrip, MainWindow
+    from floating_todo.ui.main_window import ClockDisplay, CornerResizeGrip, MainWindow
 
     tasks = [make_task("普通任务", "task-1"), make_task("拖入进行中", "task-2")]
     window = MainWindow(MemoryStore(tasks), AppSettings(), tmp_path / "settings.json")
@@ -61,6 +61,21 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     assert window.windowFlags() & Qt.FramelessWindowHint
     assert isinstance(window.resize_grip, CornerResizeGrip)
     assert window.resize_grip.toolTip() == "拖动调整窗口大小"
+    assert isinstance(window.clock_label, ClockDisplay)
+    assert window.clock_label.objectName() == "clockLabel"
+    assert window.title_action_dock.height() == 46
+    assert window.settings_button.height() == 38
+    assert window.minimize_button.height() == 38
+    assert window.close_button.height() == 38
+    window.resize(560, 680)
+    window.show()
+    qapp.processEvents()
+    title_bar = window.title_action_dock.parentWidget()
+    assert title_bar is not None
+    assert abs(window.title_action_dock.geometry().center().y() - title_bar.rect().center().y()) <= 1
+    button_top = window.settings_button.mapTo(window.title_action_dock, QPoint(0, 0)).y()
+    button_center = button_top + window.settings_button.height() // 2
+    assert abs(button_center - window.title_action_dock.rect().center().y()) <= 1
     title_label = window.centralWidget().findChild(QLabel, "windowTitleLabel")
     assert title_label is not None
     assert title_label.parent().cursor().shape() == Qt.OpenHandCursor
@@ -639,6 +654,13 @@ def test_backdrop_click_pulse_records_and_expires(qapp: QApplication) -> None:
         backdrop._tick()
 
     assert backdrop._click_pulses == []
+
+    pixmap = QPixmap(240, 160)
+    painter = QPainter(pixmap)
+    backdrop._draw_nebula(painter, 240, 160)
+    backdrop._draw_starfield(painter, 240, 160)
+    backdrop._draw_meteors(painter, 240, 160)
+    painter.end()
 
     backdrop.stop_animation()
     backdrop.close()
