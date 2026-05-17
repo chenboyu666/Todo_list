@@ -7,7 +7,7 @@ import os
 import pytest
 from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
 from PySide6.QtGui import QMouseEvent, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QGridLayout, QLabel, QProgressBar, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QGridLayout, QLabel, QProgressBar, QPushButton
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -272,8 +272,9 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     assert window.focus_complete_button.text() == "完成"
-    assert window.focus_pause_button.text() == "暂停"
-    assert window.focus_resume_button.text() == "继续"
+    assert window.focus_pause_button.text() == "Ⅱ"
+    assert window.focus_pause_button.toolTip() == "暂停任务，暂时移出进行中和提醒"
+    assert window.focus_title_label.maximumHeight() <= 96
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_pause_button.isEnabled()
     assert not window.focus_resume_button.isEnabled()
@@ -322,7 +323,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert store.saved_tasks is not None
     assert store.saved_tasks[0].progress == 55
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
-    assert any(button.text() == "暂停" for button in window.task_rows_container.findChildren(QPushButton))
+    assert any(button.text() == "Ⅱ" for button in window.task_rows_container.findChildren(QPushButton))
     task_notes = window.task_rows_container.findChildren(QLabel, "taskNotesPreview")
     assert task_notes
     assert "备注：先确认接口" in task_notes[0].text()
@@ -484,9 +485,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
     assert window.minimumWidth() >= 980
-    assert window.minimumHeight() >= 960
+    assert window.minimumHeight() >= 900
     assert window.width() >= 1080
-    assert window.height() >= 1040
+    assert window.height() >= 900
     assert window.isSizeGripEnabled()
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.priority_p1_label.text() == "P1 1"
@@ -498,10 +499,16 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
-    assert window.priority_donut_chart.minimumHeight() >= 150
-    assert window.deadline_outcome_chart.minimumHeight() >= 150
-    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 224
-    assert window.history_scroll_area.minimumHeight() >= 250
+    assert window.stats_panel.height() >= 328
+    assert window.priority_donut_chart.minimumHeight() >= 124
+    assert window.deadline_outcome_chart.minimumHeight() >= 124
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 190
+    assert window.history_scroll_area.minimumHeight() >= 180
+    window.show()
+    qapp.processEvents()
+    for card in window.findChildren(QFrame, "historyChartCard"):
+        assert card.geometry().bottom() <= window.stats_panel.contentsRect().bottom()
+    assert window.history_scroll_area.geometry().top() > window.stats_panel.geometry().bottom()
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
     assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
