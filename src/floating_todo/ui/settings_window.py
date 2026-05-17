@@ -74,18 +74,24 @@ class SettingsWindow(QDialog):
         self._populate_resource_combo(self.background_resource, "选择内置背景")
         self.background_resource.setToolTip("右侧 ▼ 展开内置背景列表")
         self.background_path = QLineEdit(settings.background_image_path)
+        self.background_path.setParent(self)
         self.background_path.setPlaceholderText("选择背景图片")
-        browse_button = QPushButton("选择")
-        browse_button.clicked.connect(self.choose_background)
+        self.background_path.hide()
+        self.background_browse_button = QPushButton("自定义")
+        self.background_browse_button.setToolTip("选择本地背景图片或动图")
+        self.background_browse_button.clicked.connect(self.choose_background)
         self.icon_path = QLineEdit(settings.icon_path)
+        self.icon_path.setParent(self)
         self.icon_path.setPlaceholderText("选择程序图标")
+        self.icon_path.hide()
         self.icon_path_edit = self.icon_path
         self.icon_resource = QComboBox()
         self.icon_resource_combo = self.icon_resource
         self._populate_resource_combo(self.icon_resource, "选择内置图标")
         self.icon_resource.setToolTip("右侧 ▼ 展开内置图标列表")
-        icon_browse_button = QPushButton("选择")
-        icon_browse_button.clicked.connect(self.choose_icon)
+        self.icon_browse_button = QPushButton("自定义")
+        self.icon_browse_button.setToolTip("选择本地图标文件；运行中的窗口和托盘会实时预览")
+        self.icon_browse_button.clicked.connect(self.choose_icon)
 
         for checkbox in (
             self.always_on_top,
@@ -107,18 +113,16 @@ class SettingsWindow(QDialog):
         form.addRow("透明度", self.opacity)
         form.addRow("提前提醒分钟", self.lead_minutes)
         form.addRow("启用背景图片", self.background_enabled)
-        form.addRow("内置背景", self.background_resource)
 
         background_layout = QHBoxLayout()
-        background_layout.addWidget(self.background_path, 1)
-        background_layout.addWidget(browse_button)
-        form.addRow("背景图片", background_layout)
+        background_layout.addWidget(self.background_resource, 1)
+        background_layout.addWidget(self.background_browse_button)
+        form.addRow("背景", background_layout)
 
         icon_layout = QHBoxLayout()
-        icon_layout.addWidget(self.icon_path, 1)
-        icon_layout.addWidget(icon_browse_button)
-        form.addRow("内置图标", self.icon_resource)
-        form.addRow("程序图标", icon_layout)
+        icon_layout.addWidget(self.icon_resource, 1)
+        icon_layout.addWidget(self.icon_browse_button)
+        form.addRow("图标", icon_layout)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -197,6 +201,9 @@ class SettingsWindow(QDialog):
             index = combo.findData(value)
         else:
             index = 0
+        placeholder = "选择内置背景" if combo is self.background_resource else "选择内置图标"
+        custom_label = "自定义背景" if combo is self.background_resource else "自定义图标"
+        combo.setItemText(0, custom_label if value and not value.startswith(BUILTIN_RESOURCE_PREFIX) else placeholder)
         combo.blockSignals(True)
         try:
             combo.setCurrentIndex(index if index >= 0 else 0)

@@ -345,7 +345,7 @@ class HistoryWindow(QDialog):
         self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(760, 720)
+        self.setMinimumSize(820, 860)
         self.setStyleSheet(_history_window_style())
 
         root = QVBoxLayout(self)
@@ -376,6 +376,8 @@ class HistoryWindow(QDialog):
 
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
+        stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        stats_panel.setMinimumHeight(360)
         stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(12, 10, 12, 12)
         stats_layout.setSpacing(10)
@@ -608,6 +610,8 @@ class HistoryWindow(QDialog):
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
+        scroll.setMinimumHeight(172)
+        self.history_scroll_area = scroll
         root.addWidget(scroll, 1)
         self._render()
 
@@ -623,7 +627,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setMinimumHeight(198)
+        card.setFixedHeight(214)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(11, 9, 11, 10)

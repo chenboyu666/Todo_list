@@ -61,6 +61,9 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.icon_resource_combo.count() == 4
     assert dialog.icon_resource_combo.itemText(3) == "一二布布动图"
     assert dialog.icon_path_edit.text() == r"C:\Icons\todo.ico"
+    assert dialog.background_path.isHidden()
+    assert dialog.icon_path_edit.isHidden()
+    assert dialog.icon_resource_combo.itemText(0) == "自定义图标"
 
     visible_text = "\n".join(
         [widget.text() for widget in dialog.findChildren(QCheckBox)]
@@ -75,10 +78,11 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         "Windows 开机启动",
         "透明度",
         "提前提醒分钟",
-        "程序图标",
+        "背景",
+        "图标",
     ):
         assert label in visible_text
-    for removed_label in ("低干扰模式", "重复提醒间隔分钟", "背景遮罩"):
+    for removed_label in ("低干扰模式", "重复提醒间隔分钟", "背景遮罩", "内置背景", "内置图标", "程序图标"):
         assert removed_label not in visible_text
     assert "右侧 ↑ 增加" not in visible_text
     assert "↓ 减少" not in visible_text
@@ -214,6 +218,7 @@ def test_settings_window_icon_picker_accepts_icon_files(
     assert "*.svg" in captured["filter"]
     assert dialog.icon_path_edit.text() == str(icon_path)
     assert dialog.icon_resource_combo.currentIndex() == 0
+    assert dialog.icon_resource_combo.itemText(0) == "自定义图标"
 
     dialog.close()
 
@@ -235,5 +240,7 @@ def test_settings_window_builtin_resources_update_path_fields(qapp: QApplication
 
     assert dialog.background_resource_combo.currentIndex() == 0
     assert dialog.icon_resource_combo.currentIndex() == 0
+    assert dialog.background_resource_combo.itemText(0) == "自定义背景"
+    assert dialog.icon_resource_combo.itemText(0) == "自定义图标"
 
     dialog.close()
