@@ -98,6 +98,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.focus_progress.value() == 0
     assert window.focus_progress_label.text() == "0%"
     assert window.focus_pause_button.isEnabled() is False
+    assert window.focus_resume_button.isEnabled() is False
     assert window.focus_complete_button.isEnabled() is False
     assert window.focus_delete_button.isEnabled() is False
     assert window.active_count_label.text() == "0"
@@ -176,21 +177,25 @@ def test_tasks_can_be_paused_and_resumed_from_rows(qapp: QApplication, tmp_path)
 
     assert store.saved_tasks is not None
     assert store.saved_tasks[0].status == "paused"
-    assert window.settings.focus_task_id is None
+    assert window.settings.focus_task_id == "task-pause"
     assert window.active_count_label.text() == "0"
-    assert window.empty_state_label.text() == "没有进行中的任务"
-    assert "继续暂停任务" in window.empty_state_hint_label.text()
+    assert window.empty_state_widget.isHidden()
+    assert window.focus_title_label.text() == "可暂停任务"
+    assert window.focus_urgency_label.text() == "已暂停"
+    assert window.focus_pause_button.isEnabled() is False
+    assert window.focus_resume_button.isEnabled() is True
     row_text = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
     assert "可暂停任务" in row_text
     assert "已暂停" in row_text
 
-    resume_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "继续")
-    resume_button.click()
+    window.focus_resume_button.click()
     qapp.processEvents()
 
     assert store.saved_tasks[0].status == "active"
     assert window.settings.focus_task_id == "task-pause"
     assert window.focus_title_label.text() == "可暂停任务"
+    assert window.focus_pause_button.isEnabled() is True
+    assert window.focus_resume_button.isEnabled() is False
 
     window.close()
 

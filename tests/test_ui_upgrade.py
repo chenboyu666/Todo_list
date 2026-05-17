@@ -273,8 +273,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     assert window.focus_complete_button.text() == "完成"
     assert window.focus_pause_button.text() == "暂停"
+    assert window.focus_resume_button.text() == "继续"
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_pause_button.isEnabled()
+    assert not window.focus_resume_button.isEnabled()
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
     assert _countdown_display("00:00:01", True) == "00:00:01"
@@ -481,8 +483,12 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
 
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
-    assert window.minimumWidth() >= 760
-    assert window.minimumHeight() >= 860
+    assert window.minimumWidth() >= 980
+    assert window.minimumHeight() >= 960
+    assert window.width() >= 1080
+    assert window.height() >= 1040
+    assert window.isSizeGripEnabled()
+    assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.priority_p1_label.text() == "P1 1"
     assert window.priority_p2_label.text() == "P2 1"
     assert window.priority_p3_label.text() == "P3 0"
@@ -494,8 +500,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.priority_donut_chart.minimumHeight() >= 150
     assert window.deadline_outcome_chart.minimumHeight() >= 150
-    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 214
-    assert window.history_scroll_area.minimumHeight() >= 172
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 224
+    assert window.history_scroll_area.minimumHeight() >= 250
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
     assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
@@ -542,6 +548,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "任务备注：交付前确认了备注" in labels
     assert "完成体会：完成后觉得复盘有效" in labels
     assert "另一条记录" not in labels
+    previews = window.findChildren(QLabel, "historyPreview")
+    assert previews
+    assert previews[0].minimumHeight() >= 44
 
     window.next_date_button.click()
     qapp.processEvents()
