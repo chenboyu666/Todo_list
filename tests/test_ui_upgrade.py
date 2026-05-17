@@ -499,10 +499,11 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
-    assert window.stats_panel.height() >= 328
-    assert window.priority_donut_chart.minimumHeight() >= 138
-    assert window.deadline_outcome_chart.minimumHeight() >= 138
-    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 204
+    assert window.history_content_scroll.widgetResizable()
+    assert window.stats_panel.height() >= 372
+    assert window.priority_donut_chart.minimumHeight() >= 162
+    assert window.deadline_outcome_chart.minimumHeight() >= 162
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 232
     assert window.history_scroll_area.minimumHeight() >= 180
     window.show()
     qapp.processEvents()
@@ -523,7 +524,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
         )
     }
     assert len(metric_tops) == 1
-    toolbar_top = window.findChild(QFrame, "historyToolbar").geometry().top()
+    toolbar = window.findChild(QFrame, "historyToolbar")
+    toolbar_top = toolbar.mapTo(window, QPoint(0, 0)).y()
     for card in window.findChildren(QFrame, "historyChartCard"):
         assert card.geometry().bottom() <= window.stats_panel.contentsRect().bottom()
         assert card.mapTo(window, QPoint(0, card.height())).y() < toolbar_top
