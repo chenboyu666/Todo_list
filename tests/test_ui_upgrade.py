@@ -478,10 +478,20 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
 
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
+    assert window.minimumWidth() >= 760
+    assert window.minimumHeight() >= 680
     assert window.priority_p1_label.text() == "P1 1"
     assert window.priority_p2_label.text() == "P2 1"
     assert window.priority_p3_label.text() == "P3 0"
     assert window.review_metric_label.text() == "复盘 1/2"
+    assert window.on_time_metric_label.text() == "准时率 100%"
+    assert window.overdue_metric_label.text() == "超时 0/2"
+    assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
+    assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
+    assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
+    assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
+    assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
+    assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
     assert window.findChildren(QProgressBar, "historyInlineProgress")
     assert window.export_button.text() == "导出 CSV"
     assert window.export_start_date.accessibleName() == "导出起始日期"
@@ -541,6 +551,54 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "按等级 · 1-2/2 条 · 1/1 页" in window.date_page_label.text()
     assert "P1 · 1 条" in labels
     assert "P2 · 1 条" in labels
+
+    window.close()
+
+
+def test_history_analytics_tracks_overdue_and_no_deadline(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    on_time = replace(
+        make_task("准时完成", "done-on-time", status="done"),
+        deadline=base + timedelta(hours=1),
+        completed_at=base,
+        updated_at=base,
+        priority="P1",
+    )
+    overdue = replace(
+        make_task("超时完成", "done-overdue", status="done"),
+        deadline=base - timedelta(hours=1),
+        completed_at=base,
+        updated_at=base,
+        priority="P2",
+    )
+    no_deadline = replace(
+        make_task("无截止完成", "done-no-deadline", status="done"),
+        deadline=None,
+        completed_at=base - timedelta(days=1),
+        updated_at=base - timedelta(days=1),
+        priority="P3",
+    )
+    store = MemoryStore([on_time, overdue, no_deadline])
+    window = HistoryWindow([on_time, overdue, no_deadline], store)
+
+    assert window.priority_p1_label.text() == "P1 1"
+    assert window.priority_p2_label.text() == "P2 1"
+    assert window.priority_p3_label.text() == "P3 1"
+    assert window.on_time_metric_label.text() == "准时率 50%"
+    assert window.overdue_metric_label.text() == "超时 1/2"
+    assert window.deadline_outcome_chart.outcome_counts == {"on_time": 1, "overdue": 1, "no_deadline": 1}
+    assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 2]
+
+    for chart in (window.priority_donut_chart, window.completion_trend_chart, window.deadline_outcome_chart):
+        chart.resize(240, 132)
+        pixmap = QPixmap(chart.size())
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        chart.render(painter, QPoint(0, 0))
+        painter.end()
+        assert not pixmap.isNull()
 
     window.close()
 
