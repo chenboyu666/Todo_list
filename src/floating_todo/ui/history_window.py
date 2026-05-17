@@ -65,7 +65,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(124)
+        self.setMinimumHeight(138)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -128,7 +128,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(124)
+        self.setMinimumHeight(138)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -208,7 +208,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(124)
+        self.setMinimumHeight(138)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -385,33 +385,32 @@ class HistoryWindow(QDialog):
         stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(12, 8, 12, 10)
         stats_layout.setSpacing(8)
-        priority_metrics = QHBoxLayout()
-        priority_metrics.setContentsMargins(0, 0, 0, 0)
-        priority_metrics.setSpacing(8)
+        metric_strip = QHBoxLayout()
+        metric_strip.setContentsMargins(0, 0, 0, 0)
+        metric_strip.setSpacing(7)
         self.priority_p1_label = self._metric_label("P1 0", "historyPriorityMetricP1")
         self.priority_p2_label = self._metric_label("P2 0", "historyPriorityMetricP2")
         self.priority_p3_label = self._metric_label("P3 0", "historyPriorityMetricP3")
         self.priority_mix_label = self.priority_p1_label
         self.review_metric_label = self._metric_label("复盘 0/0")
-        for metric in (self.priority_p1_label, self.priority_p2_label, self.priority_p3_label, self.review_metric_label):
-            priority_metrics.addWidget(metric, 1)
-        stats_layout.addLayout(priority_metrics)
-
-        summary_metrics = QHBoxLayout()
-        summary_metrics.setContentsMargins(0, 0, 0, 0)
-        summary_metrics.setSpacing(8)
         self.on_time_metric_label = self._metric_label("准时率 --")
         self.overdue_metric_label = self._metric_label("超时 0/0", "historyOverdueMetric")
         self.average_metric_label = self._metric_label("平均进度 --")
         self.latest_metric_label = self._metric_label("最近 --")
         for metric in (
+            self.priority_p1_label,
+            self.priority_p2_label,
+            self.priority_p3_label,
+            self.review_metric_label,
             self.on_time_metric_label,
             self.overdue_metric_label,
             self.average_metric_label,
             self.latest_metric_label,
         ):
-            summary_metrics.addWidget(metric, 1)
-        stats_layout.addLayout(summary_metrics)
+            metric.setMinimumWidth(0)
+            metric.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            metric_strip.addWidget(metric, 1)
+        stats_layout.addLayout(metric_strip)
 
         analytics_range = QHBoxLayout()
         analytics_range.setContentsMargins(0, 0, 0, 0)
@@ -633,13 +632,14 @@ class HistoryWindow(QDialog):
         label.setAlignment(Qt.AlignCenter)
         label.setMinimumHeight(28)
         label.setWordWrap(False)
+        label.setToolTip(text)
         return label
 
     def _chart_card(self, title: str, subtitle: str, chart: QWidget) -> QFrame:
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(190)
+        card.setFixedHeight(204)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(11, 8, 11, 8)
@@ -1274,6 +1274,8 @@ QLabel#historyOverdueMetric {{
   border: none;
   border-radius: 8px;
   font-weight: 900;
+  font-size: 12px;
+  padding: 0 4px;
 }}
 QLabel#historyPriorityMetricP1 {{
   color: #FFE1A6;
