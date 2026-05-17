@@ -22,6 +22,10 @@
 - 个性设置：支持透明度、背景图片或动图、程序图标、置顶、开机启动、最小化到托盘等设置。
 - 鼠标穿透：置顶时可开启鼠标穿透，让点击落到后方窗口；可通过托盘菜单恢复。
 
+## 发布版下载
+
+在 [Releases](https://github.com/chenboyu666/Todo_list/releases/tag/v1.0) 页面下载 `Todo-list-V1.0-windows.exe`，双击运行即可。
+
 ## 开发环境
 
 - Windows 10/11
