@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
+from floating_todo.ui.date_controls import apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
 
@@ -82,6 +83,7 @@ class TaskDialog(QDialog):
 
         self.deadline_date_input = QDateEdit()
         self.deadline_date_input.setCalendarPopup(True)
+        apply_dark_calendar_popup(self.deadline_date_input, "taskDeadlineCalendar")
         self.deadline_date_input.setToolTip("选择截止日期")
         self.deadline_date_input.setAccessibleName("截止日期")
         self.deadline_hour_input = QComboBox()
