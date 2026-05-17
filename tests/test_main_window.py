@@ -132,29 +132,26 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
     window.close()
 
 
-def test_ctrl_wheel_scale_updates_and_persists_window_scale(qapp: QApplication, tmp_path) -> None:
+def test_manual_ui_scale_application_persists_without_wheel_shortcut(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow
 
     settings_path = tmp_path / "settings.json"
     window = MainWindow(MemoryStore([]), AppSettings(), settings_path)
-    start_width = window.width()
-    start_height = window.height()
 
     assert window.settings.ui_scale == 1.0
+    assert not hasattr(window, "_handle_ctrl_wheel_delta")
+    assert not hasattr(window, "_wheel_filter_installed")
 
-    changed = window._handle_ctrl_wheel_delta(120)
+    window.apply_ui_scale(1.05)
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert changed is True
     assert window.settings.ui_scale == 1.05
     assert saved["ui_scale"] == 1.05
-    assert window.width() > start_width
-    assert window.height() > start_height
     assert window.minimumWidth() >= 546
     assert window.title_action_dock.height() >= 48
 
-    window._handle_ctrl_wheel_delta(-120)
+    window.apply_ui_scale(1.0)
 
     assert window.settings.ui_scale == 1.0
 

@@ -5,10 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QFrame,
     QGridLayout,
@@ -68,7 +67,6 @@ MAIN_WINDOW_MINIMUM_HEIGHT = 760
 FOCUS_CARD_MINIMUM_HEIGHT = 350
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 92
 TASK_SECTION_MINIMUM_HEIGHT = 54
-UI_SCALE_STEP = 0.05
 _CURRENT_UI_SCALE = DEFAULT_UI_SCALE
 
 
@@ -419,11 +417,8 @@ class MainWindow(QMainWindow):
         self._task_drag_active = False
         self._task_drag_refresh_pending = False
         self._toast_popups: list[FloatingToast] = []
-        self._zoom_toast: FloatingToast | None = None
-        self._wheel_filter_installed = False
         self.expanded_task_ids: set[str] = set()
         self.tasks = self.store.load_tasks()
-        self._install_ctrl_wheel_filter()
 
         self.setWindowTitle(APP_DISPLAY_NAME)
         self.setWindowFlag(Qt.FramelessWindowHint, True)
@@ -1008,74 +1003,21 @@ class MainWindow(QMainWindow):
         geometry = self.settings.window_geometry
         self.setGeometry(int(geometry["x"]), int(geometry["y"]), int(geometry["width"]), int(geometry["height"]))
 
-    def _install_ctrl_wheel_filter(self) -> None:
-        app = QApplication.instance()
-        if app is None or self._wheel_filter_installed:
-            return
-        app.installEventFilter(self)
-        self._wheel_filter_installed = True
-
-    def _remove_ctrl_wheel_filter(self) -> None:
-        app = QApplication.instance()
-        if app is None or not self._wheel_filter_installed:
-            return
-        app.removeEventFilter(self)
-        self._wheel_filter_installed = False
-
-    def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.Wheel and self._is_ctrl_zoom_target(watched, event):
-            delta = event.angleDelta().y()
-            if delta:
-                self._handle_ctrl_wheel_delta(delta)
-                event.accept()
-                return True
-        return super().eventFilter(watched, event)
-
-    def _is_ctrl_zoom_target(self, watched, event) -> bool:
-        if not event.modifiers() & Qt.ControlModifier:
-            return False
-        if not isinstance(watched, QWidget):
-            return False
-        return watched is self or watched.window() is self
-
-    def _handle_ctrl_wheel_delta(self, delta: int) -> bool:
-        step_count = max(1, abs(delta) // 120)
-        direction = 1 if delta > 0 else -1
-        next_scale = _clamp_ui_scale(self.settings.ui_scale + direction * UI_SCALE_STEP * step_count)
-        if next_scale == self.settings.ui_scale:
-            self._show_zoom_feedback()
-            return False
-        self.apply_ui_scale(next_scale, resize_window=True)
-        self._show_zoom_feedback()
-        return True
-
     def apply_ui_scale(
         self,
         scale: float,
         *,
         persist: bool = True,
         refresh: bool = True,
-        resize_window: bool = False,
     ) -> None:
         scale = _clamp_ui_scale(scale)
-        previous_scale = self.settings.ui_scale
         _set_current_ui_scale(scale)
         if self.settings.ui_scale != scale:
             self.settings = replace(self.settings, ui_scale=scale)
             if persist:
                 self._save_settings()
         self.setMinimumSize(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), _scale_px(MAIN_WINDOW_MINIMUM_HEIGHT))
-        if resize_window and previous_scale > 0:
-            ratio = scale / previous_scale
-            new_width = max(self.minimumWidth(), int(round(self.width() * ratio)))
-            new_height = max(self.minimumHeight(), int(round(self.height() * ratio)))
-            screen = self.screen() or QApplication.primaryScreen()
-            if screen is not None:
-                available = screen.availableGeometry()
-                new_width = min(new_width, available.width())
-                new_height = min(new_height, available.height())
-            self.resize(new_width, new_height)
-        elif self.width() < self.minimumWidth() or self.height() < self.minimumHeight():
+        if self.width() < self.minimumWidth() or self.height() < self.minimumHeight():
             self.resize(max(self.width(), self.minimumWidth()), max(self.height(), self.minimumHeight()))
 
         if hasattr(self, "root_layout"):
@@ -1139,13 +1081,6 @@ class MainWindow(QMainWindow):
             self.refresh()
             self.updateGeometry()
 
-    def _show_zoom_feedback(self) -> None:
-        if not self.isVisible():
-            return
-        if self._zoom_toast is not None and self._zoom_toast.isVisible():
-            self._zoom_toast.close()
-        self._zoom_toast = self.show_toast("界面缩放", f"{round(self.settings.ui_scale * 100)}%", duration_ms=1500)
-
     def open_settings(self) -> None:
         previous_settings = self.settings
         dialog = SettingsWindow(self.settings, self)
@@ -1199,7 +1134,6 @@ class MainWindow(QMainWindow):
             return
         self._clock_timer.stop()
         self.close_toasts()
-        self._remove_ctrl_wheel_filter()
         self.root_widget.stop_animation()
         event.accept()
 
