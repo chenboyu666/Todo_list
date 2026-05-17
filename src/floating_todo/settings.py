@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Any
 
 
-DEFAULT_GEOMETRY = {"x": 1200, "y": 120, "width": 410, "height": 620}
+DEFAULT_GEOMETRY = {"x": 1100, "y": 120, "width": 540, "height": 620}
 
 
 @dataclass(frozen=True)

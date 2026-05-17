@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.apply_window_behavior_settings()
         self.apply_icon_settings()
-        self.setMinimumSize(430, 420)
+        self.setMinimumSize(520, 420)
         self.apply_saved_geometry()
 
         self.clock_label = ClockDisplay()

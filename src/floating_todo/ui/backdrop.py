@@ -51,8 +51,8 @@ class AnimatedBackdrop(QWidget):
         self._stop_movie()
 
     def add_click_pulse(self, point: QPoint | QPointF) -> None:
-        self._click_pulses.append((QPointF(point), 11))
-        self._click_pulses = self._click_pulses[-8:]
+        self._click_pulses.append((QPointF(point), 8))
+        self._click_pulses = self._click_pulses[-10:]
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -151,30 +151,31 @@ class AnimatedBackdrop(QWidget):
     def _draw_click_pulses(self, painter: QPainter) -> None:
         painter.setBrush(Qt.NoBrush)
         for point, life in self._click_pulses:
-            progress = 1 - (life / 11)
-            radius = 14 + progress * 98
-            cyan = QColor(125, 211, 252, int(120 * (1 - progress)))
-            mint = QColor(167, 243, 208, int(70 * (1 - progress)))
-            painter.setPen(QPen(cyan, 1.8))
+            progress = 1 - (life / 8)
+            fade = max(0.0, 1 - progress)
+            radius = 8 + progress * 34
+            cyan = QColor(125, 211, 252, int(72 * fade))
+            painter.setPen(QPen(cyan, 1.1))
             painter.drawEllipse(point, radius, radius)
-            painter.setPen(QPen(mint, 1.0))
-            painter.drawEllipse(point, radius * 0.62, radius * 0.62)
-            self._draw_click_starburst(painter, point, radius, progress)
+            self._draw_click_stars(painter, point, radius, progress)
 
-    def _draw_click_starburst(self, painter: QPainter, point: QPointF, radius: float, progress: float) -> None:
+    def _draw_click_stars(self, painter: QPainter, point: QPointF, radius: float, progress: float) -> None:
         fade = max(0.0, 1 - progress)
-        for index in range(12):
-            angle = (pi * 2 / 12) * index + progress * 0.8
-            inner = radius * (0.12 + 0.08 * progress)
-            outer = radius * (0.28 + 0.18 * progress)
-            start = QPointF(point.x() + cos(angle) * inner, point.y() + sin(angle) * inner)
-            end = QPointF(point.x() + cos(angle) * outer, point.y() + sin(angle) * outer)
-            alpha = int((120 if index % 2 == 0 else 76) * fade)
-            painter.setPen(QPen(QColor(186, 230, 253, alpha), 1.15 if index % 2 == 0 else 0.85))
-            painter.drawLine(start, end)
-        painter.setBrush(QColor(246, 193, 119, int(130 * fade)))
         painter.setPen(Qt.NoPen)
-        painter.drawEllipse(point, 2.0 + progress * 2.0, 2.0 + progress * 2.0)
+        for index in range(7):
+            angle = (pi * 2 / 7) * index + progress * 0.45
+            distance = radius * (0.22 + (index % 3) * 0.16)
+            x = point.x() + cos(angle) * distance
+            y = point.y() + sin(angle) * distance
+            alpha = int((118 if index % 2 == 0 else 76) * fade)
+            size = 1.0 + (index % 3) * 0.35
+            painter.setBrush(QColor(186, 230, 253, alpha))
+            painter.drawEllipse(QPointF(x, y), size, size)
+            if index in (1, 5):
+                painter.setPen(QPen(QColor(167, 243, 208, int(alpha * 0.75)), 0.8))
+                painter.drawLine(QPointF(x - 2.5, y), QPointF(x + 2.5, y))
+                painter.drawLine(QPointF(x, y - 2.5), QPointF(x, y + 2.5))
+                painter.setPen(Qt.NoPen)
 
     def _draw_meteors(self, painter: QPainter, width: int, height: int) -> None:
         if width <= 0 or height <= 0:

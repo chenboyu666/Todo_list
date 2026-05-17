@@ -63,6 +63,7 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     assert window.resize_grip.toolTip() == "拖动调整窗口大小"
     assert isinstance(window.clock_label, ClockDisplay)
     assert window.clock_label.objectName() == "clockLabel"
+    assert window.width() >= 540
     assert window.title_action_dock.height() == 46
     assert window.settings_button.height() == 38
     assert window.minimize_button.height() == 38
@@ -649,6 +650,7 @@ def test_backdrop_click_pulse_records_and_expires(qapp: QApplication) -> None:
     backdrop.add_click_pulse(QPoint(24, 32))
 
     assert len(backdrop._click_pulses) == 1
+    assert backdrop._click_pulses[0][1] == 8
 
     for _ in range(11):
         backdrop._tick()
