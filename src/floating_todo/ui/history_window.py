@@ -65,7 +65,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(124)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -128,7 +128,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(124)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -208,7 +208,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(124)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -346,8 +346,8 @@ class HistoryWindow(QDialog):
         self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(980, 960)
-        self.resize(1080, 1040)
+        self.setMinimumSize(980, 900)
+        self.resize(1120, 900)
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
@@ -380,10 +380,11 @@ class HistoryWindow(QDialog):
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setMinimumHeight(386)
+        stats_panel.setFixedHeight(328)
+        self.stats_panel = stats_panel
         stats_layout = QVBoxLayout(stats_panel)
-        stats_layout.setContentsMargins(12, 10, 12, 12)
-        stats_layout.setSpacing(10)
+        stats_layout.setContentsMargins(12, 8, 12, 10)
+        stats_layout.setSpacing(8)
         priority_metrics = QHBoxLayout()
         priority_metrics.setContentsMargins(0, 0, 0, 0)
         priority_metrics.setSpacing(8)
@@ -613,7 +614,7 @@ class HistoryWindow(QDialog):
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
-        scroll.setMinimumHeight(250)
+        scroll.setMinimumHeight(180)
         self.history_scroll_area = scroll
         root.addWidget(scroll, 1)
 
@@ -630,7 +631,7 @@ class HistoryWindow(QDialog):
         label = QLabel(text)
         label.setObjectName(object_name)
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumHeight(32)
+        label.setMinimumHeight(28)
         label.setWordWrap(False)
         return label
 
@@ -638,11 +639,11 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(224)
+        card.setFixedHeight(190)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(11, 9, 11, 10)
-        layout.setSpacing(4)
+        layout.setContentsMargins(11, 8, 11, 8)
+        layout.setSpacing(3)
         title_label = QLabel(title)
         title_label.setObjectName("historyChartTitle")
         subtitle_label = QLabel(subtitle)

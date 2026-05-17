@@ -508,12 +508,16 @@ class MainWindow(QMainWindow):
         self.focus_title_label.setStyleSheet(_focus_title_style())
         self.focus_title_label.setWordWrap(True)
         self.focus_title_label.setMinimumHeight(46)
+        self.focus_title_label.setMaximumHeight(96)
+        self.focus_title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.focus_title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         focus_layout.addWidget(self.focus_title_label)
         self.focus_notes_label = QLabel()
         self.focus_notes_label.setWordWrap(True)
         self.focus_notes_label.setObjectName("focusNotesLabel")
         self.focus_notes_label.setStyleSheet(_notes_style(selected=True))
+        self.focus_notes_label.setMaximumHeight(62)
+        self.focus_notes_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         focus_layout.addWidget(self.focus_notes_label)
         focus_progress_row = QHBoxLayout()
         focus_progress_row.setSpacing(10)
@@ -531,16 +535,16 @@ class MainWindow(QMainWindow):
         self.focus_edit_button.setToolTip("编辑当前进行中的任务")
         self.focus_edit_button.clicked.connect(self.edit_focus_task)
         focus_actions.addWidget(self.focus_edit_button)
-        self.focus_pause_button = QPushButton("暂停")
+        self.focus_pause_button = QPushButton("Ⅱ")
         self.focus_pause_button.setObjectName("focusPauseButton")
         self.focus_pause_button.setToolTip("暂停当前任务，暂时移出进行中和提醒")
-        self.focus_pause_button.clicked.connect(self.pause_focus_task)
+        self.focus_pause_button.setAccessibleName("暂停或继续当前任务")
+        self.focus_pause_button.setFixedSize(44, 36)
+        self.focus_pause_button.clicked.connect(self.toggle_focus_pause_task)
         focus_actions.addWidget(self.focus_pause_button)
-        self.focus_resume_button = QPushButton("继续")
-        self.focus_resume_button.setObjectName("resumeTaskButton")
-        self.focus_resume_button.setToolTip("继续暂停中的当前任务")
+        self.focus_resume_button = QPushButton()
+        self.focus_resume_button.hide()
         self.focus_resume_button.clicked.connect(self.resume_focus_task)
-        focus_actions.addWidget(self.focus_resume_button)
         self.focus_complete_button = QPushButton("完成")
         self.focus_complete_button.setObjectName("focusCompleteButton")
         self.focus_complete_button.setToolTip("完成当前进行中的任务")
@@ -670,6 +674,16 @@ class MainWindow(QMainWindow):
         if focused is None or focused.status != "paused":
             return
         self.resume_task(focused.id, make_focus=True)
+
+    def toggle_focus_pause_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None:
+            return
+        if focused.status == "paused":
+            self.resume_task(focused.id, make_focus=True)
+            return
+        if focused.status == "active":
+            self.pause_task(focused.id)
 
     def delete_focus_task(self) -> None:
         focused = self.focus_task()
@@ -1269,8 +1283,8 @@ class MainWindow(QMainWindow):
         compact_row.setSpacing(6)
         compact_row.addStretch(1)
         if is_paused:
-            resume_button = QPushButton("继续")
-            resume_button.setObjectName("resumeTaskButton")
+            resume_button = QPushButton()
+            self._configure_pause_resume_button(resume_button, paused=True)
             resume_button.setToolTip("恢复任务，并设为当前进行中")
             resume_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
             compact_row.addWidget(resume_button)
@@ -1333,15 +1347,12 @@ class MainWindow(QMainWindow):
         detail_row.setSpacing(6)
         detail_row.addWidget(QLabel(f"工作量 {row['effort_label']}"))
         detail_row.addStretch(1)
+        pause_button = QPushButton()
+        self._configure_pause_resume_button(pause_button, paused=is_paused)
         if is_paused:
-            pause_button = QPushButton("继续")
-            pause_button.setObjectName("resumeTaskButton")
             pause_button.setToolTip("恢复任务，并设为当前进行中")
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
         else:
-            pause_button = QPushButton("暂停")
-            pause_button.setObjectName("pauseTaskButton")
-            pause_button.setToolTip("暂停任务，暂时移出进行中和提醒")
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.pause_task(task_id))
         detail_row.addWidget(pause_button)
         edit_button = QPushButton("编辑")
@@ -1387,12 +1398,29 @@ class MainWindow(QMainWindow):
     def _set_focus_action_state(self, status: str | None) -> None:
         has_task = status in {"active", "paused"}
         self.focus_edit_button.setEnabled(has_task)
-        self.focus_pause_button.setEnabled(status == "active")
+        self._configure_pause_resume_button(self.focus_pause_button, paused=status == "paused", focus=True)
+        self.focus_pause_button.setEnabled(has_task)
         self.focus_resume_button.setEnabled(status == "paused")
         self.focus_complete_button.setEnabled(has_task)
         self.focus_delete_button.setEnabled(has_task)
         self.focus_progress.setEnabled(has_task)
         self.focus_progress_label.setEnabled(has_task)
+
+    def _configure_pause_resume_button(self, button: QPushButton, *, paused: bool, focus: bool = False) -> None:
+        if paused:
+            button.setText("▶")
+            button.setObjectName("resumeTaskButton")
+            button.setToolTip("继续暂停中的当前任务")
+            button.setAccessibleName("继续任务")
+        else:
+            button.setText("Ⅱ")
+            button.setObjectName("focusPauseButton" if focus else "pauseTaskButton")
+            button.setToolTip("暂停任务，暂时移出进行中和提醒")
+            button.setAccessibleName("暂停任务")
+        button.setCursor(Qt.PointingHandCursor)
+        button.setFixedSize(44, 36)
+        button.style().unpolish(button)
+        button.style().polish(button)
 
     def _set_focus_notes(self, notes: str) -> None:
         preview = _note_preview(notes, limit=92)

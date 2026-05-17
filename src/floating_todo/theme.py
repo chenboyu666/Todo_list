@@ -102,6 +102,8 @@ QPushButton#focusPauseButton, QPushButton#pauseTaskButton {{
   background: #2D2414;
   color: #FFE2A8;
   font-weight: 800;
+  font-size: 17px;
+  padding: 0 10px;
 }}
 QPushButton#focusPauseButton:hover, QPushButton#pauseTaskButton:hover {{
   background: #4A3218;
@@ -112,6 +114,8 @@ QPushButton#resumeTaskButton {{
     stop:1 #115E59);
   color: #ECFEFF;
   font-weight: 800;
+  font-size: 17px;
+  padding: 0 10px;
 }}
 QPushButton#resumeTaskButton:hover {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
