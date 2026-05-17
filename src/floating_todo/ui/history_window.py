@@ -417,10 +417,14 @@ class HistoryWindow(QDialog):
         analytics_range.setSpacing(8)
         analytics_title = QLabel("统计区间")
         analytics_title.setObjectName("historyAnalyticsTitle")
+        analytics_title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        analytics_title.setFixedHeight(38)
         analytics_range.addWidget(analytics_title)
         self.analytics_count_label = QLabel("0 条")
         self.analytics_count_label.setObjectName("historyAnalyticsCount")
         self.analytics_count_label.setAlignment(Qt.AlignCenter)
+        self.analytics_count_label.setFixedHeight(38)
+        self.analytics_count_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         analytics_range.addWidget(self.analytics_count_label)
         analytics_range.addStretch(1)
         self.analytics_all_button = self._range_preset_button(
@@ -449,10 +453,12 @@ class HistoryWindow(QDialog):
             "选择统计图表的起始完成日期",
             "统计起始日期",
         )
-        analytics_range.addWidget(_date_chip("起始", self.analytics_start_date), 1)
+        self.analytics_start_date_chip = _date_chip("起始", self.analytics_start_date)
+        analytics_range.addWidget(self.analytics_start_date_chip, 1)
         analytics_to_label = QLabel("→")
         analytics_to_label.setObjectName("historyAnalyticsArrow")
         analytics_to_label.setAlignment(Qt.AlignCenter)
+        analytics_to_label.setFixedHeight(38)
         analytics_range.addWidget(analytics_to_label)
         self.analytics_end_date = self._date_edit(
             "historyAnalyticsEndDate",
@@ -460,7 +466,8 @@ class HistoryWindow(QDialog):
             "选择统计图表的结束完成日期",
             "统计结束日期",
         )
-        analytics_range.addWidget(_date_chip("结束", self.analytics_end_date), 1)
+        self.analytics_end_date_chip = _date_chip("结束", self.analytics_end_date)
+        analytics_range.addWidget(self.analytics_end_date_chip, 1)
         stats_layout.addLayout(analytics_range)
 
         chart_grid = QGridLayout()
@@ -630,7 +637,7 @@ class HistoryWindow(QDialog):
         label = QLabel(text)
         label.setObjectName(object_name)
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumHeight(28)
+        label.setFixedHeight(28)
         label.setWordWrap(False)
         label.setToolTip(text)
         return label
@@ -662,6 +669,8 @@ class HistoryWindow(QDialog):
         edit.setDisplayFormat("yyyy-MM-dd")
         edit.setToolTip(tooltip)
         edit.setAccessibleName(accessible_name)
+        edit.setFixedHeight(34)
+        edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return edit
 
     def _range_preset_button(self, text: str, tooltip: str, object_name: str) -> QPushButton:
@@ -669,6 +678,7 @@ class HistoryWindow(QDialog):
         button.setObjectName(object_name)
         button.setToolTip(tooltip)
         button.setCursor(Qt.PointingHandCursor)
+        button.setFixedHeight(34)
         return button
 
     def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
@@ -1175,12 +1185,17 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
 def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     chip = QFrame()
     chip.setObjectName("historyExportDateChip")
+    chip.setFixedHeight(46)
+    chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     layout = QHBoxLayout(chip)
-    layout.setContentsMargins(9, 6, 7, 6)
+    layout.setContentsMargins(8, 5, 7, 5)
     layout.setSpacing(7)
     label = QLabel(label_text)
     label.setObjectName("historyExportDateLabel")
     label.setAlignment(Qt.AlignCenter)
+    label.setFixedHeight(30)
+    date_edit.setFixedHeight(34)
+    date_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     layout.addWidget(label)
     layout.addWidget(date_edit, 1)
     return chip
