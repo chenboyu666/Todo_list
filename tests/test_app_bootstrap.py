@@ -3,6 +3,7 @@ from pathlib import Path
 from floating_todo.settings import settings_to_dict
 from floating_todo.app import app_data_dir, ensure_data_files
 from floating_todo.theme import (
+    APP_FONT_FAMILY,
     CALM_TECH_QSS,
     THEME_COLORS,
     THEME_FONT,
@@ -27,6 +28,8 @@ def test_theme_exposes_reusable_tokens_used_by_qss():
     assert THEME_COLORS["accent"] == "#7DD3FC"
     assert THEME_RADIUS["control"] == "8px"
     assert THEME_SPACING["control_padding"] == "5px 12px"
+    assert APP_FONT_FAMILY == "Alibaba PuHuiTi 3.0"
+    assert APP_FONT_FAMILY in THEME_FONT["family"]
     assert "Segoe UI Variable" in THEME_FONT["family"]
     assert "Microsoft YaHei UI" in THEME_FONT["family"]
 
@@ -206,5 +209,5 @@ def test_package_data_includes_app_icon_svg():
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
 
     assert "[tool.setuptools.package-data]" in pyproject
-    for asset_pattern in ("assets/app_icon.svg", "assets/ui/*.svg", "assets/resources/*"):
+    for asset_pattern in ("assets/app_icon.svg", "assets/ui/*.svg", "assets/resources/*", "assets/fonts/*.ttf"):
         assert f'"{asset_pattern}"' in pyproject

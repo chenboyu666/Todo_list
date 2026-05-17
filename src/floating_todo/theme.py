@@ -33,8 +33,10 @@ THEME_SPACING = {
     "field_padding": "5px 10px",
 }
 
+APP_FONT_FAMILY = "Alibaba PuHuiTi 3.0"
+
 THEME_FONT = {
-    "family": '"Segoe UI Variable", "HarmonyOS Sans SC", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI"',
+    "family": f'"{APP_FONT_FAMILY}", "Alibaba PuHuiTi", "Segoe UI Variable", "HarmonyOS Sans SC", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI"',
     "size": "13px",
 }
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from floating_todo.app_fonts import install_app_fonts
 from floating_todo.app_identity import APP_DISPLAY_NAME, resolved_icon_path
 from floating_todo.notifications import NotificationSender
 from floating_todo.settings import settings_from_dict
@@ -38,6 +39,7 @@ def app_icon_path() -> Path:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_DISPLAY_NAME)
+    install_app_fonts(app)
     app.setStyleSheet(CALM_TECH_QSS)
     install_global_interaction_effects(app)
     data_dir = ensure_data_files()
