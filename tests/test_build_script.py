@@ -4,9 +4,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCRIPT = PROJECT_ROOT / "scripts" / "build.ps1"
 README = PROJECT_ROOT / "README.md"
+GITIGNORE = PROJECT_ROOT / ".gitignore"
 
 
-def test_build_script_uses_repeatable_pyinstaller_onedir_contract():
+def test_build_script_uses_repeatable_pyinstaller_onefile_contract():
     script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
     assert '$ErrorActionPreference = "Stop"' in script
@@ -14,7 +15,8 @@ def test_build_script_uses_repeatable_pyinstaller_onedir_contract():
     assert '.venv\\Scripts\\python.exe" -m pip install --upgrade pip' in script
     assert '.venv\\Scripts\\python.exe" -m pip install -r "requirements.txt"' in script
     assert '"--noconfirm"' in script
-    assert '"--onedir"' in script
+    assert '"--onefile"' in script
+    assert '"--onedir"' not in script
     assert '"--windowed"' in script
     assert '"--name"' in script
     assert '"Todo list"' in script
@@ -28,8 +30,8 @@ def test_build_script_uses_repeatable_pyinstaller_onedir_contract():
     assert '"--exclude-module"' in script
     assert '"PySide6.QtWebEngineWidgets"' in script
     assert '"src/floating_todo/__main__.py"' in script
-    assert "dist/Todo list/data" in script
-    assert "Build complete: dist/Todo list/Todo list.exe" in script
+    assert "dist/data" in script
+    assert "Build complete: dist/Todo list.exe" in script
 
 
 def test_build_script_safely_cleans_only_project_directories():
@@ -49,8 +51,9 @@ def test_readme_documents_current_build_flow():
     readme = README.read_text(encoding="utf-8")
 
     assert "```powershell\npowershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\build.ps1\n```" in readme
-    assert "dist\\Todo list\\Todo list.exe" in readme
+    assert "dist\\Todo list.exe" in readme
     assert "release\\V1.0\\Todo-list-V1.0-windows.zip" in readme
+    assert "压缩包内只包含可运行的 `Todo list.exe`，不会包含快捷方式。" in readme
     assert "data\\" in readme
     assert "scaffold stage" not in readme
     assert "later packaging task" not in readme
@@ -65,3 +68,9 @@ def test_readme_installs_project_before_local_run_command():
     launch_command = run_section.index("python -m floating_todo")
 
     assert editable_install < launch_command
+
+
+def test_shortcuts_are_ignored_for_release_artifacts():
+    gitignore = GITIGNORE.read_text(encoding="utf-8")
+
+    assert "*.lnk" in gitignore
