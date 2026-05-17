@@ -65,7 +65,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(138)
+        self.setMinimumHeight(162)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -79,7 +79,7 @@ class PriorityDonutChart(QWidget):
         if rect.isEmpty():
             return
         total = sum(self.priority_counts.values())
-        diameter = min(88.0, rect.height() - 8, rect.width() * 0.46)
+        diameter = min(86.0, rect.height() - 16, rect.width() * 0.42)
         chart_rect = QRectF(rect.left() + 4, rect.center().y() - diameter / 2, diameter, diameter)
         center = chart_rect.center()
         ring_width = max(13.0, diameter * 0.18)
@@ -108,11 +108,11 @@ class PriorityDonutChart(QWidget):
         painter.drawText(chart_rect, Qt.AlignCenter, str(total))
 
         legend_x = chart_rect.right() + 18
-        legend_y = rect.top() + 18
-        font.setPointSize(9)
+        legend_y = rect.top() + 16
+        font.setPointSize(8)
         painter.setFont(font)
         for index, priority in enumerate(("P1", "P2", "P3")):
-            y = legend_y + index * 28
+            y = legend_y + index * 25
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(PRIORITY_CHART_COLORS[priority]))
             painter.drawRoundedRect(QRectF(legend_x, y + 4, 22, 8), 4, 4)
@@ -128,7 +128,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(138)
+        self.setMinimumHeight(162)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -208,7 +208,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(138)
+        self.setMinimumHeight(162)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -231,16 +231,16 @@ class DeadlineOutcomeChart(QWidget):
 
         font = painter.font()
         font.setBold(True)
-        font.setPointSize(20)
+        font.setPointSize(18)
         painter.setFont(font)
         painter.setPen(QColor("#ECFEFF"))
-        painter.drawText(QRectF(rect.left(), rect.top(), 78, 34), Qt.AlignLeft | Qt.AlignVCenter, f"{rate}%")
+        painter.drawText(QRectF(rect.left(), rect.top(), 78, 30), Qt.AlignLeft | Qt.AlignVCenter, f"{rate}%")
         font.setPointSize(8)
         painter.setFont(font)
         painter.setPen(QColor("#9EB5C8"))
-        painter.drawText(QRectF(rect.left() + 80, rect.top() + 9, rect.width() - 80, 20), Qt.AlignLeft, "准时率")
+        painter.drawText(QRectF(rect.left() + 80, rect.top() + 7, rect.width() - 80, 20), Qt.AlignLeft, "准时率")
 
-        bar_rect = QRectF(rect.left(), rect.top() + 48, rect.width(), 14)
+        bar_rect = QRectF(rect.left(), rect.top() + 44, rect.width(), 14)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor("#111D2C"))
         painter.drawRoundedRect(bar_rect, 7, 7)
@@ -265,7 +265,7 @@ class DeadlineOutcomeChart(QWidget):
             ("超时", self.outcome_counts["overdue"], "#FCA5A5"),
             ("无截止", self.outcome_counts["no_deadline"], "#9AA4B8"),
         )
-        legend_top = bar_rect.bottom() + 14
+        legend_top = bar_rect.bottom() + 11
         for index, (label, value, color) in enumerate(legend):
             x = rect.left() + index * rect.width() / 3
             painter.setBrush(QColor(color))
@@ -377,10 +377,28 @@ class HistoryWindow(QDialog):
         header_layout.addWidget(self.count_label)
         root.addWidget(header_panel)
 
+        content_scroll = QScrollArea()
+        content_scroll.setObjectName("historyContentScroll")
+        content_scroll.setWidgetResizable(True)
+        content_scroll.setFrameShape(QFrame.NoFrame)
+        content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content_scroll.setStyleSheet("QScrollArea#historyContentScroll { background: transparent; border: none; }")
+        content_scroll.viewport().setAutoFillBackground(False)
+        content_scroll.viewport().setStyleSheet("background: transparent;")
+        self.history_content_scroll = content_scroll
+        self.history_content = QWidget()
+        self.history_content.setStyleSheet("background: transparent;")
+        content_layout = QVBoxLayout(self.history_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
+        self.history_content_layout = content_layout
+        content_scroll.setWidget(self.history_content)
+        root.addWidget(content_scroll, 1)
+
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setFixedHeight(328)
+        stats_panel.setFixedHeight(372)
         self.stats_panel = stats_panel
         stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(12, 8, 12, 10)
@@ -484,7 +502,7 @@ class HistoryWindow(QDialog):
         chart_grid.setColumnStretch(1, 1)
         chart_grid.setColumnStretch(2, 1)
         stats_layout.addLayout(chart_grid)
-        root.addWidget(stats_panel)
+        content_layout.addWidget(stats_panel)
 
         toolbar_panel = QFrame()
         toolbar_panel.setObjectName("historyToolbar")
@@ -574,7 +592,7 @@ class HistoryWindow(QDialog):
         export_panel_layout.addLayout(export_row)
         toolbar_layout.addLayout(search_row)
         toolbar_layout.addWidget(export_panel)
-        root.addWidget(toolbar_panel)
+        content_layout.addWidget(toolbar_panel)
         self._configure_analytics_date_range()
         self._configure_export_date_range()
         self.analytics_start_date.dateChanged.connect(self._render)
@@ -605,7 +623,7 @@ class HistoryWindow(QDialog):
         self.next_date_button.setObjectName("historyPageButton")
         self.next_date_button.clicked.connect(lambda checked=False: self._move_date_page(1))
         date_pager_layout.addWidget(self.next_date_button)
-        root.addWidget(self.date_pager_widget)
+        content_layout.addWidget(self.date_pager_widget)
 
         self.container = QWidget()
         self.container.setStyleSheet("background: transparent;")
@@ -622,7 +640,7 @@ class HistoryWindow(QDialog):
         scroll.setWidget(self.container)
         scroll.setMinimumHeight(180)
         self.history_scroll_area = scroll
-        root.addWidget(scroll, 1)
+        content_layout.addWidget(scroll, 1)
 
         resize_row = QHBoxLayout()
         resize_row.setContentsMargins(0, 0, 0, 0)
@@ -646,7 +664,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(204)
+        card.setFixedHeight(232)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(11, 8, 11, 8)
