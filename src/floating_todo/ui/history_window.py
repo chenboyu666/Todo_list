@@ -209,11 +209,6 @@ class HistoryWindow(QDialog):
         self.page_size_input.setToolTip("右侧 ↑ 增加每页条数，↓ 减少每页条数")
         self.page_size_input.valueChanged.connect(self._reset_page)
         search_row.addWidget(self.page_size_input)
-        self.page_size_step_hint = QLabel("↑ 多 / ↓ 少")
-        self.page_size_step_hint.setObjectName("historyStepHint")
-        self.page_size_step_hint.setAlignment(Qt.AlignCenter)
-        self.page_size_step_hint.setToolTip("说明每页条数右侧灰色箭头的含义")
-        search_row.addWidget(self.page_size_step_hint)
 
         export_row = QHBoxLayout()
         export_row.setContentsMargins(0, 0, 0, 0)
@@ -805,17 +800,6 @@ QLabel#historyPageLabel {{
   border: none;
   border-radius: 8px;
   padding: 7px 12px;
-  font-weight: 900;
-}}
-QLabel#historyStepHint {{
-  color: #BAE6FD;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #102033,
-    stop:1 #103A3D);
-  border: none;
-  border-radius: 8px;
-  padding: 7px 9px;
-  font-size: 12px;
   font-weight: 900;
 }}
 QPushButton#historyPageButton, QPushButton#historyNoteButton, QPushButton#historyExportButton {{

@@ -600,8 +600,9 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
 
     labels = rendered_history_text()
     assert window.page_size_input.value() == 5
-    assert "↑ 多" in window.page_size_step_hint.text()
-    assert "↓ 少" in window.page_size_step_hint.text()
+    assert not hasattr(window, "page_size_step_hint")
+    assert "↑ 增加" in window.page_size_input.toolTip()
+    assert "↓ 减少" in window.page_size_input.toolTip()
     assert window.date_selector.currentData() == "2026-05-12"
     assert "1-5/6 条 · 1/2 页" in window.date_page_label.text()
     assert "完成记录 0" in labels
