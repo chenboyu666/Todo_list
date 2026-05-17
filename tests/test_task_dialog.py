@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from PySide6.QtCore import QDate, QDateTime, QTimeZone
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 
@@ -84,17 +84,24 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.effort_spin.maximum() == 1440
     assert dialog.effort_spin.singleStep() == 15
     assert dialog.effort_spin.value() == 60
-    assert "每次 15 分钟" in dialog.effort_hint_label.text()
-    assert "↑ 增加 15 分钟" in dialog.effort_step_hint_label.text()
-    assert "↓ 减少 15 分钟" in dialog.effort_step_hint_label.text()
+    assert not hasattr(dialog, "effort_hint_label")
+    assert not hasattr(dialog, "effort_step_hint_label")
     assert "增减 15 分钟" in dialog.effort_spin.toolTip()
     assert dialog.progress_spin.minimum() == 0
     assert dialog.progress_spin.maximum() == 100
-    assert "每次增减 1%" in dialog.progress_hint_label.text()
-    assert "↑ +1%" in dialog.progress_step_hint_label.text()
-    assert "↓ -1%" in dialog.progress_step_hint_label.text()
+    assert not hasattr(dialog, "progress_hint_label")
+    assert not hasattr(dialog, "progress_step_hint_label")
     assert dialog.deadline_edit.calendarPopup()
-    assert "日期、小时和分钟" in dialog.deadline_hint_label.text()
+    assert not hasattr(dialog, "priority_hint_label")
+    assert not hasattr(dialog, "deadline_hint_label")
+    visible_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+    assert "P1 最优先" not in visible_text
+    assert "每次 15 分钟" not in visible_text
+    assert "日期、小时和分钟" not in visible_text
+    assert "键盘" not in visible_text
+    assert "日期" in visible_text
+    assert "小时" in visible_text
+    assert "分钟" in visible_text
     assert dialog.deadline_date_input.accessibleName() == "截止日期"
     assert dialog.deadline_hour_input.accessibleName() == "截止小时"
     assert dialog.deadline_minute_input.accessibleName() == "截止分钟"

@@ -144,16 +144,10 @@ class TaskDialog(QDialog):
         form.setSpacing(12)
         form.addRow("任务名称", self.title_input)
         form.addRow("优先级", self.priority_input)
-        self.priority_hint_label = _hint_label("P1 最优先，P2 普通，P3 较低；只影响排序和优先级颜色。")
-        form.addRow("", self.priority_hint_label)
         effort_layout = QHBoxLayout()
         effort_layout.setSpacing(8)
         effort_layout.addWidget(self.effort_input, 1)
-        self.effort_step_hint_label = _step_hint_label("↑ 增加 15 分钟  ↓ 减少 15 分钟")
-        effort_layout.addWidget(self.effort_step_hint_label)
         form.addRow("预计工作量", effort_layout)
-        self.effort_hint_label = _hint_label("右侧 ↑ 增加、↓ 减少；每次 15 分钟。修改后会同步推算截止时间。")
-        form.addRow("", self.effort_hint_label)
 
         deadline_layout = QVBoxLayout()
         deadline_layout.setSpacing(6)
@@ -165,9 +159,7 @@ class TaskDialog(QDialog):
         deadline_fields.addWidget(self.deadline_hour_input)
         deadline_fields.addWidget(_inline_label("分钟"))
         deadline_fields.addWidget(self.deadline_minute_input)
-        self.deadline_hint_label = _hint_label("选择日期、小时和分钟；工作量变化时会自动带动这里更新。")
         deadline_layout.addLayout(deadline_fields)
-        deadline_layout.addWidget(self.deadline_hint_label)
         form.addRow("截止时间", deadline_layout)
 
         progress_layout = QHBoxLayout()
@@ -175,11 +167,7 @@ class TaskDialog(QDialog):
         progress_layout.addWidget(self.progress_slider, 1)
         self.progress_value_input.setStyleSheet(_progress_input_style())
         progress_layout.addWidget(self.progress_value_input)
-        self.progress_step_hint_label = _step_hint_label("键盘 ↑ +1%  ↓ -1%")
-        progress_layout.addWidget(self.progress_step_hint_label)
         form.addRow("手动进度", progress_layout)
-        self.progress_hint_label = _hint_label("可拖动滑条，也可以直接输入百分比；键盘 ↑ / ↓ 每次增减 1%。")
-        form.addRow("", self.progress_hint_label)
         form.addRow("备注", self.notes_input)
         layout.addWidget(panel)
 
@@ -316,20 +304,6 @@ def _progress_input_style() -> str:
     )
 
 
-def _hint_label(text: str) -> QLabel:
-    label = QLabel(text)
-    label.setWordWrap(True)
-    label.setObjectName("taskDialogHint")
-    label.setStyleSheet(
-        "color: #8FA7B8;"
-        "background: transparent;"
-        "font-size: 12px;"
-        "font-weight: 600;"
-        "padding: 0 4px;"
-    )
-    return label
-
-
 def _inline_label(text: str) -> QLabel:
     label = QLabel(text)
     label.setObjectName("taskDialogInlineLabel")
@@ -341,22 +315,5 @@ def _inline_label(text: str) -> QLabel:
         "border-radius: 8px;"
         "padding: 6px 8px;"
         "font-weight: 800;"
-    )
-    return label
-
-
-def _step_hint_label(text: str) -> QLabel:
-    label = QLabel(text)
-    label.setObjectName("stepHintLabel")
-    label.setAlignment(Qt.AlignCenter)
-    label.setToolTip("说明右侧灰色箭头控制区的增减含义")
-    label.setStyleSheet(
-        "color: #BAE6FD;"
-        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #102033, stop:1 #103A3D);"
-        "border: none;"
-        "border-radius: 8px;"
-        "font-size: 12px;"
-        "font-weight: 900;"
-        "padding: 6px 8px;"
     )
     return label

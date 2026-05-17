@@ -49,8 +49,9 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.lead_minutes_spinbox.minimum() == 1
     assert dialog.lead_minutes_spinbox.maximum() == 240
     assert dialog.lead_minutes_spinbox.value() == 45
-    assert "↑ 增加" in dialog.lead_minutes_step_hint.text()
-    assert "↓ 减少" in dialog.lead_minutes_step_hint.text()
+    assert not hasattr(dialog, "lead_minutes_step_hint")
+    assert "↑ 增加" in dialog.lead_minutes_spinbox.toolTip()
+    assert "↓ 减少" in dialog.lead_minutes_spinbox.toolTip()
     assert not hasattr(dialog, "repeat_minutes_spinbox")
     assert not hasattr(dialog, "background_overlay")
     assert "▼ 展开" in dialog.background_resource_combo.toolTip()
@@ -79,6 +80,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         assert label in visible_text
     for removed_label in ("低干扰模式", "重复提醒间隔分钟", "背景遮罩"):
         assert removed_label not in visible_text
+    assert "右侧 ↑ 增加" not in visible_text
+    assert "↓ 减少" not in visible_text
 
     dialog.close()
 
