@@ -83,9 +83,10 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
     assert window.minimumWidth() >= 520
-    assert window.minimumHeight() >= 720
+    assert window.minimumHeight() >= 760
     assert window.focus_card.minimumHeight() >= 350
     assert window.focus_deadline_panel.minimumHeight() >= 92
+    assert window.task_section_widget.minimumHeight() >= 54
     assert not window.empty_state_widget.isHidden()
     assert window.empty_state_label.text() == "没有进行中的任务"
     assert window.empty_state_hint_label.text() == "点击新增任务开始"
@@ -109,14 +110,21 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
     window = MainWindow(MemoryStore([]))
 
+    window.show()
     window.resize(520, 420)
     qapp.processEvents()
 
     assert window.width() >= window.minimumWidth()
     assert window.height() >= window.minimumHeight()
-    assert window.minimumHeight() >= 720
+    assert window.minimumHeight() >= 760
     assert window.focus_card.minimumHeight() >= 350
     assert window.focus_deadline_panel.minimumHeight() >= 92
+    assert window.task_section_widget.minimumHeight() >= 54
+    assert window.task_section_widget.geometry().top() > window.focus_card.geometry().bottom()
+    assert window.history_button.geometry().top() >= 0
+    assert window.history_button.geometry().bottom() <= window.task_section_widget.height()
+    assert window.add_button.geometry().top() >= 0
+    assert window.add_button.geometry().bottom() <= window.task_section_widget.height()
 
     window.close()
 
@@ -483,7 +491,7 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     assert window.geometry().x() == 33
     assert window.geometry().y() == 44
     assert window.geometry().width() == 520
-    assert window.geometry().height() == 720
+    assert window.geometry().height() == 760
 
     window.close()
 
@@ -547,7 +555,7 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert saved["window_geometry"] == {"x": 31, "y": 42, "width": 520, "height": 720}
+    assert saved["window_geometry"] == {"x": 31, "y": 42, "width": 520, "height": 760}
     assert dict(window.settings.window_geometry) == saved["window_geometry"]
 
     window.close()
@@ -571,7 +579,7 @@ def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     assert window.geometry().x() == locked_geometry["x"]
     assert window.geometry().y() == locked_geometry["y"]
     assert window.geometry().width() == 520
-    assert window.geometry().height() == 720
+    assert window.geometry().height() == 760
 
     window.close()
 
