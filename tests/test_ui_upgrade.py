@@ -7,7 +7,7 @@ import os
 import pytest
 from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
 from PySide6.QtGui import QMouseEvent, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QFrame, QGridLayout, QLabel, QProgressBar, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QGridLayout, QLabel, QProgressBar, QPushButton, QWidget
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -500,14 +500,29 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.stats_panel.height() >= 328
-    assert window.priority_donut_chart.minimumHeight() >= 124
-    assert window.deadline_outcome_chart.minimumHeight() >= 124
-    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 190
+    assert window.priority_donut_chart.minimumHeight() >= 138
+    assert window.deadline_outcome_chart.minimumHeight() >= 138
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 204
     assert window.history_scroll_area.minimumHeight() >= 180
     window.show()
     qapp.processEvents()
+    metric_tops = {
+        label.geometry().top()
+        for label in (
+            window.priority_p1_label,
+            window.priority_p2_label,
+            window.priority_p3_label,
+            window.review_metric_label,
+            window.on_time_metric_label,
+            window.overdue_metric_label,
+            window.average_metric_label,
+            window.latest_metric_label,
+        )
+    }
+    assert len(metric_tops) == 1
     for card in window.findChildren(QFrame, "historyChartCard"):
         assert card.geometry().bottom() <= window.stats_panel.contentsRect().bottom()
+        assert card.findChild(QWidget, "historyPriorityDonutChart") or card.findChild(QWidget, "historyCompletionTrendChart") or card.findChild(QWidget, "historyDeadlineOutcomeChart")
     assert window.history_scroll_area.geometry().top() > window.stats_panel.geometry().bottom()
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
