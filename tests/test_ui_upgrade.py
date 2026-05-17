@@ -262,12 +262,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
     assert _countdown_display("00:00:01", True) == "00:00:01"
-    assert "font-size: 28px" in _countdown_label_style("normal", pulse=True)
+    assert "font-size: 30px" in _countdown_label_style("normal", pulse=True)
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
     assert window.focus_priority_label.text() == "P1"
-    assert "font-size: 23px" in window.focus_title_label.styleSheet()
+    assert "font-size: 24px" in window.focus_title_label.styleSheet()
     assert ("focusCountdownLabel", 170) not in tick_animations
     window.show()
     qapp.processEvents()
@@ -381,7 +381,7 @@ def test_background_settings_are_applied(qapp: QApplication, tmp_path) -> None:
 
     assert window.root_widget.background_enabled is True
     assert window.root_widget.background_image_path == str(image_path)
-    assert window.root_widget.background_overlay == 0.55
+    assert window.root_widget.background_overlay == 0.68
 
     window.close()
 
@@ -467,10 +467,13 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.review_metric_label.text() == "复盘 1/2"
     assert window.findChildren(QProgressBar, "historyInlineProgress")
     assert window.export_button.text() == "导出 CSV"
+    assert window.export_start_date.accessibleName() == "导出起始日期"
+    assert window.export_end_date.accessibleName() == "导出结束日期"
 
     labels = rendered_history_text()
     assert "已复盘" in labels
-    assert "2026-05-12 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
+    assert window.date_selector.currentData() == "2026-05-12"
+    assert "1-1/1 条 · 1/1 页" in window.date_page_label.text()
     assert "完成任务" in labels
     assert "任务备注：交付前确认了备注" in labels
     assert "完成体会：完成后觉得复盘有效" in labels
@@ -480,17 +483,24 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "2026-05-11 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
-    assert "另一条记录" in labels
-    assert "完成任务" not in labels
+    assert "1-1/1 条 · 1/1 页" in window.date_page_label.text()
+    assert "完成任务" in labels
 
     window.search_input.setText("另一条")
     qapp.processEvents()
 
     assert window.count_label.text() == "1 条"
-    assert "2026-05-11 · 1-1/1 条 · 1/1 页" in window.date_page_label.text()
+    assert window.date_selector.currentData() == "2026-05-11"
+    assert "1-1/1 条 · 1/1 页" in window.date_page_label.text()
 
     window.search_input.clear()
+    window.date_selector.setCurrentIndex(window.date_selector.findData("2026-05-11"))
+    qapp.processEvents()
+
+    labels = rendered_history_text()
+    assert "另一条记录" in labels
+    assert "完成任务" not in labels
+
     window.group_mode.setCurrentText("按等级")
     qapp.processEvents()
 
@@ -510,11 +520,17 @@ def test_history_window_exports_filtered_records_as_csv(qapp: QApplication, tmp_
         make_task("完成任务", "done-1", status="done", notes="交付前确认备注"),
         reflection="下次提前拆分",
     )
-    second = replace(make_task("另一条记录", "done-2", status="done"), priority="P2")
+    second = replace(
+        make_task("另一条记录", "done-2", status="done"),
+        priority="P2",
+        completed_at=first.completed_at - timedelta(days=1),
+        updated_at=first.updated_at - timedelta(days=1),
+    )
     store = MemoryStore([first, second])
     window = HistoryWindow([first, second], store)
     window.search_input.setText("完成")
     qapp.processEvents()
+    window.export_start_date.setDate(window.export_end_date.date())
 
     export_path = tmp_path / "history.csv"
     count = window.export_history_to_path(export_path)
@@ -526,6 +542,17 @@ def test_history_window_exports_filtered_records_as_csv(qapp: QApplication, tmp_
     assert "交付前确认备注" in exported
     assert "下次提前拆分" in exported
     assert "done-2" not in exported
+
+    window.search_input.clear()
+    qapp.processEvents()
+    window.export_start_date.setDate(window.export_end_date.date())
+    ranged_path = tmp_path / "history-range.csv"
+    count = window.export_history_to_path(ranged_path)
+
+    ranged = ranged_path.read_text(encoding="utf-8-sig")
+    assert count == 1
+    assert "done-1" in ranged
+    assert "done-2" not in ranged
 
     window.close()
 
@@ -558,7 +585,8 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
     assert window.page_size_input.value() == 5
     assert "↑ 多" in window.page_size_step_hint.text()
     assert "↓ 少" in window.page_size_step_hint.text()
-    assert "2026-05-12 · 1-5/6 条 · 1/2 页" in window.date_page_label.text()
+    assert window.date_selector.currentData() == "2026-05-12"
+    assert "1-5/6 条 · 1/2 页" in window.date_page_label.text()
     assert "完成记录 0" in labels
     assert "完成记录 5" not in labels
 
@@ -566,14 +594,14 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "2026-05-12 · 6-6/6 条 · 2/2 页" in window.date_page_label.text()
+    assert "6-6/6 条 · 2/2 页" in window.date_page_label.text()
     assert "完成记录 5" in labels
     assert "完成记录 0" not in labels
 
     window.page_size_input.setValue(2)
     qapp.processEvents()
 
-    assert "2026-05-12 · 1-2/6 条 · 1/3 页" in window.date_page_label.text()
+    assert "1-2/6 条 · 1/3 页" in window.date_page_label.text()
 
     window.group_mode.setCurrentText("按等级")
     qapp.processEvents()

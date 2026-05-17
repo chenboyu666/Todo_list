@@ -42,7 +42,7 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.close_to_tray_checkbox.isChecked() is False
     assert dialog.launch_on_startup_checkbox.isChecked() is True
     assert dialog.launch_on_startup_checkbox.text() == "开启"
-    assert dialog.low_distraction_checkbox.isChecked() is True
+    assert not hasattr(dialog, "low_distraction_checkbox")
     assert dialog.opacity_slider.minimum() == 30
     assert dialog.opacity_slider.maximum() == 100
     assert dialog.opacity_slider.value() == 72
@@ -51,11 +51,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.lead_minutes_spinbox.value() == 45
     assert "↑ 增加" in dialog.lead_minutes_step_hint.text()
     assert "↓ 减少" in dialog.lead_minutes_step_hint.text()
-    assert dialog.repeat_minutes_spinbox.minimum() == 1
-    assert dialog.repeat_minutes_spinbox.maximum() == 240
-    assert dialog.repeat_minutes_spinbox.value() == 12
-    assert "↑ 增加" in dialog.repeat_minutes_step_hint.text()
-    assert "↓ 减少" in dialog.repeat_minutes_step_hint.text()
+    assert not hasattr(dialog, "repeat_minutes_spinbox")
+    assert not hasattr(dialog, "background_overlay")
     assert "▼ 展开" in dialog.background_resource_combo.toolTip()
     assert "▼ 展开" in dialog.icon_resource_combo.toolTip()
     assert dialog.background_resource_combo.count() == 4
@@ -75,13 +72,13 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         "锁定位置",
         "关闭时进入托盘",
         "Windows 开机启动",
-        "低干扰模式",
         "透明度",
         "提前提醒分钟",
-        "重复提醒间隔分钟",
         "程序图标",
     ):
         assert label in visible_text
+    for removed_label in ("低干扰模式", "重复提醒间隔分钟", "背景遮罩"):
+        assert removed_label not in visible_text
 
     dialog.close()
 
@@ -96,10 +93,8 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     dialog.lock_position_checkbox.setChecked(True)
     dialog.close_to_tray_checkbox.setChecked(False)
     dialog.launch_on_startup_checkbox.setChecked(True)
-    dialog.low_distraction_checkbox.setChecked(True)
     dialog.opacity_slider.setValue(64)
     dialog.lead_minutes_spinbox.setValue(33)
-    dialog.repeat_minutes_spinbox.setValue(9)
     dialog.icon_path_edit.setText(r"C:\Icons\new-todo.ico")
     dialog.background_resource_combo.setCurrentIndex(1)
     dialog.icon_resource_combo.setCurrentIndex(3)
@@ -112,12 +107,13 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.lock_position is True
     assert updated.close_to_tray is False
     assert updated.launch_on_startup is True
-    assert updated.low_distraction_mode is True
+    assert updated.low_distraction_mode is False
     assert updated.opacity == 0.64
     assert updated.notification_lead_minutes == 33
-    assert updated.notification_repeat_minutes == 9
+    assert updated.notification_repeat_minutes == 10
     assert updated.background_enabled is True
     assert updated.background_image_path == "builtin:study"
+    assert updated.background_overlay == 0.68
     assert updated.icon_path == "builtin:bubu-motion"
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
     assert updated.theme == "custom"
@@ -155,14 +151,13 @@ def test_settings_window_previews_opacity_and_background(qapp: QApplication, tmp
     dialog.opacity_slider.setValue(58)
     dialog.background_path.setText(str(image_path))
     dialog.background_enabled.setChecked(True)
-    dialog.background_overlay.setValue(45)
     dialog.icon_path_edit.setText(str(icon_path))
 
     assert previews
     assert previews[-1].opacity == 0.58
     assert previews[-1].background_image_path == str(image_path)
     assert previews[-1].background_enabled is True
-    assert previews[-1].background_overlay == 0.45
+    assert previews[-1].background_overlay == 0.68
     assert previews[-1].icon_path == str(icon_path)
 
     dialog.close()

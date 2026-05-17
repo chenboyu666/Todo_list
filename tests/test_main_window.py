@@ -114,6 +114,11 @@ def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication)
     assert complete_store.saved_tasks is not None
     assert complete_store.saved_tasks[0].status == "done"
     assert complete_store.saved_tasks[0].progress == 100
+    toast_text = "\n".join(
+        label.text() for popup in complete_window._toast_popups for label in popup.findChildren(QLabel)
+    )
+    assert "完成得漂亮" in toast_text
+    assert "顶部完成" in toast_text
     complete_window.close()
 
     delete_task = make_task("顶部删除", task_id="task-delete")
@@ -174,30 +179,27 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     window.close()
 
 
-def test_low_distraction_mode_hides_summary_and_task_areas_on_startup(qapp: QApplication) -> None:
+def test_deprecated_low_distraction_setting_is_ignored_on_startup(qapp: QApplication) -> None:
     from floating_todo.ui.main_window import MainWindow
 
     window = MainWindow(MemoryStore([]), AppSettings(low_distraction_mode=True))
 
-    assert window.summary_widget.isHidden()
-    assert window.task_section_widget.isHidden()
-    assert window.empty_state_widget.isHidden()
-    assert window.task_scroll_area.isHidden()
+    assert window.settings.low_distraction_mode is False
+    assert not window.summary_widget.isHidden()
+    assert not window.task_section_widget.isHidden()
+    assert not window.task_scroll_area.isHidden()
     assert not window.focus_card.isHidden()
 
     window.close()
 
 
-def test_accepting_settings_toggles_low_distraction_visibility(
+def test_accepting_settings_keeps_deprecated_low_distraction_disabled(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     import floating_todo.ui.main_window as main_window
 
     settings_path = tmp_path / "settings.json"
-    updated_settings = [
-        AppSettings(low_distraction_mode=True),
-        AppSettings(low_distraction_mode=False),
-    ]
+    updated_settings = AppSettings(low_distraction_mode=True)
 
     class AcceptedSettingsWindow:
         def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
@@ -208,7 +210,7 @@ def test_accepting_settings_toggles_low_distraction_visibility(
             return QDialog.Accepted
 
         def build_settings(self) -> AppSettings:
-            return updated_settings.pop(0)
+            return updated_settings
 
     monkeypatch.setattr(main_window, "SettingsWindow", AcceptedSettingsWindow)
     window = main_window.MainWindow(MemoryStore([make_task("Visible task")]), AppSettings(), settings_path)
@@ -219,14 +221,7 @@ def test_accepting_settings_toggles_low_distraction_visibility(
 
     window.open_settings()
 
-    assert window.summary_widget.isHidden()
-    assert window.task_section_widget.isHidden()
-    assert window.task_scroll_area.isHidden()
-    assert window.empty_state_widget.isHidden()
-    assert not window.focus_card.isHidden()
-
-    window.open_settings()
-
+    assert window.settings.low_distraction_mode is False
     assert not window.summary_widget.isHidden()
     assert not window.task_section_widget.isHidden()
     assert not window.task_scroll_area.isHidden()
@@ -749,6 +744,9 @@ def test_refresh_sends_due_reminders_once_and_persists_flags(qapp: QApplication)
     window = MainWindow(store, AppSettings(notification_lead_minutes=15), notification_sender=sender)
 
     assert sender.sent == [("任务已超时", "提醒任务")]
+    toast_text = "\n".join(label.text() for popup in window._toast_popups for label in popup.findChildren(QLabel))
+    assert "已经超时" in toast_text
+    assert "提醒任务" in toast_text
     assert store.save_count == 1
     assert store.saved_tasks is not None
     saved_task = store.saved_tasks[0]

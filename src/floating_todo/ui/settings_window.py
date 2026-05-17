@@ -21,7 +21,12 @@ from PySide6.QtWidgets import (
 
 from floating_todo.app_resources import BUILTIN_RESOURCES, BUILTIN_RESOURCE_PREFIX
 from floating_todo.app_identity import ICON_FILE_FILTER
-from floating_todo.settings import AppSettings
+from floating_todo.settings import (
+    AppSettings,
+    DEFAULT_BACKGROUND_OVERLAY,
+    DEFAULT_LOW_DISTRACTION_MODE,
+    DEFAULT_NOTIFICATION_REPEAT_MINUTES,
+)
 
 
 class SettingsWindow(QDialog):
@@ -51,9 +56,6 @@ class SettingsWindow(QDialog):
         self.launch_on_startup = QCheckBox()
         self.launch_on_startup.setChecked(settings.launch_on_startup)
         self.launch_on_startup_checkbox = self.launch_on_startup
-        self.low_distraction = QCheckBox()
-        self.low_distraction.setChecked(settings.low_distraction_mode)
-        self.low_distraction_checkbox = self.low_distraction
         self.opacity = QSlider(Qt.Horizontal)
         self.opacity.setRange(30, 100)
         self.opacity.setValue(round(settings.opacity * 100))
@@ -65,14 +67,6 @@ class SettingsWindow(QDialog):
         self.lead_minutes.setToolTip("右侧 ↑ 增加、↓ 减少；每次调整 1 分钟")
         self.lead_minutes_spin = self.lead_minutes
         self.lead_minutes_spinbox = self.lead_minutes
-        self.repeat_minutes = QSpinBox()
-        self.repeat_minutes.setRange(1, 240)
-        self.repeat_minutes.setValue(settings.notification_repeat_minutes)
-        self.repeat_minutes.setSuffix(" 分钟")
-        self.repeat_minutes.setToolTip("右侧 ↑ 增加、↓ 减少；每次调整 1 分钟")
-        self.repeat_minutes_spin = self.repeat_minutes
-        self.repeat_minutes_spinbox = self.repeat_minutes
-
         self.background_enabled = QCheckBox()
         self.background_enabled.setChecked(settings.background_enabled)
         self.background_resource = QComboBox()
@@ -83,9 +77,6 @@ class SettingsWindow(QDialog):
         self.background_path.setPlaceholderText("选择背景图片")
         browse_button = QPushButton("选择")
         browse_button.clicked.connect(self.choose_background)
-        self.background_overlay = QSlider(Qt.Horizontal)
-        self.background_overlay.setRange(25, 95)
-        self.background_overlay.setValue(round(settings.background_overlay * 100))
         self.icon_path = QLineEdit(settings.icon_path)
         self.icon_path.setPlaceholderText("选择程序图标")
         self.icon_path_edit = self.icon_path
@@ -102,7 +93,6 @@ class SettingsWindow(QDialog):
             self.lock_position,
             self.close_to_tray,
             self.launch_on_startup,
-            self.low_distraction,
             self.background_enabled,
         ):
             self._configure_toggle(checkbox)
@@ -114,12 +104,9 @@ class SettingsWindow(QDialog):
         form.addRow("锁定位置", self.lock_position)
         form.addRow("关闭时进入托盘", self.close_to_tray)
         form.addRow("Windows 开机启动", self.launch_on_startup)
-        form.addRow("低干扰模式", self.low_distraction)
         form.addRow("透明度", self.opacity)
         self.lead_minutes_step_hint = _step_hint_label("右侧 ↑ 增加 / ↓ 减少")
         form.addRow("提前提醒分钟", _with_hint(self.lead_minutes, self.lead_minutes_step_hint))
-        self.repeat_minutes_step_hint = _step_hint_label("右侧 ↑ 增加 / ↓ 减少")
-        form.addRow("重复提醒间隔分钟", _with_hint(self.repeat_minutes, self.repeat_minutes_step_hint))
         form.addRow("启用背景图片", self.background_enabled)
         form.addRow("内置背景", self.background_resource)
 
@@ -127,7 +114,6 @@ class SettingsWindow(QDialog):
         background_layout.addWidget(self.background_path, 1)
         background_layout.addWidget(browse_button)
         form.addRow("背景图片", background_layout)
-        form.addRow("背景遮罩", self.background_overlay)
 
         icon_layout = QHBoxLayout()
         icon_layout.addWidget(self.icon_path, 1)
@@ -192,7 +178,6 @@ class SettingsWindow(QDialog):
         self.background_enabled.toggled.connect(self._emit_preview)
         self.background_path.textChanged.connect(self._emit_preview)
         self.background_path.textChanged.connect(lambda text: self._sync_resource_combo(self.background_resource, text))
-        self.background_overlay.valueChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(lambda text: self._sync_resource_combo(self.icon_resource, text))
 
@@ -241,13 +226,13 @@ class SettingsWindow(QDialog):
             lock_position=self.lock_position.isChecked(),
             close_to_tray=self.close_to_tray.isChecked(),
             launch_on_startup=self.launch_on_startup.isChecked(),
-            low_distraction_mode=self.low_distraction.isChecked(),
+            low_distraction_mode=DEFAULT_LOW_DISTRACTION_MODE,
             opacity=self.opacity.value() / 100,
             notification_lead_minutes=self.lead_minutes.value(),
-            notification_repeat_minutes=self.repeat_minutes.value(),
+            notification_repeat_minutes=DEFAULT_NOTIFICATION_REPEAT_MINUTES,
             background_enabled=self.background_enabled.isChecked(),
             background_image_path=self.background_path.text().strip(),
-            background_overlay=self.background_overlay.value() / 100,
+            background_overlay=DEFAULT_BACKGROUND_OVERLAY,
             icon_path=self.icon_path.text().strip(),
         )
 
