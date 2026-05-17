@@ -83,7 +83,7 @@ def test_malformed_settings_fall_back_without_raising():
     assert settings.opacity == 0.96
     assert settings.notification_lead_minutes == 15
     assert settings.notification_repeat_minutes == 10
-    assert dict(settings.window_geometry) == {"x": 1100, "y": 30, "width": 540, "height": 760}
+    assert dict(settings.window_geometry) == {"x": 1100, "y": 30, "width": 540, "height": 780}
     assert settings_from_dict({"opacity": None}).opacity == 0.96
 
 

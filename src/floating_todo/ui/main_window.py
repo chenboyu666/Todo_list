@@ -60,9 +60,10 @@ from floating_todo.view_models import (
 
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
 MAIN_WINDOW_MINIMUM_WIDTH = 520
-MAIN_WINDOW_MINIMUM_HEIGHT = 720
+MAIN_WINDOW_MINIMUM_HEIGHT = 760
 FOCUS_CARD_MINIMUM_HEIGHT = 350
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 92
+TASK_SECTION_MINIMUM_HEIGHT = 54
 
 
 class TaskStore(Protocol):
@@ -545,8 +546,11 @@ class MainWindow(QMainWindow):
         self._sync_focus_header_layout()
 
         self.task_section_widget = QWidget()
+        self.task_section_widget.setMinimumHeight(TASK_SECTION_MINIMUM_HEIGHT)
+        self.task_section_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         actions_layout = QHBoxLayout(self.task_section_widget)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setContentsMargins(0, 6, 0, 6)
+        actions_layout.setAlignment(Qt.AlignVCenter)
         section_label = QLabel("任务")
         section_label.setStyleSheet("font-weight: 700;")
         actions_layout.addWidget(section_label)
