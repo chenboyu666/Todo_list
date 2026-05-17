@@ -12,17 +12,28 @@ class DialogTitleBar(QFrame):
         self.setStyleSheet("QFrame { background: transparent; border: none; }")
 
         layout = QHBoxLayout(self)
+        self.layout = layout
         layout.setContentsMargins(0, 0, 0, 0)
         title_label = QLabel(title)
         title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
         layout.addWidget(title_label)
         layout.addStretch(1)
         close_button = QPushButton("×")
+        self.close_button = close_button
         close_button.setFixedWidth(38)
         close_button.setCursor(Qt.PointingHandCursor)
         close_button.setToolTip("关闭")
         close_button.clicked.connect(dialog.reject)
         layout.addWidget(close_button)
+
+    def add_action_button(self, text: str, tooltip: str, callback) -> QPushButton:
+        button = QPushButton(text)
+        button.setFixedWidth(38)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setToolTip(tooltip)
+        button.clicked.connect(callback)
+        self.layout.insertWidget(max(0, self.layout.count() - 1), button)
+        return button
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
