@@ -482,7 +482,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
     assert window.minimumWidth() >= 760
-    assert window.minimumHeight() >= 680
+    assert window.minimumHeight() >= 860
     assert window.priority_p1_label.text() == "P1 1"
     assert window.priority_p2_label.text() == "P2 1"
     assert window.priority_p3_label.text() == "P3 0"
@@ -494,6 +494,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.priority_donut_chart.minimumHeight() >= 150
     assert window.deadline_outcome_chart.minimumHeight() >= 150
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 214
+    assert window.history_scroll_area.minimumHeight() >= 172
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
     assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
