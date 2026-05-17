@@ -132,6 +132,31 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
     window.close()
 
 
+def test_ctrl_wheel_scale_updates_and_persists_window_scale(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    settings_path = tmp_path / "settings.json"
+    window = MainWindow(MemoryStore([]), AppSettings(), settings_path)
+
+    assert window.settings.ui_scale == 1.0
+
+    changed = window._handle_ctrl_wheel_delta(120)
+    qapp.processEvents()
+
+    saved = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert changed is True
+    assert window.settings.ui_scale == 1.05
+    assert saved["ui_scale"] == 1.05
+    assert window.minimumWidth() >= 546
+    assert window.title_action_dock.height() >= 48
+
+    window._handle_ctrl_wheel_delta(-120)
+
+    assert window.settings.ui_scale == 1.0
+
+    window.close()
+
+
 def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication) -> None:
     from floating_todo.ui.main_window import MainWindow, completion_toast_copy
 

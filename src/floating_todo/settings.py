@@ -10,6 +10,9 @@ DEFAULT_GEOMETRY = {"x": 1100, "y": 120, "width": 540, "height": 780}
 DEFAULT_LOW_DISTRACTION_MODE = False
 DEFAULT_NOTIFICATION_REPEAT_MINUTES = 10
 DEFAULT_BACKGROUND_OVERLAY = 0.68
+DEFAULT_UI_SCALE = 1.0
+MIN_UI_SCALE = 0.85
+MAX_UI_SCALE = 1.3
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,7 @@ class AppSettings:
     background_enabled: bool = False
     background_overlay: float = DEFAULT_BACKGROUND_OVERLAY
     icon_path: str = ""
+    ui_scale: float = DEFAULT_UI_SCALE
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "window_geometry", MappingProxyType(dict(self.window_geometry)))
@@ -78,6 +82,8 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
                 geometry[key] = _coerce_int(raw_geometry[key], DEFAULT_GEOMETRY[key])
     opacity = _coerce_float(data.get("opacity", 0.96), 0.96)
     opacity = max(0.3, min(1.0, opacity))
+    ui_scale = _coerce_float(data.get("ui_scale", DEFAULT_UI_SCALE), DEFAULT_UI_SCALE)
+    ui_scale = round(max(MIN_UI_SCALE, min(MAX_UI_SCALE, ui_scale)), 2)
     raw_focus_task_id = data.get("focus_task_id")
     raw_background_path = data.get("background_image_path", "")
     raw_icon_path = data.get("icon_path", "")
@@ -98,6 +104,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         background_enabled=_coerce_bool(data.get("background_enabled", False), False),
         background_overlay=DEFAULT_BACKGROUND_OVERLAY,
         icon_path=str(raw_icon_path) if raw_icon_path else "",
+        ui_scale=ui_scale,
     )
 
 
@@ -128,4 +135,5 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "background_enabled": settings.background_enabled,
         "background_overlay": DEFAULT_BACKGROUND_OVERLAY,
         "icon_path": settings.icon_path,
+        "ui_scale": settings.ui_scale,
     }

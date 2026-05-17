@@ -344,6 +344,7 @@ class HistoryWindow(QDialog):
         self._selected_date_key: str | None = None
         self._selected_page_index = 0
         self._syncing_date_selector = False
+        self._history_column_count = 1
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setMinimumSize(980, 900)
@@ -515,7 +516,7 @@ class HistoryWindow(QDialog):
         search_row.setSpacing(8)
         self.search_input = QLineEdit()
         self.search_input.setObjectName("historySearch")
-        self.search_input.setPlaceholderText("搜索历史任务")
+        self.search_input.setPlaceholderText("按任务名称搜索")
         self.search_input.textChanged.connect(self._render)
         search_row.addWidget(self.search_input, 1)
         self.group_mode = QComboBox()
@@ -528,7 +529,7 @@ class HistoryWindow(QDialog):
         search_row.addWidget(page_size_label)
         self.page_size_input = QSpinBox()
         self.page_size_input.setRange(1, 100)
-        self.page_size_input.setValue(5)
+        self.page_size_input.setValue(8)
         self.page_size_input.setSuffix(" 条")
         self.page_size_input.setToolTip("右侧 ↑ 增加每页条数，↓ 减少每页条数")
         self.page_size_input.valueChanged.connect(self._reset_page)
@@ -627,9 +628,10 @@ class HistoryWindow(QDialog):
 
         self.container = QWidget()
         self.container.setStyleSheet("background: transparent;")
-        self.list_layout = QVBoxLayout(self.container)
+        self.list_layout = QGridLayout(self.container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
-        self.list_layout.setSpacing(8)
+        self.list_layout.setHorizontalSpacing(10)
+        self.list_layout.setVerticalSpacing(10)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -651,11 +653,19 @@ class HistoryWindow(QDialog):
         root.addLayout(resize_row)
         self._render()
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if not hasattr(self, "history_scroll_area") or not hasattr(self, "list_layout"):
+            return
+        next_columns = self._history_grid_columns()
+        if next_columns != self._history_column_count:
+            self._render()
+
     def _metric_label(self, text: str, object_name: str = "historyMetricChip") -> QLabel:
         label = QLabel(text)
         label.setObjectName(object_name)
         label.setAlignment(Qt.AlignCenter)
-        label.setFixedHeight(28)
+        label.setFixedHeight(32)
         label.setWordWrap(False)
         label.setToolTip(text)
         return label
@@ -791,6 +801,8 @@ class HistoryWindow(QDialog):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+        for row in range(self.list_layout.rowCount()):
+            self.list_layout.setRowStretch(row, 0)
         completed = self._filtered_completed_tasks()
         self.count_label.setText(f"{len(completed)} 条")
         analytics_completed = self._analytics_tasks(completed)
@@ -802,26 +814,45 @@ class HistoryWindow(QDialog):
             query = self.search_input.text().strip()
             empty = QLabel("没有匹配的完成记录" if query else "还没有完成记录")
             empty.setStyleSheet(f"color: {THEME_COLORS['border']};")
-            self.list_layout.addWidget(empty)
+            self.list_layout.addWidget(empty, 0, 0)
             animate_content_swap(self.container)
             return
+        columns = self._history_grid_columns()
+        self._history_column_count = columns
+        for column in range(3):
+            self.list_layout.setColumnStretch(column, 1 if column < columns else 0)
+        row = 0
         groups = self._group_completed_tasks(completed)
         if self.group_mode.currentText() == "按日期":
             group_title, tasks = self._selected_date_group(groups)
             self._clamp_selected_page(tasks)
             self._set_date_pager(groups, group_title)
-            self.list_layout.addWidget(self._group_header(group_title, len(tasks)))
-            for task in self._page_tasks(tasks):
-                self.list_layout.addWidget(self._history_card(task))
+            row = self._add_history_group(row, group_title, self._page_tasks(tasks), len(tasks), columns)
         else:
             self._clamp_selected_page(completed)
             self._set_level_pager(completed)
             for group_title, tasks, total_count in self._paged_group_slices(groups):
-                self.list_layout.addWidget(self._group_header(group_title, total_count))
-                for task in tasks:
-                    self.list_layout.addWidget(self._history_card(task))
-        self.list_layout.addStretch(1)
+                row = self._add_history_group(row, group_title, tasks, total_count, columns)
+        self.list_layout.setRowStretch(row, 1)
         animate_content_swap(self.container)
+
+    def _history_grid_columns(self) -> int:
+        viewport_width = self.history_scroll_area.viewport().width() if hasattr(self, "history_scroll_area") else 0
+        width = max(viewport_width, self.width() - 72)
+        if width >= 1360:
+            return 3
+        if width >= 760:
+            return 2
+        return 1
+
+    def _add_history_group(
+        self, row: int, group_title: str, tasks: list[Task], total_count: int, columns: int
+    ) -> int:
+        self.list_layout.addWidget(self._group_header(group_title, total_count), row, 0, 1, columns)
+        row += 1
+        for index, task in enumerate(tasks):
+            self.list_layout.addWidget(self._history_card(task), row + index // columns, index % columns)
+        return row + max(1, (len(tasks) + columns - 1) // columns)
 
     def _update_metrics(self, completed: list[Task]) -> None:
         total = len(completed)
@@ -863,14 +894,7 @@ class HistoryWindow(QDialog):
         query = self.search_input.text().strip().lower()
         if not query:
             return completed
-        return [
-            task
-            for task in completed
-            if query in task.title.lower()
-            or query in task.priority.lower()
-            or query in task.reflection.lower()
-            or query in task.notes.lower()
-        ]
+        return [task for task in completed if query in task.title.lower()]
 
     def _exportable_tasks(self) -> list[Task]:
         return self._tasks_in_export_date_range(self._filtered_completed_tasks())
@@ -1049,7 +1073,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setMinimumHeight(178)
+        card.setMinimumHeight(188)
         apply_soft_shadow(card, blur=28, y_offset=10, alpha=105)
         shell = QHBoxLayout(card)
         shell.setContentsMargins(0, 0, 0, 0)
@@ -1064,6 +1088,14 @@ class HistoryWindow(QDialog):
         layout.setSpacing(6)
         shell.addWidget(content, 1)
 
+        title = QLabel(task.title)
+        title.setObjectName("historyTaskTitle")
+        title.setWordWrap(True)
+        title.setMinimumHeight(42)
+        title.setMaximumHeight(58)
+        title.setToolTip(task.title)
+        layout.addWidget(title)
+
         header = QHBoxLayout()
         header.setSpacing(8)
         priority = QLabel(task.priority)
@@ -1072,10 +1104,6 @@ class HistoryWindow(QDialog):
         priority.setFixedHeight(24)
         priority.setFixedWidth(42)
         header.addWidget(priority)
-        title = QLabel(task.title)
-        title.setObjectName("historyTaskTitle")
-        title.setWordWrap(False)
-        header.addWidget(title, 1)
         progress = QLabel(f"{task.progress}%")
         progress.setObjectName("historyProgressChip")
         progress.setAlignment(Qt.AlignCenter)
@@ -1086,6 +1114,7 @@ class HistoryWindow(QDialog):
         )
         review_status.setAlignment(Qt.AlignCenter)
         header.addWidget(review_status)
+        header.addStretch(1)
         layout.addLayout(header)
 
         progress_bar = QProgressBar()
@@ -1307,8 +1336,8 @@ QLabel#historyOverdueMetric {{
   border: none;
   border-radius: 8px;
   font-weight: 900;
-  font-size: 12px;
-  padding: 0 4px;
+  font-size: 13px;
+  padding: 0 6px;
 }}
 QLabel#historyPriorityMetricP1 {{
   color: #FFE1A6;
@@ -1328,7 +1357,7 @@ QLabel#historyOverdueMetric {{
 }}
 QLabel#historyAnalyticsTitle {{
   color: #F8FBFF;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   padding: 0 2px;
 }}
@@ -1340,6 +1369,7 @@ QLabel#historyAnalyticsCount {{
   min-width: 54px;
   min-height: 28px;
   font-weight: 900;
+  font-size: 13px;
 }}
 QPushButton#historyAnalyticsPresetButton {{
   color: #BDEAFE;
@@ -1372,12 +1402,12 @@ QFrame#historyChartCard {{
 }}
 QLabel#historyChartTitle {{
   color: #F8FBFF;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
 }}
 QLabel#historyChartSubtitle {{
   color: #8EA2B7;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }}
 QFrame#historyToolbar {{
@@ -1456,6 +1486,7 @@ QDateEdit#historyAnalyticsStartDate, QDateEdit#historyAnalyticsEndDate {{
   background: #101827;
   color: #ECFEFF;
   font-weight: 700;
+  font-size: 14px;
   min-width: 112px;
 }}
 QLabel#historyPageLabel {{
@@ -1509,8 +1540,12 @@ QLabel#historyPriorityP2 {{ color: #DCE7FF; background: #1B2F69; }}
 QLabel#historyPriorityP3 {{ color: #D9FBE8; background: #123B34; }}
 QLabel#historyTaskTitle {{
   color: #F8FBFF;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 900;
+  background: #0A121E;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 8px;
 }}
 QLabel#historyProgressChip {{
   color: #ECFEFF;
@@ -1552,6 +1587,7 @@ QProgressBar#historyInlineProgress::chunk {{
 QLabel#historyCompletedAt {{
   color: #AEC2D3;
   font-weight: 700;
+  font-size: 13px;
 }}
 QLabel#historyPreview {{
   color: #C4D2E2;
