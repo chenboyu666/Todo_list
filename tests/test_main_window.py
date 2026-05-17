@@ -137,6 +137,8 @@ def test_ctrl_wheel_scale_updates_and_persists_window_scale(qapp: QApplication, 
 
     settings_path = tmp_path / "settings.json"
     window = MainWindow(MemoryStore([]), AppSettings(), settings_path)
+    start_width = window.width()
+    start_height = window.height()
 
     assert window.settings.ui_scale == 1.0
 
@@ -147,6 +149,8 @@ def test_ctrl_wheel_scale_updates_and_persists_window_scale(qapp: QApplication, 
     assert changed is True
     assert window.settings.ui_scale == 1.05
     assert saved["ui_scale"] == 1.05
+    assert window.width() > start_width
+    assert window.height() > start_height
     assert window.minimumWidth() >= 546
     assert window.title_action_dock.height() >= 48
 

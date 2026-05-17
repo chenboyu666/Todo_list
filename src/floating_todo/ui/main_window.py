@@ -552,10 +552,6 @@ class MainWindow(QMainWindow):
         self.focus_deadline_label.setMinimumWidth(_scale_px(220))
         deadline_layout.addWidget(self.focus_deadline_label)
         deadline_layout.addWidget(self.focus_countdown_label)
-        focus_top.addWidget(deadline_panel, 0, 4, 2, 1)
-        focus_top.setColumnMinimumWidth(4, _scale_px(244))
-        focus_top.setColumnStretch(4, 2)
-        focus_layout.addLayout(focus_top)
 
         self.focus_title_label.setStyleSheet(_focus_title_style())
         self.focus_title_label.setWordWrap(True)
@@ -563,7 +559,11 @@ class MainWindow(QMainWindow):
         self.focus_title_label.setMaximumHeight(_scale_px(96))
         self.focus_title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.focus_title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        focus_layout.addWidget(self.focus_title_label)
+        focus_top.addWidget(self.focus_title_label, 1, 0, 1, 4)
+        focus_top.addWidget(deadline_panel, 0, 4, 2, 1)
+        focus_top.setColumnMinimumWidth(4, _scale_px(244))
+        focus_top.setColumnStretch(4, 2)
+        focus_layout.addLayout(focus_top)
         self.focus_notes_label = QLabel()
         self.focus_notes_label.setWordWrap(True)
         self.focus_notes_label.setObjectName("focusNotesLabel")
@@ -1045,19 +1045,37 @@ class MainWindow(QMainWindow):
         if next_scale == self.settings.ui_scale:
             self._show_zoom_feedback()
             return False
-        self.apply_ui_scale(next_scale)
+        self.apply_ui_scale(next_scale, resize_window=True)
         self._show_zoom_feedback()
         return True
 
-    def apply_ui_scale(self, scale: float, *, persist: bool = True, refresh: bool = True) -> None:
+    def apply_ui_scale(
+        self,
+        scale: float,
+        *,
+        persist: bool = True,
+        refresh: bool = True,
+        resize_window: bool = False,
+    ) -> None:
         scale = _clamp_ui_scale(scale)
+        previous_scale = self.settings.ui_scale
         _set_current_ui_scale(scale)
         if self.settings.ui_scale != scale:
             self.settings = replace(self.settings, ui_scale=scale)
             if persist:
                 self._save_settings()
         self.setMinimumSize(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), _scale_px(MAIN_WINDOW_MINIMUM_HEIGHT))
-        if self.width() < self.minimumWidth() or self.height() < self.minimumHeight():
+        if resize_window and previous_scale > 0:
+            ratio = scale / previous_scale
+            new_width = max(self.minimumWidth(), int(round(self.width() * ratio)))
+            new_height = max(self.minimumHeight(), int(round(self.height() * ratio)))
+            screen = self.screen() or QApplication.primaryScreen()
+            if screen is not None:
+                available = screen.availableGeometry()
+                new_width = min(new_width, available.width())
+                new_height = min(new_height, available.height())
+            self.resize(new_width, new_height)
+        elif self.width() < self.minimumWidth() or self.height() < self.minimumHeight():
             self.resize(max(self.width(), self.minimumWidth()), max(self.height(), self.minimumHeight()))
 
         if hasattr(self, "root_layout"):
@@ -1201,20 +1219,26 @@ class MainWindow(QMainWindow):
     def _sync_focus_header_layout(self) -> None:
         layout = getattr(self, "focus_top_layout", None)
         deadline_panel = getattr(self, "focus_deadline_panel", None)
-        if layout is None or deadline_panel is None:
+        title_label = getattr(self, "focus_title_label", None)
+        if layout is None or deadline_panel is None or title_label is None:
             return
         layout.removeWidget(deadline_panel)
+        layout.removeWidget(title_label)
         narrow = self.width() < _scale_px(720)
         if narrow:
-            layout.addWidget(deadline_panel, 1, 0, 1, 4)
+            layout.addWidget(title_label, 1, 0, 1, 4)
+            layout.addWidget(deadline_panel, 2, 0, 1, 4)
             layout.setColumnMinimumWidth(4, 0)
             layout.setColumnStretch(4, 0)
+            title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
             self.focus_deadline_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             self.focus_countdown_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             return
+        layout.addWidget(title_label, 1, 0, 1, 4)
         layout.addWidget(deadline_panel, 0, 4, 2, 1)
         layout.setColumnMinimumWidth(4, _scale_px(244))
         layout.setColumnStretch(4, 2)
+        title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self.focus_deadline_label.setAlignment(Qt.AlignCenter)
         self.focus_countdown_label.setAlignment(Qt.AlignCenter)
 

@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QPointF, QRectF, Qt
+from PySide6.QtCore import QDate, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QComboBox,
@@ -345,17 +345,21 @@ class HistoryWindow(QDialog):
         self._selected_page_index = 0
         self._syncing_date_selector = False
         self._history_column_count = 1
+        self._normal_geometry_before_fullscreen: QRect | None = None
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(980, 900)
-        self.resize(1120, 900)
+        self.setMinimumSize(980, 940)
+        self.resize(1120, 980)
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(12)
-        root.addWidget(DialogTitleBar(self, self.windowTitle()))
+        self.title_bar = DialogTitleBar(self, self.windowTitle())
+        self.fullscreen_button = self.title_bar.add_action_button("□", "全屏历史窗口", self.toggle_fullscreen)
+        self.fullscreen_button.setObjectName("historyFullscreenButton")
+        root.addWidget(self.title_bar)
 
         header_panel = QFrame()
         header_panel.setObjectName("historyHeaderPanel")
@@ -640,7 +644,7 @@ class HistoryWindow(QDialog):
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
-        scroll.setMinimumHeight(180)
+        scroll.setMinimumHeight(260)
         self.history_scroll_area = scroll
         content_layout.addWidget(scroll, 1)
 
@@ -660,6 +664,19 @@ class HistoryWindow(QDialog):
         next_columns = self._history_grid_columns()
         if next_columns != self._history_column_count:
             self._render()
+
+    def toggle_fullscreen(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+            if self._normal_geometry_before_fullscreen is not None:
+                self.setGeometry(self._normal_geometry_before_fullscreen)
+            self.fullscreen_button.setText("□")
+            self.fullscreen_button.setToolTip("全屏历史窗口")
+            return
+        self._normal_geometry_before_fullscreen = QRect(self.geometry())
+        self.fullscreen_button.setText("▣")
+        self.fullscreen_button.setToolTip("还原历史窗口")
+        self.showFullScreen()
 
     def _metric_label(self, text: str, object_name: str = "historyMetricChip") -> QLabel:
         label = QLabel(text)

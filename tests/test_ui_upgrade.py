@@ -246,11 +246,15 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
 
     window.resize(620, 620)
     qapp.processEvents()
+    title_index = window.focus_top_layout.indexOf(window.focus_title_label)
+    assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
-    assert window.focus_top_layout.getItemPosition(deadline_index) == (1, 0, 1, 4)
+    assert window.focus_top_layout.getItemPosition(deadline_index) == (2, 0, 1, 4)
 
     window.resize(760, 620)
     qapp.processEvents()
+    title_index = window.focus_top_layout.indexOf(window.focus_title_label)
+    assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
     assert window.focus_top_layout.getItemPosition(deadline_index) == (0, 4, 2, 1)
 
@@ -485,11 +489,13 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
     assert window.minimumWidth() >= 980
-    assert window.minimumHeight() >= 900
+    assert window.minimumHeight() >= 940
     assert window.width() >= 1080
-    assert window.height() >= 900
+    assert window.height() >= 980
     assert window.isSizeGripEnabled()
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
+    assert window.fullscreen_button.objectName() == "historyFullscreenButton"
+    assert window.fullscreen_button.toolTip() == "全屏历史窗口"
     assert window.priority_p1_label.text() == "P1 1"
     assert window.priority_p2_label.text() == "P2 1"
     assert window.priority_p3_label.text() == "P3 0"
@@ -504,9 +510,19 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.priority_donut_chart.minimumHeight() >= 162
     assert window.deadline_outcome_chart.minimumHeight() >= 162
     assert window.priority_donut_chart.parentWidget().minimumHeight() >= 232
-    assert window.history_scroll_area.minimumHeight() >= 180
+    assert window.history_scroll_area.minimumHeight() >= 260
     window.show()
     qapp.processEvents()
+    normal_geometry = window.geometry()
+    window.fullscreen_button.click()
+    qapp.processEvents()
+    assert window.isFullScreen()
+    assert window.fullscreen_button.text() == "▣"
+    window.fullscreen_button.click()
+    qapp.processEvents()
+    assert not window.isFullScreen()
+    assert window.geometry() == normal_geometry
+    assert window.fullscreen_button.text() == "□"
     assert window.analytics_count_label.height() <= 38
     assert window.analytics_start_date_chip.height() <= 46
     assert window.analytics_end_date_chip.height() <= 46
