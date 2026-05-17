@@ -96,8 +96,6 @@ release\V1.0\Todo-list-V1.0-windows.zip
 Todo list\Todo list.exe
 ```
 
-如果要发到 GitHub，建议把 zip 上传到 GitHub Releases，而不是提交到仓库源码里。
-
 ## 测试
 
 ```powershell
