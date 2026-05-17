@@ -545,6 +545,10 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.analytics_week_button.text() == "近7日"
     assert window.analytics_month_button.text() == "本月"
     assert window.analytics_start_date.calendarWidget().objectName() == "historyAnalyticsStartCalendar"
+    assert window.search_input.placeholderText() == "按任务名称搜索"
+    assert isinstance(window.list_layout, QGridLayout)
+    assert window._history_grid_columns() >= 2
+    assert window.priority_p1_label.height() >= 32
     window.analytics_start_date.setDate(window.analytics_end_date.date())
     qapp.processEvents()
     assert window.analytics_count_label.text() == "1 条"
@@ -584,6 +588,13 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     previews = window.findChildren(QLabel, "historyPreview")
     assert previews
     assert previews[0].minimumHeight() >= 44
+
+    window.search_input.setText("交付")
+    qapp.processEvents()
+
+    assert window.count_label.text() == "0 条"
+    window.search_input.clear()
+    qapp.processEvents()
 
     window.next_date_button.click()
     qapp.processEvents()
@@ -722,7 +733,7 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
             completed_at=base - timedelta(minutes=index),
             updated_at=base - timedelta(minutes=index),
         )
-        for index in range(6)
+        for index in range(10)
     ]
     store = MemoryStore(tasks)
     window = HistoryWindow(tasks, store)
@@ -737,33 +748,33 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
         return "\n".join(parts)
 
     labels = rendered_history_text()
-    assert window.page_size_input.value() == 5
+    assert window.page_size_input.value() == 8
     assert not hasattr(window, "page_size_step_hint")
     assert "↑ 增加" in window.page_size_input.toolTip()
     assert "↓ 减少" in window.page_size_input.toolTip()
     assert window.date_selector.currentData() == "2026-05-12"
-    assert "1-5/6 条 · 1/2 页" in window.date_page_label.text()
+    assert "1-8/10 条 · 1/2 页" in window.date_page_label.text()
     assert "完成记录 0" in labels
-    assert "完成记录 5" not in labels
+    assert "完成记录 9" not in labels
 
     window.next_date_button.click()
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "6-6/6 条 · 2/2 页" in window.date_page_label.text()
-    assert "完成记录 5" in labels
+    assert "9-10/10 条 · 2/2 页" in window.date_page_label.text()
+    assert "完成记录 9" in labels
     assert "完成记录 0" not in labels
 
     window.page_size_input.setValue(2)
     qapp.processEvents()
 
-    assert "1-2/6 条 · 1/3 页" in window.date_page_label.text()
+    assert "1-2/10 条 · 1/5 页" in window.date_page_label.text()
 
     window.group_mode.setCurrentText("按等级")
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "按等级 · 1-2/6 条 · 1/3 页" in window.date_page_label.text()
+    assert "按等级 · 1-2/10 条 · 1/5 页" in window.date_page_label.text()
     assert "完成记录 0" in labels
     assert "完成记录 2" not in labels
 
@@ -771,7 +782,7 @@ def test_history_page_size_limits_date_results(qapp: QApplication) -> None:
     qapp.processEvents()
 
     labels = rendered_history_text()
-    assert "按等级 · 3-4/6 条 · 2/3 页" in window.date_page_label.text()
+    assert "按等级 · 3-4/10 条 · 2/5 页" in window.date_page_label.text()
     assert "完成记录 2" in labels
     assert "完成记录 0" not in labels
 

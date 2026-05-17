@@ -42,23 +42,32 @@ def test_settings_round_trip_with_defaults():
     settings = settings_from_dict(
         {
             "opacity": 0.5,
+            "ui_scale": 1.2,
             "window_geometry": {"x": 10, "y": 20, "width": 410, "height": 620},
             "icon_path": r"C:\Icons\todo.ico",
         }
     )
 
     assert settings.opacity == 0.5
+    assert settings.ui_scale == 1.2
     assert settings.close_to_tray is True
     assert settings.mouse_passthrough is False
     assert settings.icon_path == r"C:\Icons\todo.ico"
     assert settings.window_geometry["x"] == 10
     assert settings_to_dict(settings)["theme"] == "calm-tech-dark"
     assert settings_to_dict(settings)["icon_path"] == r"C:\Icons\todo.ico"
+    assert settings_to_dict(settings)["ui_scale"] == 1.2
 
 
 def test_opacity_is_clamped():
     assert settings_from_dict({"opacity": 2}).opacity == 1.0
     assert settings_from_dict({"opacity": 0.1}).opacity == 0.3
+
+
+def test_ui_scale_is_clamped():
+    assert settings_from_dict({"ui_scale": 2}).ui_scale == 1.3
+    assert settings_from_dict({"ui_scale": 0.1}).ui_scale == 0.85
+    assert settings_from_dict({"ui_scale": "bad"}).ui_scale == 1.0
 
 
 def test_window_geometry_cannot_be_mutated_directly():
