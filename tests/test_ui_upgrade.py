@@ -63,6 +63,8 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     assert window.resize_grip.toolTip() == "拖动调整窗口大小"
     assert isinstance(window.clock_label, ClockDisplay)
     assert window.clock_label.objectName() == "clockLabel"
+    assert hasattr(window.clock_label, "_draw_clock_sweep")
+    assert not hasattr(window.clock_label, "_draw_clock_stars")
     assert window.width() >= 540
     assert window.title_action_dock.height() == 46
     assert window.settings_button.height() == 38
@@ -239,6 +241,18 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
         lambda widget, duration=180: tick_animations.append((widget.objectName(), duration)),
     )
     window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
+    window.show()
+    qapp.processEvents()
+
+    window.resize(620, 620)
+    qapp.processEvents()
+    deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
+    assert window.focus_top_layout.getItemPosition(deadline_index) == (1, 0, 1, 4)
+
+    window.resize(760, 620)
+    qapp.processEvents()
+    deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
+    assert window.focus_top_layout.getItemPosition(deadline_index) == (0, 4, 2, 1)
 
     row_labels = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
     button_text = "\n".join(button.text() for button in window.task_rows_container.findChildren(QPushButton))
@@ -269,7 +283,6 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_priority_label.text() == "P1"
     assert "font-size: 24px" in window.focus_title_label.styleSheet()
     assert ("focusCountdownLabel", 170) not in tick_animations
-    window.show()
     qapp.processEvents()
     window.focus_countdown_label.setText("00:00:00")
     window.refresh()
@@ -287,6 +300,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert task_titles
     assert task_titles[0].minimumHeight() >= 38
     assert task_titles[0].toolTip() == "临近任务"
+    deadlines = window.task_rows_container.findChildren(QLabel, "activeTaskDeadline")
+    assert deadlines
+    assert deadlines[0].wordWrap()
+    assert deadlines[0].minimumHeight() >= 28
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
     expand_button.click()
     qapp.processEvents()
