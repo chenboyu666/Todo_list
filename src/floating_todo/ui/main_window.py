@@ -60,7 +60,9 @@ from floating_todo.view_models import (
 
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
 MAIN_WINDOW_MINIMUM_WIDTH = 520
-MAIN_WINDOW_MINIMUM_HEIGHT = 560
+MAIN_WINDOW_MINIMUM_HEIGHT = 720
+FOCUS_CARD_MINIMUM_HEIGHT = 350
+FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 92
 
 
 class TaskStore(Protocol):
@@ -456,6 +458,7 @@ class MainWindow(QMainWindow):
         self.focus_card = FocusDropCard(self)
         self.focus_card.setObjectName("focusCard")
         self.focus_card.setToolTip("把任务拖到这里设为进行中")
+        self.focus_card.setMinimumHeight(FOCUS_CARD_MINIMUM_HEIGHT)
         self.focus_card.setStyleSheet(_card_style("normal", selected=True))
         apply_soft_shadow(self.focus_card, blur=34, y_offset=12, alpha=120)
         focus_layout = QVBoxLayout(self.focus_card)
@@ -486,6 +489,7 @@ class MainWindow(QMainWindow):
         deadline_panel = QFrame()
         deadline_panel.setObjectName("focusDeadlinePanel")
         deadline_panel.setStyleSheet(_focus_deadline_panel_style())
+        deadline_panel.setMinimumHeight(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT)
         deadline_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.focus_deadline_panel = deadline_panel
         deadline_layout = QVBoxLayout(deadline_panel)
