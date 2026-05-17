@@ -5,7 +5,8 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFrame,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -48,6 +50,228 @@ CSV_HEADERS = [
     "任务备注",
     "完成体会",
 ]
+
+PRIORITY_CHART_COLORS = {
+    "P1": "#F6A44D",
+    "P2": "#8EA7FF",
+    "P3": "#A7F3D0",
+}
+
+
+class PriorityDonutChart(QWidget):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
+        self.setObjectName("historyPriorityDonutChart")
+        self.setAccessibleName("优先级完成结构图")
+        self.setMinimumHeight(132)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def set_counts(self, counts: dict[str, int]) -> None:
+        self.priority_counts = {priority: max(0, int(counts.get(priority, 0))) for priority in ("P1", "P2", "P3")}
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(6, 4, -6, -6)
+        if rect.isEmpty():
+            return
+        total = sum(self.priority_counts.values())
+        diameter = min(88.0, rect.height() - 8, rect.width() * 0.46)
+        chart_rect = QRectF(rect.left() + 4, rect.center().y() - diameter / 2, diameter, diameter)
+        center = chart_rect.center()
+        ring_width = max(13.0, diameter * 0.18)
+
+        painter.setPen(QPen(QColor("#162235"), ring_width, Qt.SolidLine, Qt.RoundCap))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(chart_rect.adjusted(ring_width / 2, ring_width / 2, -ring_width / 2, -ring_width / 2))
+
+        if total:
+            start_angle = 90 * 16
+            arc_rect = chart_rect.adjusted(ring_width / 2, ring_width / 2, -ring_width / 2, -ring_width / 2)
+            for priority in ("P1", "P2", "P3"):
+                count = self.priority_counts[priority]
+                if not count:
+                    continue
+                span_angle = int(-360 * 16 * count / total)
+                painter.setPen(QPen(QColor(PRIORITY_CHART_COLORS[priority]), ring_width, Qt.SolidLine, Qt.RoundCap))
+                painter.drawArc(arc_rect, start_angle, span_angle)
+                start_angle += span_angle
+
+        painter.setPen(QColor("#F8FBFF"))
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(13)
+        painter.setFont(font)
+        painter.drawText(chart_rect, Qt.AlignCenter, str(total))
+
+        legend_x = chart_rect.right() + 18
+        legend_y = rect.top() + 18
+        font.setPointSize(9)
+        painter.setFont(font)
+        for index, priority in enumerate(("P1", "P2", "P3")):
+            y = legend_y + index * 28
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(PRIORITY_CHART_COLORS[priority]))
+            painter.drawRoundedRect(QRectF(legend_x, y + 4, 22, 8), 4, 4)
+            painter.setPen(QColor("#D8E8F5"))
+            count = self.priority_counts[priority]
+            percent = round(count / total * 100) if total else 0
+            painter.drawText(QRectF(legend_x + 30, y - 2, rect.right() - legend_x - 30, 22), Qt.AlignLeft, f"{priority}  {count} · {percent}%")
+
+
+class CompletionTrendChart(QWidget):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.trend_points: list[tuple[date, int]] = []
+        self.setObjectName("historyCompletionTrendChart")
+        self.setAccessibleName("每日完成曲线图")
+        self.setMinimumHeight(132)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def set_points(self, points: list[tuple[date, int]]) -> None:
+        self.trend_points = list(points)
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        outer = QRectF(self.rect()).adjusted(8, 8, -8, -8)
+        plot = outer.adjusted(28, 12, -10, -28)
+        if plot.width() <= 0 or plot.height() <= 0:
+            return
+
+        painter.setPen(QPen(QColor("#1F3146"), 1))
+        for index in range(4):
+            y = plot.top() + plot.height() * index / 3
+            painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y))
+
+        if not self.trend_points:
+            painter.setPen(QColor("#6F8093"))
+            painter.drawText(outer, Qt.AlignCenter, "暂无趋势")
+            return
+
+        max_value = max(1, max(value for _, value in self.trend_points))
+        coordinates: list[QPointF] = []
+        span = max(1, len(self.trend_points) - 1)
+        for index, (_, value) in enumerate(self.trend_points):
+            x = plot.left() + plot.width() * index / span if len(self.trend_points) > 1 else plot.center().x()
+            y = plot.bottom() - plot.height() * value / max_value
+            coordinates.append(QPointF(x, y))
+
+        if coordinates:
+            area = QPainterPath(coordinates[0])
+            for point in coordinates[1:]:
+                area.lineTo(point)
+            area.lineTo(QPointF(coordinates[-1].x(), plot.bottom()))
+            area.lineTo(QPointF(coordinates[0].x(), plot.bottom()))
+            area.closeSubpath()
+            gradient = QLinearGradient(plot.topLeft(), plot.bottomLeft())
+            top_fill = QColor("#7DD3FC")
+            top_fill.setAlpha(72)
+            bottom_fill = QColor("#A7F3D0")
+            bottom_fill.setAlpha(8)
+            gradient.setColorAt(0, top_fill)
+            gradient.setColorAt(1, bottom_fill)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(gradient)
+            painter.drawPath(area)
+
+            line = QPainterPath(coordinates[0])
+            for point in coordinates[1:]:
+                line.lineTo(point)
+            painter.setPen(QPen(QColor("#7DD3FC"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(line)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#ECFEFF"))
+            for point in coordinates:
+                painter.drawEllipse(point, 3.2, 3.2)
+
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(8)
+        painter.setFont(font)
+        painter.setPen(QColor("#9EB5C8"))
+        start_label = self.trend_points[0][0].strftime("%m-%d")
+        end_label = self.trend_points[-1][0].strftime("%m-%d")
+        painter.drawText(QRectF(plot.left(), plot.bottom() + 7, 72, 18), Qt.AlignLeft, start_label)
+        painter.drawText(QRectF(plot.right() - 72, plot.bottom() + 7, 72, 18), Qt.AlignRight, end_label)
+        painter.drawText(QRectF(outer.left(), outer.top(), 46, 18), Qt.AlignLeft, str(max_value))
+
+
+class DeadlineOutcomeChart(QWidget):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
+        self.setObjectName("historyDeadlineOutcomeChart")
+        self.setAccessibleName("准时与超时分布图")
+        self.setMinimumHeight(132)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
+        self.outcome_counts = {
+            "on_time": max(0, int(on_time)),
+            "overdue": max(0, int(overdue)),
+            "no_deadline": max(0, int(no_deadline)),
+        }
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(10, 12, -10, -10)
+        if rect.isEmpty():
+            return
+        total = sum(self.outcome_counts.values())
+        deadline_total = self.outcome_counts["on_time"] + self.outcome_counts["overdue"]
+        rate = round(self.outcome_counts["on_time"] / deadline_total * 100) if deadline_total else 0
+
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(22)
+        painter.setFont(font)
+        painter.setPen(QColor("#ECFEFF"))
+        painter.drawText(QRectF(rect.left(), rect.top(), rect.width(), 36), Qt.AlignLeft, f"{rate}%")
+        font.setPointSize(8)
+        painter.setFont(font)
+        painter.setPen(QColor("#9EB5C8"))
+        painter.drawText(QRectF(rect.left() + 72, rect.top() + 8, rect.width() - 72, 20), Qt.AlignLeft, "准时率")
+
+        bar_rect = QRectF(rect.left(), rect.top() + 48, rect.width(), 14)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#111D2C"))
+        painter.drawRoundedRect(bar_rect, 7, 7)
+        if total:
+            cursor = bar_rect.left()
+            segments = (
+                ("on_time", "#A7F3D0"),
+                ("overdue", "#FCA5A5"),
+                ("no_deadline", "#617086"),
+            )
+            for key, color in segments:
+                value = self.outcome_counts[key]
+                if not value:
+                    continue
+                width = bar_rect.width() * value / total
+                painter.setBrush(QColor(color))
+                painter.drawRoundedRect(QRectF(cursor, bar_rect.top(), width, bar_rect.height()), 7, 7)
+                cursor += width
+
+        legend = (
+            ("准时", self.outcome_counts["on_time"], "#A7F3D0"),
+            ("超时", self.outcome_counts["overdue"], "#FCA5A5"),
+            ("无截止", self.outcome_counts["no_deadline"], "#9AA4B8"),
+        )
+        legend_top = bar_rect.bottom() + 17
+        for index, (label, value, color) in enumerate(legend):
+            x = rect.left() + index * rect.width() / 3
+            painter.setBrush(QColor(color))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(QRectF(x, legend_top + 4, 18, 7), 3.5, 3.5)
+            painter.setPen(QColor("#D8E8F5"))
+            painter.drawText(QRectF(x + 24, legend_top - 2, rect.width() / 3 - 28, 22), Qt.AlignLeft, f"{label} {value}")
 
 
 class HistoryNoteDialog(QDialog):
@@ -121,7 +345,7 @@ class HistoryWindow(QDialog):
         self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(520, 560)
+        self.setMinimumSize(760, 680)
         self.setStyleSheet(_history_window_style())
 
         root = QVBoxLayout(self)
@@ -153,8 +377,8 @@ class HistoryWindow(QDialog):
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_layout = QVBoxLayout(stats_panel)
-        stats_layout.setContentsMargins(10, 8, 10, 8)
-        stats_layout.setSpacing(7)
+        stats_layout.setContentsMargins(12, 10, 12, 12)
+        stats_layout.setSpacing(10)
         priority_metrics = QHBoxLayout()
         priority_metrics.setContentsMargins(0, 0, 0, 0)
         priority_metrics.setSpacing(8)
@@ -162,23 +386,41 @@ class HistoryWindow(QDialog):
         self.priority_p2_label = self._metric_label("P2 0", "historyPriorityMetricP2")
         self.priority_p3_label = self._metric_label("P3 0", "historyPriorityMetricP3")
         self.priority_mix_label = self.priority_p1_label
-        for metric in (self.priority_p1_label, self.priority_p2_label, self.priority_p3_label):
+        self.review_metric_label = self._metric_label("复盘 0/0")
+        for metric in (self.priority_p1_label, self.priority_p2_label, self.priority_p3_label, self.review_metric_label):
             priority_metrics.addWidget(metric, 1)
         stats_layout.addLayout(priority_metrics)
 
         summary_metrics = QHBoxLayout()
         summary_metrics.setContentsMargins(0, 0, 0, 0)
         summary_metrics.setSpacing(8)
-        self.review_metric_label = self._metric_label("复盘 0/0")
+        self.on_time_metric_label = self._metric_label("准时率 --")
+        self.overdue_metric_label = self._metric_label("超时 0/0", "historyOverdueMetric")
         self.average_metric_label = self._metric_label("平均进度 --")
         self.latest_metric_label = self._metric_label("最近 --")
         for metric in (
-            self.review_metric_label,
+            self.on_time_metric_label,
+            self.overdue_metric_label,
             self.average_metric_label,
             self.latest_metric_label,
         ):
             summary_metrics.addWidget(metric, 1)
         stats_layout.addLayout(summary_metrics)
+
+        chart_grid = QGridLayout()
+        chart_grid.setContentsMargins(0, 0, 0, 0)
+        chart_grid.setHorizontalSpacing(9)
+        chart_grid.setVerticalSpacing(9)
+        self.priority_donut_chart = PriorityDonutChart()
+        self.completion_trend_chart = CompletionTrendChart()
+        self.deadline_outcome_chart = DeadlineOutcomeChart()
+        chart_grid.addWidget(self._chart_card("优先级结构", "P1 / P2 / P3 完成占比", self.priority_donut_chart), 0, 0)
+        chart_grid.addWidget(self._chart_card("完成曲线", "最近完成节奏", self.completion_trend_chart), 0, 1)
+        chart_grid.addWidget(self._chart_card("超时分布", "准时、超时与无截止", self.deadline_outcome_chart), 0, 2)
+        chart_grid.setColumnStretch(0, 1)
+        chart_grid.setColumnStretch(1, 1)
+        chart_grid.setColumnStretch(2, 1)
+        stats_layout.addLayout(chart_grid)
         root.addWidget(stats_panel)
 
         toolbar_panel = QFrame()
@@ -323,6 +565,24 @@ class HistoryWindow(QDialog):
         label.setWordWrap(False)
         return label
 
+    def _chart_card(self, title: str, subtitle: str, chart: QWidget) -> QFrame:
+        card = QFrame()
+        card.setObjectName("historyChartCard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(11, 9, 11, 10)
+        layout.setSpacing(4)
+        title_label = QLabel(title)
+        title_label.setObjectName("historyChartTitle")
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setObjectName("historyChartSubtitle")
+        subtitle_label.setWordWrap(False)
+        layout.addWidget(title_label)
+        layout.addWidget(subtitle_label)
+        layout.addWidget(chart, 1)
+        return card
+
     def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
         button = QPushButton(text)
         button.setObjectName("historyExportPresetButton")
@@ -410,6 +670,11 @@ class HistoryWindow(QDialog):
             priority: sum(1 for task in completed if task.priority == priority)
             for priority in ("P1", "P2", "P3")
         }
+        overdue = sum(1 for task in completed if _task_completed_late(task))
+        no_deadline = sum(1 for task in completed if task.deadline is None)
+        deadline_total = total - no_deadline
+        on_time = max(0, deadline_total - overdue)
+        on_time_rate = round(on_time / deadline_total * 100) if deadline_total else None
         reviewed = sum(1 for task in completed if task.notes.strip() or task.reflection.strip())
         average = round(sum(task.progress for task in completed) / total) if total else None
         latest_task = max(completed, key=lambda task: task.completed_at or task.updated_at, default=None)
@@ -422,8 +687,13 @@ class HistoryWindow(QDialog):
         self.priority_p2_label.setText(f"P2 {counts['P2']}")
         self.priority_p3_label.setText(f"P3 {counts['P3']}")
         self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
+        self.on_time_metric_label.setText(f"准时率 {on_time_rate}%" if on_time_rate is not None else "准时率 --")
+        self.overdue_metric_label.setText(f"超时 {overdue}/{deadline_total}")
         self.average_metric_label.setText(f"平均进度 {average}%" if average is not None else "平均进度 --")
         self.latest_metric_label.setText(f"最近 {latest}")
+        self.priority_donut_chart.set_counts(counts)
+        self.completion_trend_chart.set_points(_completion_trend(completed))
+        self.deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
 
     def _reset_page(self, *args) -> None:
         self._selected_page_index = 0
@@ -785,6 +1055,26 @@ def _task_completed_date(task: Task) -> date | None:
     return value.astimezone().date() if value else None
 
 
+def _task_completed_late(task: Task) -> bool:
+    completed_at = task.completed_at or task.updated_at
+    return bool(task.deadline and completed_at and completed_at > task.deadline)
+
+
+def _completion_trend(tasks: list[Task], *, max_days: int = 14) -> list[tuple[date, int]]:
+    dates = [_task_completed_date(task) for task in tasks]
+    dates = [item for item in dates if item is not None]
+    if not dates:
+        return []
+    end = max(dates)
+    start = max(min(dates), end - timedelta(days=max_days - 1))
+    counts: dict[date, int] = {}
+    for item in dates:
+        if item >= start:
+            counts[item] = counts.get(item, 0) + 1
+    days = (end - start).days + 1
+    return [(start + timedelta(days=offset), counts.get(start + timedelta(days=offset), 0)) for offset in range(days)]
+
+
 def _date_in_range(value: date | None, start: date, end: date) -> bool:
     return value is not None and start <= value <= end
 
@@ -831,7 +1121,8 @@ QFrame#historyStatsPanel {{
 QLabel#historyMetricChip,
 QLabel#historyPriorityMetricP1,
 QLabel#historyPriorityMetricP2,
-QLabel#historyPriorityMetricP3 {{
+QLabel#historyPriorityMetricP3,
+QLabel#historyOverdueMetric {{
   color: #D4E3F2;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #111D2C,
@@ -851,6 +1142,28 @@ QLabel#historyPriorityMetricP2 {{
 QLabel#historyPriorityMetricP3 {{
   color: #D9FBE8;
   background: #123A33;
+}}
+QLabel#historyOverdueMetric {{
+  color: #FFD5DF;
+  background: #3A1822;
+}}
+QFrame#historyChartCard {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #0D1624,
+    stop:0.58 #0F1D2E,
+    stop:1 #102A2D);
+  border: none;
+  border-radius: 8px;
+}}
+QLabel#historyChartTitle {{
+  color: #F8FBFF;
+  font-size: 14px;
+  font-weight: 900;
+}}
+QLabel#historyChartSubtitle {{
+  color: #8EA2B7;
+  font-size: 12px;
+  font-weight: 700;
 }}
 QFrame#historyToolbar {{
   background: #0C121D;
