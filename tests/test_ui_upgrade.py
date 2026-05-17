@@ -506,6 +506,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.history_scroll_area.minimumHeight() >= 180
     window.show()
     qapp.processEvents()
+    assert window.analytics_count_label.height() <= 38
+    assert window.analytics_start_date_chip.height() <= 46
+    assert window.analytics_end_date_chip.height() <= 46
     metric_tops = {
         label.geometry().top()
         for label in (
@@ -520,9 +523,15 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
         )
     }
     assert len(metric_tops) == 1
+    toolbar_top = window.findChild(QFrame, "historyToolbar").geometry().top()
     for card in window.findChildren(QFrame, "historyChartCard"):
         assert card.geometry().bottom() <= window.stats_panel.contentsRect().bottom()
-        assert card.findChild(QWidget, "historyPriorityDonutChart") or card.findChild(QWidget, "historyCompletionTrendChart") or card.findChild(QWidget, "historyDeadlineOutcomeChart")
+        assert card.mapTo(window, QPoint(0, card.height())).y() < toolbar_top
+        assert (
+            card.findChild(QWidget, "historyPriorityDonutChart")
+            or card.findChild(QWidget, "historyCompletionTrendChart")
+            or card.findChild(QWidget, "historyDeadlineOutcomeChart")
+        )
     assert window.history_scroll_area.geometry().top() > window.stats_panel.geometry().bottom()
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
