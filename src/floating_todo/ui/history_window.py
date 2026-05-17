@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from floating_todo.domain import Task
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.date_controls import apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
 
@@ -210,39 +211,68 @@ class HistoryWindow(QDialog):
         self.page_size_input.valueChanged.connect(self._reset_page)
         search_row.addWidget(self.page_size_input)
 
+        export_panel = QFrame()
+        export_panel.setObjectName("historyExportPanel")
+        export_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        export_panel_layout = QVBoxLayout(export_panel)
+        export_panel_layout.setContentsMargins(10, 9, 10, 10)
+        export_panel_layout.setSpacing(8)
+        export_header = QHBoxLayout()
+        export_header.setContentsMargins(0, 0, 0, 0)
+        export_header.setSpacing(8)
+        export_range_label = QLabel("导出区间")
+        export_range_label.setObjectName("historyExportTitle")
+        export_header.addWidget(export_range_label)
+        self.export_count_label = QLabel("0 条")
+        self.export_count_label.setObjectName("historyExportCount")
+        self.export_count_label.setAlignment(Qt.AlignCenter)
+        export_header.addWidget(self.export_count_label)
+        export_header.addStretch(1)
+        self.export_all_button = self._export_preset_button("全部", "导出全部完成记录")
+        self.export_week_button = self._export_preset_button("近7日", "快速选择最近 7 天")
+        self.export_month_button = self._export_preset_button("本月", "快速选择当前月份")
+        self.export_all_button.clicked.connect(lambda checked=False: self._apply_export_preset("all"))
+        self.export_week_button.clicked.connect(lambda checked=False: self._apply_export_preset("week"))
+        self.export_month_button.clicked.connect(lambda checked=False: self._apply_export_preset("month"))
+        for preset_button in (self.export_all_button, self.export_week_button, self.export_month_button):
+            export_header.addWidget(preset_button)
+        export_panel_layout.addLayout(export_header)
+
         export_row = QHBoxLayout()
         export_row.setContentsMargins(0, 0, 0, 0)
         export_row.setSpacing(8)
-        export_range_label = QLabel("导出日期")
-        export_range_label.setObjectName("historyToolbarLabel")
-        export_row.addWidget(export_range_label)
         self.export_start_date = QDateEdit()
         self.export_start_date.setObjectName("historyExportStartDate")
         self.export_start_date.setCalendarPopup(True)
+        apply_dark_calendar_popup(self.export_start_date, "historyExportStartCalendar")
         self.export_start_date.setDisplayFormat("yyyy-MM-dd")
         self.export_start_date.setToolTip("选择 CSV 导出的起始完成日期")
         self.export_start_date.setAccessibleName("导出起始日期")
-        export_row.addWidget(self.export_start_date)
-        export_to_label = QLabel("至")
-        export_to_label.setObjectName("historyToolbarLabel")
+        export_row.addWidget(_export_date_chip("起始", self.export_start_date), 1)
+        export_to_label = QLabel("→")
+        export_to_label.setObjectName("historyExportArrow")
+        export_to_label.setAlignment(Qt.AlignCenter)
         export_row.addWidget(export_to_label)
         self.export_end_date = QDateEdit()
         self.export_end_date.setObjectName("historyExportEndDate")
         self.export_end_date.setCalendarPopup(True)
+        apply_dark_calendar_popup(self.export_end_date, "historyExportEndCalendar")
         self.export_end_date.setDisplayFormat("yyyy-MM-dd")
         self.export_end_date.setToolTip("选择 CSV 导出的结束完成日期")
         self.export_end_date.setAccessibleName("导出结束日期")
-        export_row.addWidget(self.export_end_date)
-        export_row.addStretch(1)
+        export_row.addWidget(_export_date_chip("结束", self.export_end_date), 1)
         self.export_button = QPushButton("导出 CSV")
         self.export_button.setObjectName("historyExportButton")
         self.export_button.setToolTip("导出当前搜索结果中日期范围内的历史记录表格")
         self.export_button.clicked.connect(self.export_history)
         export_row.addWidget(self.export_button)
+        export_panel_layout.addLayout(export_row)
         toolbar_layout.addLayout(search_row)
-        toolbar_layout.addLayout(export_row)
+        toolbar_layout.addWidget(export_panel)
         root.addWidget(toolbar_panel)
         self._configure_export_date_range()
+        self.export_start_date.dateChanged.connect(self._update_export_count)
+        self.export_end_date.dateChanged.connect(self._update_export_count)
 
         self.date_pager_widget = QWidget()
         date_pager_layout = QHBoxLayout(self.date_pager_widget)
@@ -293,6 +323,13 @@ class HistoryWindow(QDialog):
         label.setWordWrap(False)
         return label
 
+    def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("historyExportPresetButton")
+        button.setToolTip(tooltip)
+        button.setCursor(Qt.PointingHandCursor)
+        return button
+
     def _configure_export_date_range(self) -> None:
         dates = [_task_completed_date(task) for task in self.tasks if task.status == "done"]
         dates = [item for item in dates if item is not None]
@@ -303,11 +340,33 @@ class HistoryWindow(QDialog):
             today = QDate.currentDate().toPython()
             start = today
             end = today
+        self._export_min_date = start
+        self._export_max_date = end
         start_qdate = QDate(start.year, start.month, start.day)
         end_qdate = QDate(end.year, end.month, end.day)
         for edit, value in ((self.export_start_date, start_qdate), (self.export_end_date, end_qdate)):
             edit.setDateRange(start_qdate, end_qdate)
             edit.setDate(value)
+        self._update_export_count()
+
+    def _apply_export_preset(self, preset: str) -> None:
+        min_date = getattr(self, "_export_min_date", QDate.currentDate().toPython())
+        max_date = getattr(self, "_export_max_date", QDate.currentDate().toPython())
+        end = max_date
+        if preset == "week":
+            start = max(min_date, end - timedelta(days=6))
+        elif preset == "month":
+            start = max(min_date, date(end.year, end.month, 1))
+        else:
+            start = min_date
+        self.export_start_date.setDate(QDate(start.year, start.month, start.day))
+        self.export_end_date.setDate(QDate(end.year, end.month, end.day))
+        self._update_export_count()
+
+    def _update_export_count(self, *args) -> None:
+        if not hasattr(self, "export_count_label"):
+            return
+        self.export_count_label.setText(f"{len(self._exportable_tasks())} 条")
 
     def _render(self) -> None:
         while self.list_layout.count():
@@ -318,6 +377,7 @@ class HistoryWindow(QDialog):
         completed = self._filtered_completed_tasks()
         self.count_label.setText(f"{len(completed)} 条")
         self._update_metrics(completed)
+        self._update_export_count()
         if not completed:
             self._set_date_pager([], None)
             query = self.search_input.text().strip()
@@ -702,6 +762,20 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
             )
 
 
+def _export_date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
+    chip = QFrame()
+    chip.setObjectName("historyExportDateChip")
+    layout = QHBoxLayout(chip)
+    layout.setContentsMargins(9, 6, 7, 6)
+    layout.setSpacing(7)
+    label = QLabel(label_text)
+    label.setObjectName("historyExportDateLabel")
+    label.setAlignment(Qt.AlignCenter)
+    layout.addWidget(label)
+    layout.addWidget(date_edit, 1)
+    return chip
+
+
 def _export_datetime(value) -> str:
     return value.astimezone().strftime("%Y-%m-%d %H:%M:%S") if value else ""
 
@@ -789,10 +863,71 @@ QLabel#historyToolbarLabel {{
   font-weight: 900;
   padding: 0 4px;
 }}
+QFrame#historyExportPanel {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0A1421,
+    stop:0.55 #0D1B2A,
+    stop:1 #102D32);
+  border: none;
+  border-radius: 8px;
+}}
+QLabel#historyExportTitle {{
+  color: #F8FBFF;
+  font-size: 15px;
+  font-weight: 900;
+}}
+QLabel#historyExportCount {{
+  color: #DFFBFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #155E75,
+    stop:1 #047857);
+  border: none;
+  border-radius: 8px;
+  min-width: 54px;
+  min-height: 28px;
+  font-weight: 900;
+}}
+QPushButton#historyExportPresetButton {{
+  color: #BAE6FD;
+  background: #101827;
+  border: none;
+  border-radius: 8px;
+  min-height: 28px;
+  padding: 3px 10px;
+  font-weight: 900;
+}}
+QPushButton#historyExportPresetButton:hover {{
+  color: #ECFEFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #123047,
+    stop:1 #115E59);
+}}
+QFrame#historyExportDateChip {{
+  background: #070D16;
+  border: none;
+  border-radius: 8px;
+}}
+QLabel#historyExportDateLabel {{
+  color: #7DD3FC;
+  background: #0D1A28;
+  border: none;
+  border-radius: 7px;
+  min-width: 42px;
+  min-height: 28px;
+  font-weight: 900;
+}}
+QLabel#historyExportArrow {{
+  color: #A7F3D0;
+  min-width: 24px;
+  font-size: 18px;
+  font-weight: 900;
+}}
 QLineEdit#historySearch, QComboBox#historyMode, QComboBox#historyDateSelector,
 QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate {{
   background: #101827;
+  color: #ECFEFF;
   font-weight: 700;
+  min-width: 112px;
 }}
 QLabel#historyPageLabel {{
   color: #7DD3FC;
@@ -806,6 +941,12 @@ QPushButton#historyPageButton, QPushButton#historyNoteButton, QPushButton#histor
   background: #162033;
   color: #F6F8FC;
   font-weight: 800;
+}}
+QPushButton#historyExportButton {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #155E75,
+    stop:1 #0F766E);
+  color: #ECFEFF;
 }}
 QPushButton#historyPageButton:hover, QPushButton#historyNoteButton:hover, QPushButton#historyExportButton:hover {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,

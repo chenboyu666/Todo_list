@@ -94,6 +94,8 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.deadline_edit.calendarPopup()
     assert not hasattr(dialog, "priority_hint_label")
     assert not hasattr(dialog, "deadline_hint_label")
+    assert dialog.deadline_date_input.calendarWidget().objectName() == "taskDeadlineCalendar"
+    assert "#070B12" in dialog.deadline_date_input.calendarWidget().styleSheet()
     visible_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
     assert "P1 最优先" not in visible_text
     assert "每次 15 分钟" not in visible_text

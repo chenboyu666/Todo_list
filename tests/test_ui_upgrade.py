@@ -486,6 +486,20 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.export_button.text() == "导出 CSV"
     assert window.export_start_date.accessibleName() == "导出起始日期"
     assert window.export_end_date.accessibleName() == "导出结束日期"
+    assert window.export_count_label.text() == "2 条"
+    assert window.export_all_button.text() == "全部"
+    assert window.export_week_button.text() == "近7日"
+    assert window.export_month_button.text() == "本月"
+    assert window.export_start_date.calendarWidget().objectName() == "historyExportStartCalendar"
+    assert window.export_start_date.calendarWidget().firstDayOfWeek() == Qt.Monday
+    assert not window.export_start_date.calendarWidget().isGridVisible()
+    assert "#070B12" in window.export_start_date.calendarWidget().styleSheet()
+    window.export_start_date.setDate(window.export_end_date.date())
+    qapp.processEvents()
+    assert window.export_count_label.text() == "1 条"
+    window.export_all_button.click()
+    qapp.processEvents()
+    assert window.export_count_label.text() == "2 条"
 
     labels = rendered_history_text()
     assert "已复盘" in labels
@@ -507,6 +521,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     qapp.processEvents()
 
     assert window.count_label.text() == "1 条"
+    assert window.export_count_label.text() == "1 条"
     assert window.date_selector.currentData() == "2026-05-11"
     assert "1-1/1 条 · 1/1 页" in window.date_page_label.text()
 
