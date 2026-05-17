@@ -13,7 +13,7 @@ class FloatingToast(QFrame):
         self.setObjectName("floatingToast")
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
-        self.setFixedWidth(330)
+        self.setFixedWidth(360)
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
         self._auto_close_timer.timeout.connect(self.close)
@@ -29,8 +29,8 @@ class FloatingToast(QFrame):
         layout.addWidget(accent)
 
         content = QVBoxLayout()
-        content.setContentsMargins(13, 11, 10, 12)
-        content.setSpacing(5)
+        content.setContentsMargins(14, 12, 12, 13)
+        content.setSpacing(6)
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
@@ -62,8 +62,8 @@ class FloatingToast(QFrame):
         spacing = 10
         if parent is not None and parent.isVisible():
             top_right = parent.mapToGlobal(parent.rect().topRight())
-            x = top_right.x() - self.width() - 18
-            y = top_right.y() + 76 + stack_index * (self.height() + spacing)
+            x = top_right.x() - self.width() - 20
+            y = top_right.y() + 70 + stack_index * (self.height() + spacing)
             self.move(x, y)
             return
         screen = QApplication.primaryScreen()
@@ -71,8 +71,8 @@ class FloatingToast(QFrame):
             return
         available = screen.availableGeometry()
         self.move(
-            available.right() - self.width() - 18,
-            available.bottom() - self.height() - 18 - stack_index * (self.height() + spacing),
+            available.right() - self.width() - 20,
+            available.bottom() - self.height() - 20 - stack_index * (self.height() + spacing),
         )
 
 
@@ -99,11 +99,11 @@ QFrame#toastAccent {{
 }}
 QLabel#toastTitle {{
   color: {colors["title"]};
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
 }}
 QLabel#toastMessage {{
-  color: #CFE1EE;
+  color: #DAEAF3;
   font-weight: 700;
   line-height: 18px;
 }}

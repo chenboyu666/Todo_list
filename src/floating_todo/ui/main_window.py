@@ -758,8 +758,9 @@ class MainWindow(QMainWindow):
         return dialog.exec() == QDialog.Accepted
 
     def show_completion_encouragement(self, task: Task) -> None:
-        message = f"{task.title}\n{completion_encouragement(task)}"
-        self.show_toast("完成得漂亮", message, kind="success", duration_ms=5200)
+        title, body = completion_toast_copy(task)
+        message = f"{task.title}\n{body}"
+        self.show_toast(title, message, kind="success", duration_ms=5600)
 
     def delete_task(self, task_id: str) -> None:
         index = self._task_index(task_id)
@@ -1570,14 +1571,67 @@ def _note_preview(notes: str, *, limit: int = 72) -> str:
     return f"{text[:limit]}..."
 
 
+COMPLETION_TOAST_TITLES = (
+    "完成得漂亮",
+    "推进完成",
+    "收尾成功",
+    "又清掉一项",
+    "节奏很好",
+)
+
+COMPLETION_ENCOURAGEMENTS = {
+    "priority": (
+        "关键任务已经落地，今天的主线更稳了。",
+        "优先级最高的事项拿下了，后面的推进会轻很多。",
+        "这一步很关键，你把它推进到闭环了。",
+        "重要事项已经收住，接下来可以更从容。",
+    ),
+    "large": (
+        "这是一块不小的工作量，完成它很值得记一笔。",
+        "大块任务收尾了，给后面的时间腾出了空间。",
+        "耐心推进到这里，很扎实。",
+        "这类任务最消耗心力，你已经把它稳稳落地。",
+    ),
+    "progress": (
+        "从推进到收尾已经闭环，继续保持这个节奏。",
+        "最后一段也补上了，这个任务现在完整落地。",
+        "把未完成的部分收住了，很稳。",
+        "进度条走到终点，今天又多了一个确定结果。",
+    ),
+    "default": (
+        "又完成一项，清单正在变轻。",
+        "这一项已经归档，继续往前走。",
+        "小闭环也很重要，今天又往前推进了一步。",
+        "完成感正在积累，节奏保持得不错。",
+    ),
+}
+
+
+def completion_toast_copy(task: Task) -> tuple[str, str]:
+    body_options = COMPLETION_ENCOURAGEMENTS[_completion_encouragement_category(task)]
+    return (
+        _stable_pick(COMPLETION_TOAST_TITLES, task, salt="title"),
+        _stable_pick(body_options, task, salt="body"),
+    )
+
+
 def completion_encouragement(task: Task) -> str:
+    return completion_toast_copy(task)[1]
+
+
+def _completion_encouragement_category(task: Task) -> str:
     if task.priority == "P1":
-        return "高优先级任务拿下了，今天的关键推进很稳。"
+        return "priority"
     if task.effort_minutes >= 90:
-        return "这是一块不小的工作量，完成它很值得记一笔。"
+        return "large"
     if task.progress < 100:
-        return "从推进到收尾已经闭环，继续保持这个节奏。"
-    return "又完成一项，清单正在变轻。"
+        return "progress"
+    return "default"
+
+
+def _stable_pick(options: tuple[str, ...], task: Task, *, salt: str) -> str:
+    seed = f"{salt}|{task.id}|{task.title}|{task.priority}|{task.effort_minutes}|{task.created_at.isoformat()}"
+    return options[sum(ord(character) for character in seed) % len(options)]
 
 
 PRIORITY_STYLES = {

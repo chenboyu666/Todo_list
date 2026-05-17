@@ -130,7 +130,7 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
 
 def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MainWindow, completion_toast_copy
 
     complete_task = make_task("顶部完成", task_id="task-complete", progress=40)
     complete_store = MemoryStore([complete_task])
@@ -145,7 +145,9 @@ def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication)
     toast_text = "\n".join(
         label.text() for popup in complete_window._toast_popups for label in popup.findChildren(QLabel)
     )
-    assert "完成得漂亮" in toast_text
+    toast_title, toast_body = completion_toast_copy(complete_store.saved_tasks[0])
+    assert toast_title in toast_text
+    assert toast_body in toast_text
     assert "顶部完成" in toast_text
     complete_window.close()
 
@@ -158,6 +160,35 @@ def test_focus_card_actions_complete_and_delete_current_task(qapp: QApplication)
 
     assert delete_store.saved_tasks == []
     delete_window.close()
+
+
+def test_completion_toast_copy_has_stable_contextual_variants() -> None:
+    from floating_todo.ui.main_window import (
+        COMPLETION_ENCOURAGEMENTS,
+        COMPLETION_TOAST_TITLES,
+        completion_encouragement,
+        completion_toast_copy,
+    )
+
+    priority_task = make_task("关键推进", task_id="copy-p1", priority="P1", progress=100)
+    large_task = make_task("大块工作", task_id="copy-large", priority="P2", effort_minutes=120, progress=100)
+    progress_task = make_task("补齐收尾", task_id="copy-progress", priority="P3", effort_minutes=30, progress=40)
+    default_task = make_task("日常闭环", task_id="copy-default", priority="P3", effort_minutes=30, progress=100)
+
+    assert completion_toast_copy(priority_task) == completion_toast_copy(priority_task)
+    assert completion_toast_copy(priority_task)[0] in COMPLETION_TOAST_TITLES
+    assert completion_encouragement(priority_task) in COMPLETION_ENCOURAGEMENTS["priority"]
+    assert completion_encouragement(large_task) in COMPLETION_ENCOURAGEMENTS["large"]
+    assert completion_encouragement(progress_task) in COMPLETION_ENCOURAGEMENTS["progress"]
+    assert completion_encouragement(default_task) in COMPLETION_ENCOURAGEMENTS["default"]
+
+    general_bodies = {
+        completion_toast_copy(
+            make_task(f"日常闭环 {index}", task_id=f"copy-default-{index}", priority="P3", progress=100)
+        )[1]
+        for index in range(8)
+    }
+    assert len(general_bodies) > 1
 
 
 def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication) -> None:
