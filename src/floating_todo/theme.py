@@ -98,6 +98,26 @@ QPushButton#taskExpandButton:hover, QPushButton#taskCollapseButton:hover {{
     stop:0 #1D3147,
     stop:1 #1E4E4A);
 }}
+QPushButton#focusPauseButton, QPushButton#pauseTaskButton {{
+  background: #2D2414;
+  color: #FFE2A8;
+  font-weight: 800;
+}}
+QPushButton#focusPauseButton:hover, QPushButton#pauseTaskButton:hover {{
+  background: #4A3218;
+}}
+QPushButton#resumeTaskButton {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #123047,
+    stop:1 #115E59);
+  color: #ECFEFF;
+  font-weight: 800;
+}}
+QPushButton#resumeTaskButton:hover {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #155E75,
+    stop:1 #047857);
+}}
 QPushButton#dangerButton {{
   background: #3A1822;
   color: #FFD5DF;

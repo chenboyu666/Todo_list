@@ -64,7 +64,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(132)
+        self.setMinimumHeight(150)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -127,7 +127,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(132)
+        self.setMinimumHeight(150)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -207,7 +207,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(132)
+        self.setMinimumHeight(150)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -221,7 +221,7 @@ class DeadlineOutcomeChart(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(10, 12, -10, -10)
+        rect = QRectF(self.rect()).adjusted(10, 8, -10, -8)
         if rect.isEmpty():
             return
         total = sum(self.outcome_counts.values())
@@ -230,14 +230,14 @@ class DeadlineOutcomeChart(QWidget):
 
         font = painter.font()
         font.setBold(True)
-        font.setPointSize(22)
+        font.setPointSize(20)
         painter.setFont(font)
         painter.setPen(QColor("#ECFEFF"))
-        painter.drawText(QRectF(rect.left(), rect.top(), rect.width(), 36), Qt.AlignLeft, f"{rate}%")
+        painter.drawText(QRectF(rect.left(), rect.top(), 78, 34), Qt.AlignLeft | Qt.AlignVCenter, f"{rate}%")
         font.setPointSize(8)
         painter.setFont(font)
         painter.setPen(QColor("#9EB5C8"))
-        painter.drawText(QRectF(rect.left() + 72, rect.top() + 8, rect.width() - 72, 20), Qt.AlignLeft, "准时率")
+        painter.drawText(QRectF(rect.left() + 80, rect.top() + 9, rect.width() - 80, 20), Qt.AlignLeft, "准时率")
 
         bar_rect = QRectF(rect.left(), rect.top() + 48, rect.width(), 14)
         painter.setPen(Qt.NoPen)
@@ -264,7 +264,7 @@ class DeadlineOutcomeChart(QWidget):
             ("超时", self.outcome_counts["overdue"], "#FCA5A5"),
             ("无截止", self.outcome_counts["no_deadline"], "#9AA4B8"),
         )
-        legend_top = bar_rect.bottom() + 17
+        legend_top = bar_rect.bottom() + 14
         for index, (label, value, color) in enumerate(legend):
             x = rect.left() + index * rect.width() / 3
             painter.setBrush(QColor(color))
@@ -345,7 +345,7 @@ class HistoryWindow(QDialog):
         self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(760, 680)
+        self.setMinimumSize(760, 720)
         self.setStyleSheet(_history_window_style())
 
         root = QVBoxLayout(self)
@@ -406,6 +406,57 @@ class HistoryWindow(QDialog):
         ):
             summary_metrics.addWidget(metric, 1)
         stats_layout.addLayout(summary_metrics)
+
+        analytics_range = QHBoxLayout()
+        analytics_range.setContentsMargins(0, 0, 0, 0)
+        analytics_range.setSpacing(8)
+        analytics_title = QLabel("统计区间")
+        analytics_title.setObjectName("historyAnalyticsTitle")
+        analytics_range.addWidget(analytics_title)
+        self.analytics_count_label = QLabel("0 条")
+        self.analytics_count_label.setObjectName("historyAnalyticsCount")
+        self.analytics_count_label.setAlignment(Qt.AlignCenter)
+        analytics_range.addWidget(self.analytics_count_label)
+        analytics_range.addStretch(1)
+        self.analytics_all_button = self._range_preset_button(
+            "全部",
+            "统计全部完成记录",
+            "historyAnalyticsPresetButton",
+        )
+        self.analytics_week_button = self._range_preset_button(
+            "近7日",
+            "只统计最近 7 天完成记录",
+            "historyAnalyticsPresetButton",
+        )
+        self.analytics_month_button = self._range_preset_button(
+            "本月",
+            "只统计当前月份完成记录",
+            "historyAnalyticsPresetButton",
+        )
+        self.analytics_all_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("all"))
+        self.analytics_week_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("week"))
+        self.analytics_month_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("month"))
+        for preset_button in (self.analytics_all_button, self.analytics_week_button, self.analytics_month_button):
+            analytics_range.addWidget(preset_button)
+        self.analytics_start_date = self._date_edit(
+            "historyAnalyticsStartDate",
+            "historyAnalyticsStartCalendar",
+            "选择统计图表的起始完成日期",
+            "统计起始日期",
+        )
+        analytics_range.addWidget(_date_chip("起始", self.analytics_start_date), 1)
+        analytics_to_label = QLabel("→")
+        analytics_to_label.setObjectName("historyAnalyticsArrow")
+        analytics_to_label.setAlignment(Qt.AlignCenter)
+        analytics_range.addWidget(analytics_to_label)
+        self.analytics_end_date = self._date_edit(
+            "historyAnalyticsEndDate",
+            "historyAnalyticsEndCalendar",
+            "选择统计图表的结束完成日期",
+            "统计结束日期",
+        )
+        analytics_range.addWidget(_date_chip("结束", self.analytics_end_date), 1)
+        stats_layout.addLayout(analytics_range)
 
         chart_grid = QGridLayout()
         chart_grid.setContentsMargins(0, 0, 0, 0)
@@ -512,7 +563,10 @@ class HistoryWindow(QDialog):
         toolbar_layout.addLayout(search_row)
         toolbar_layout.addWidget(export_panel)
         root.addWidget(toolbar_panel)
+        self._configure_analytics_date_range()
         self._configure_export_date_range()
+        self.analytics_start_date.dateChanged.connect(self._render)
+        self.analytics_end_date.dateChanged.connect(self._render)
         self.export_start_date.dateChanged.connect(self._update_export_count)
         self.export_end_date.dateChanged.connect(self._update_export_count)
 
@@ -569,6 +623,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        card.setMinimumHeight(198)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(11, 9, 11, 10)
@@ -583,35 +638,64 @@ class HistoryWindow(QDialog):
         layout.addWidget(chart, 1)
         return card
 
-    def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
+    def _date_edit(self, object_name: str, calendar_name: str, tooltip: str, accessible_name: str) -> QDateEdit:
+        edit = QDateEdit()
+        edit.setObjectName(object_name)
+        edit.setCalendarPopup(True)
+        apply_dark_calendar_popup(edit, calendar_name)
+        edit.setDisplayFormat("yyyy-MM-dd")
+        edit.setToolTip(tooltip)
+        edit.setAccessibleName(accessible_name)
+        return edit
+
+    def _range_preset_button(self, text: str, tooltip: str, object_name: str) -> QPushButton:
         button = QPushButton(text)
-        button.setObjectName("historyExportPresetButton")
+        button.setObjectName(object_name)
         button.setToolTip(tooltip)
         button.setCursor(Qt.PointingHandCursor)
         return button
 
-    def _configure_export_date_range(self) -> None:
+    def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
+        return self._range_preset_button(text, tooltip, "historyExportPresetButton")
+
+    def _completed_date_bounds(self) -> tuple[date, date]:
         dates = [_task_completed_date(task) for task in self.tasks if task.status == "done"]
         dates = [item for item in dates if item is not None]
         if dates:
-            start = min(dates)
-            end = max(dates)
-        else:
-            today = QDate.currentDate().toPython()
-            start = today
-            end = today
-        self._export_min_date = start
-        self._export_max_date = end
+            return min(dates), max(dates)
+        today = QDate.currentDate().toPython()
+        return today, today
+
+    def _configure_date_range(self, start_edit: QDateEdit, end_edit: QDateEdit) -> tuple[date, date]:
+        start, end = self._completed_date_bounds()
         start_qdate = QDate(start.year, start.month, start.day)
         end_qdate = QDate(end.year, end.month, end.day)
-        for edit, value in ((self.export_start_date, start_qdate), (self.export_end_date, end_qdate)):
+        for edit, value in ((start_edit, start_qdate), (end_edit, end_qdate)):
             edit.setDateRange(start_qdate, end_qdate)
             edit.setDate(value)
+        return start, end
+
+    def _configure_export_date_range(self) -> None:
+        start, end = self._configure_date_range(self.export_start_date, self.export_end_date)
+        self._export_min_date = start
+        self._export_max_date = end
         self._update_export_count()
 
-    def _apply_export_preset(self, preset: str) -> None:
-        min_date = getattr(self, "_export_min_date", QDate.currentDate().toPython())
-        max_date = getattr(self, "_export_max_date", QDate.currentDate().toPython())
+    def _configure_analytics_date_range(self) -> None:
+        start, end = self._configure_date_range(self.analytics_start_date, self.analytics_end_date)
+        self._analytics_min_date = start
+        self._analytics_max_date = end
+        self._update_analytics_count()
+
+    def _apply_date_preset(
+        self,
+        preset: str,
+        *,
+        start_edit: QDateEdit,
+        end_edit: QDateEdit,
+        min_date: date,
+        max_date: date,
+    ) -> None:
         end = max_date
         if preset == "week":
             start = max(min_date, end - timedelta(days=6))
@@ -619,14 +703,43 @@ class HistoryWindow(QDialog):
             start = max(min_date, date(end.year, end.month, 1))
         else:
             start = min_date
-        self.export_start_date.setDate(QDate(start.year, start.month, start.day))
-        self.export_end_date.setDate(QDate(end.year, end.month, end.day))
+        start_edit.setDate(QDate(start.year, start.month, start.day))
+        end_edit.setDate(QDate(end.year, end.month, end.day))
+
+    def _apply_analytics_preset(self, preset: str) -> None:
+        min_date = getattr(self, "_analytics_min_date", QDate.currentDate().toPython())
+        max_date = getattr(self, "_analytics_max_date", QDate.currentDate().toPython())
+        self._apply_date_preset(
+            preset,
+            start_edit=self.analytics_start_date,
+            end_edit=self.analytics_end_date,
+            min_date=min_date,
+            max_date=max_date,
+        )
+        self._render()
+
+    def _apply_export_preset(self, preset: str) -> None:
+        min_date = getattr(self, "_export_min_date", QDate.currentDate().toPython())
+        max_date = getattr(self, "_export_max_date", QDate.currentDate().toPython())
+        self._apply_date_preset(
+            preset,
+            start_edit=self.export_start_date,
+            end_edit=self.export_end_date,
+            min_date=min_date,
+            max_date=max_date,
+        )
         self._update_export_count()
 
     def _update_export_count(self, *args) -> None:
         if not hasattr(self, "export_count_label"):
             return
         self.export_count_label.setText(f"{len(self._exportable_tasks())} 条")
+
+    def _update_analytics_count(self, tasks: list[Task] | None = None) -> None:
+        if not hasattr(self, "analytics_count_label"):
+            return
+        analytics_tasks = tasks if tasks is not None else self._analytics_tasks()
+        self.analytics_count_label.setText(f"{len(analytics_tasks)} 条")
 
     def _render(self) -> None:
         while self.list_layout.count():
@@ -636,7 +749,9 @@ class HistoryWindow(QDialog):
                 widget.deleteLater()
         completed = self._filtered_completed_tasks()
         self.count_label.setText(f"{len(completed)} 条")
-        self._update_metrics(completed)
+        analytics_completed = self._analytics_tasks(completed)
+        self._update_metrics(analytics_completed)
+        self._update_analytics_count(analytics_completed)
         self._update_export_count()
         if not completed:
             self._set_date_pager([], None)
@@ -716,9 +831,16 @@ class HistoryWindow(QDialog):
     def _exportable_tasks(self) -> list[Task]:
         return self._tasks_in_export_date_range(self._filtered_completed_tasks())
 
+    def _analytics_tasks(self, tasks: list[Task] | None = None) -> list[Task]:
+        source_tasks = self._filtered_completed_tasks() if tasks is None else tasks
+        return self._tasks_in_date_range(source_tasks, self.analytics_start_date, self.analytics_end_date)
+
     def _tasks_in_export_date_range(self, tasks: list[Task]) -> list[Task]:
-        start = self.export_start_date.date().toPython()
-        end = self.export_end_date.date().toPython()
+        return self._tasks_in_date_range(tasks, self.export_start_date, self.export_end_date)
+
+    def _tasks_in_date_range(self, tasks: list[Task], start_edit: QDateEdit, end_edit: QDateEdit) -> list[Task]:
+        start = start_edit.date().toPython()
+        end = end_edit.date().toPython()
         if start > end:
             start, end = end, start
         return [task for task in tasks if _date_in_range(_task_completed_date(task), start, end)]
@@ -1032,7 +1154,7 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
             )
 
 
-def _export_date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
+def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     chip = QFrame()
     chip.setObjectName("historyExportDateChip")
     layout = QHBoxLayout(chip)
@@ -1044,6 +1166,10 @@ def _export_date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     layout.addWidget(label)
     layout.addWidget(date_edit, 1)
     return chip
+
+
+def _export_date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
+    return _date_chip(label_text, date_edit)
 
 
 def _export_datetime(value) -> str:
@@ -1147,6 +1273,42 @@ QLabel#historyOverdueMetric {{
   color: #FFD5DF;
   background: #3A1822;
 }}
+QLabel#historyAnalyticsTitle {{
+  color: #F8FBFF;
+  font-size: 14px;
+  font-weight: 900;
+  padding: 0 2px;
+}}
+QLabel#historyAnalyticsCount {{
+  color: #ECFEFF;
+  background: #123047;
+  border: none;
+  border-radius: 8px;
+  min-width: 54px;
+  min-height: 28px;
+  font-weight: 900;
+}}
+QPushButton#historyAnalyticsPresetButton {{
+  color: #BDEAFE;
+  background: #101827;
+  border: none;
+  border-radius: 8px;
+  min-height: 28px;
+  padding: 3px 9px;
+  font-weight: 900;
+}}
+QPushButton#historyAnalyticsPresetButton:hover {{
+  color: #ECFEFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #14304A,
+    stop:1 #135E58);
+}}
+QLabel#historyAnalyticsArrow {{
+  color: #A7F3D0;
+  min-width: 22px;
+  font-size: 17px;
+  font-weight: 900;
+}}
 QFrame#historyChartCard {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
     stop:0 #0D1624,
@@ -1236,7 +1398,8 @@ QLabel#historyExportArrow {{
   font-weight: 900;
 }}
 QLineEdit#historySearch, QComboBox#historyMode, QComboBox#historyDateSelector,
-QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate {{
+QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate,
+QDateEdit#historyAnalyticsStartDate, QDateEdit#historyAnalyticsEndDate {{
   background: #101827;
   color: #ECFEFF;
   font-weight: 700;

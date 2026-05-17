@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from floating_todo.domain import Task, normalize_datetime, sort_tasks
+from floating_todo.domain import Task, normalize_datetime, sort_visible_tasks
 
 
 def deadline_at_label(deadline: datetime | None) -> str:
@@ -44,7 +44,7 @@ def deadline_urgency(deadline: datetime | None, now: datetime) -> tuple[str, str
 
 
 def today_completion_percent(tasks: list[Task]) -> int:
-    visible = [task for task in tasks if task.status in {"active", "done"}]
+    visible = [task for task in tasks if task.status in {"active", "paused", "done"}]
     if not visible:
         return 0
     done = [task for task in visible if task.status == "done"]
@@ -54,12 +54,16 @@ def today_completion_percent(tasks: list[Task]) -> int:
 def task_rows(tasks: list[Task], now: datetime) -> list[dict[str, object]]:
     now = normalize_datetime(now)
     rows: list[dict[str, object]] = []
-    for task in sort_tasks(tasks):
+    for task in sort_visible_tasks(tasks):
         urgency, urgency_label = deadline_urgency(task.deadline, now)
+        if task.status == "paused":
+            urgency, urgency_label = "paused", "已暂停"
         rows.append(
             {
                 "id": task.id,
                 "title": task.title,
+                "status": task.status,
+                "is_paused": task.status == "paused",
                 "notes": task.notes,
                 "priority": task.priority,
                 "effort_label": f"{task.effort_minutes} min",
