@@ -130,26 +130,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-### PySide6 下载很慢或文件很大
-
-这是正常的。PySide6 包含 Qt 运行库，首次安装会下载比较大的依赖。下载完成后再次打包会快很多。
-
-### 能不能只发 exe
-
-不建议。当前是文件夹式打包，单独的 exe 离开同目录依赖后通常无法运行。请发送 `release\V1.0\Todo-list-V1.0-windows.zip`。
-
-### conda 环境能不能用
-
-可以，但不是必须。使用 conda 时建议单独创建 Python 3.10 环境：
-
-```cmd
-conda create -n todo-list python=3.10 -y
-conda activate todo-list
-pip install -r requirements.txt
-pip install -e .
-python -m floating_todo
-```
-
 ## 项目结构
 
 ```text
