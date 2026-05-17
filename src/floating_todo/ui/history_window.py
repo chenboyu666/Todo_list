@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import csv
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -115,6 +117,7 @@ class HistoryWindow(QDialog):
         self.store = store
         self._selected_date_key: str | None = None
         self._selected_page_index = 0
+        self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setMinimumSize(520, 560)
@@ -177,6 +180,12 @@ class HistoryWindow(QDialog):
         stats_layout.addLayout(summary_metrics)
         root.addWidget(stats_panel)
 
+        toolbar_panel = QFrame()
+        toolbar_panel.setObjectName("historyToolbar")
+        toolbar_layout = QVBoxLayout(toolbar_panel)
+        toolbar_layout.setContentsMargins(7, 7, 7, 7)
+        toolbar_layout.setSpacing(8)
+
         search_row = QHBoxLayout()
         search_row.setContentsMargins(0, 0, 0, 0)
         search_row.setSpacing(8)
@@ -205,27 +214,60 @@ class HistoryWindow(QDialog):
         self.page_size_step_hint.setAlignment(Qt.AlignCenter)
         self.page_size_step_hint.setToolTip("说明每页条数右侧灰色箭头的含义")
         search_row.addWidget(self.page_size_step_hint)
+
+        export_row = QHBoxLayout()
+        export_row.setContentsMargins(0, 0, 0, 0)
+        export_row.setSpacing(8)
+        export_range_label = QLabel("导出日期")
+        export_range_label.setObjectName("historyToolbarLabel")
+        export_row.addWidget(export_range_label)
+        self.export_start_date = QDateEdit()
+        self.export_start_date.setObjectName("historyExportStartDate")
+        self.export_start_date.setCalendarPopup(True)
+        self.export_start_date.setDisplayFormat("yyyy-MM-dd")
+        self.export_start_date.setToolTip("选择 CSV 导出的起始完成日期")
+        self.export_start_date.setAccessibleName("导出起始日期")
+        export_row.addWidget(self.export_start_date)
+        export_to_label = QLabel("至")
+        export_to_label.setObjectName("historyToolbarLabel")
+        export_row.addWidget(export_to_label)
+        self.export_end_date = QDateEdit()
+        self.export_end_date.setObjectName("historyExportEndDate")
+        self.export_end_date.setCalendarPopup(True)
+        self.export_end_date.setDisplayFormat("yyyy-MM-dd")
+        self.export_end_date.setToolTip("选择 CSV 导出的结束完成日期")
+        self.export_end_date.setAccessibleName("导出结束日期")
+        export_row.addWidget(self.export_end_date)
+        export_row.addStretch(1)
         self.export_button = QPushButton("导出 CSV")
         self.export_button.setObjectName("historyExportButton")
-        self.export_button.setToolTip("导出当前筛选后的历史记录表格")
+        self.export_button.setToolTip("导出当前搜索结果中日期范围内的历史记录表格")
         self.export_button.clicked.connect(self.export_history)
-        search_row.addWidget(self.export_button)
-        search_panel = QFrame()
-        search_panel.setObjectName("historyToolbar")
-        search_panel.setLayout(search_row)
-        root.addWidget(search_panel)
+        export_row.addWidget(self.export_button)
+        toolbar_layout.addLayout(search_row)
+        toolbar_layout.addLayout(export_row)
+        root.addWidget(toolbar_panel)
+        self._configure_export_date_range()
 
         self.date_pager_widget = QWidget()
         date_pager_layout = QHBoxLayout(self.date_pager_widget)
         date_pager_layout.setContentsMargins(0, 0, 0, 0)
         date_pager_layout.setSpacing(8)
+        date_selector_label = QLabel("日期")
+        date_selector_label.setObjectName("historyToolbarLabel")
+        date_pager_layout.addWidget(date_selector_label)
+        self.date_selector = QComboBox()
+        self.date_selector.setObjectName("historyDateSelector")
+        self.date_selector.setToolTip("选择要查看的完成日期")
+        self.date_selector.currentIndexChanged.connect(self._select_date_from_combo)
+        date_pager_layout.addWidget(self.date_selector, 1)
+        self.date_page_label = QLabel("")
+        self.date_page_label.setObjectName("historyPageLabel")
+        date_pager_layout.addWidget(self.date_page_label, 1)
         self.prev_date_button = QPushButton("上一页")
         self.prev_date_button.setObjectName("historyPageButton")
         self.prev_date_button.clicked.connect(lambda checked=False: self._move_date_page(-1))
         date_pager_layout.addWidget(self.prev_date_button)
-        self.date_page_label = QLabel("")
-        self.date_page_label.setObjectName("historyPageLabel")
-        date_pager_layout.addWidget(self.date_page_label, 1)
         self.next_date_button = QPushButton("下一页")
         self.next_date_button.setObjectName("historyPageButton")
         self.next_date_button.clicked.connect(lambda checked=False: self._move_date_page(1))
@@ -255,6 +297,22 @@ class HistoryWindow(QDialog):
         label.setMinimumHeight(32)
         label.setWordWrap(False)
         return label
+
+    def _configure_export_date_range(self) -> None:
+        dates = [_task_completed_date(task) for task in self.tasks if task.status == "done"]
+        dates = [item for item in dates if item is not None]
+        if dates:
+            start = min(dates)
+            end = max(dates)
+        else:
+            today = QDate.currentDate().toPython()
+            start = today
+            end = today
+        start_qdate = QDate(start.year, start.month, start.day)
+        end_qdate = QDate(end.year, end.month, end.day)
+        for edit, value in ((self.export_start_date, start_qdate), (self.export_end_date, end_qdate)):
+            edit.setDateRange(start_qdate, end_qdate)
+            edit.setDate(value)
 
     def _render(self) -> None:
         while self.list_layout.count():
@@ -330,6 +388,16 @@ class HistoryWindow(QDialog):
             or query in task.notes.lower()
         ]
 
+    def _exportable_tasks(self) -> list[Task]:
+        return self._tasks_in_export_date_range(self._filtered_completed_tasks())
+
+    def _tasks_in_export_date_range(self, tasks: list[Task]) -> list[Task]:
+        start = self.export_start_date.date().toPython()
+        end = self.export_end_date.date().toPython()
+        if start > end:
+            start, end = end, start
+        return [task for task in tasks if _date_in_range(_task_completed_date(task), start, end)]
+
     def _group_completed_tasks(self, tasks: list[Task]) -> list[tuple[str, list[Task]]]:
         sorted_tasks = sorted(tasks, key=lambda item: item.completed_at or item.updated_at, reverse=True)
         groups: dict[str, list[Task]] = {}
@@ -393,6 +461,7 @@ class HistoryWindow(QDialog):
         self.date_pager_widget.setVisible(visible)
         if not visible or selected_title is None:
             self.date_page_label.setText("")
+            self._sync_date_selector([], None)
             self.prev_date_button.setEnabled(False)
             self.next_date_button.setEnabled(False)
             return
@@ -400,23 +469,26 @@ class HistoryWindow(QDialog):
         index = titles.index(selected_title)
         selected_tasks = groups[index][1]
         self._clamp_selected_page(selected_tasks)
+        self._sync_date_selector(groups, selected_title)
         page_size = self._page_size()
         page_count = self._page_count(selected_tasks)
         start = self._selected_page_index * page_size + 1
         end = min(len(selected_tasks), start + page_size - 1)
         self.date_page_label.setText(
-            f"{selected_title} · {start}-{end}/{len(selected_tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
+            f"{start}-{end}/{len(selected_tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
         )
-        self.prev_date_button.setEnabled(index > 0 or self._selected_page_index > 0)
-        self.next_date_button.setEnabled(index < len(groups) - 1 or self._selected_page_index < page_count - 1)
+        self.prev_date_button.setEnabled(self._selected_page_index > 0)
+        self.next_date_button.setEnabled(self._selected_page_index < page_count - 1)
 
     def _set_level_pager(self, tasks: list[Task]) -> None:
         self.date_pager_widget.setVisible(bool(tasks))
         if not tasks:
             self.date_page_label.setText("")
+            self._sync_date_selector([], None)
             self.prev_date_button.setEnabled(False)
             self.next_date_button.setEnabled(False)
             return
+        self._sync_date_selector([], None)
         self._clamp_selected_page(tasks)
         page_size = self._page_size()
         page_count = self._page_count(tasks)
@@ -427,6 +499,32 @@ class HistoryWindow(QDialog):
         )
         self.prev_date_button.setEnabled(self._selected_page_index > 0)
         self.next_date_button.setEnabled(self._selected_page_index < page_count - 1)
+
+    def _sync_date_selector(self, groups: list[tuple[str, list[Task]]], selected_title: str | None) -> None:
+        self._syncing_date_selector = True
+        try:
+            self.date_selector.clear()
+            for title, tasks in groups:
+                self.date_selector.addItem(f"{title}  ·  {len(tasks)} 条", title)
+            if selected_title is None:
+                self.date_selector.addItem("全部等级", "")
+                self.date_selector.setEnabled(False)
+                return
+            self.date_selector.setEnabled(True)
+            index = self.date_selector.findData(selected_title)
+            self.date_selector.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            self._syncing_date_selector = False
+
+    def _select_date_from_combo(self, index: int) -> None:
+        if self._syncing_date_selector or index < 0:
+            return
+        selected = self.date_selector.itemData(index)
+        if not selected or selected == self._selected_date_key:
+            return
+        self._selected_date_key = str(selected)
+        self._selected_page_index = 0
+        self._render()
 
     def _move_date_page(self, offset: int) -> None:
         if self.group_mode.currentText() != "按日期":
@@ -447,17 +545,9 @@ class HistoryWindow(QDialog):
         current_tasks = groups[current_index][1]
         self._clamp_selected_page(current_tasks)
         next_page = self._selected_page_index + offset
-        page_count = self._page_count(current_tasks)
-        if 0 <= next_page < page_count:
+        if 0 <= next_page < self._page_count(current_tasks):
             self._selected_page_index = next_page
             self._render()
-            return
-        next_index = current_index + (1 if offset > 0 else -1)
-        if not 0 <= next_index < len(groups):
-            return
-        self._selected_date_key = titles[next_index]
-        self._selected_page_index = 0 if offset > 0 else self._page_count(groups[next_index][1]) - 1
-        self._render()
 
     def _group_header(self, title: str, count: int) -> QLabel:
         label = QLabel(f"{title} · {count} 条")
@@ -548,7 +638,7 @@ class HistoryWindow(QDialog):
         return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
     def export_history(self) -> None:
-        tasks = self._filtered_completed_tasks()
+        tasks = self._exportable_tasks()
         if not tasks:
             QMessageBox.information(self, "导出历史记录", "没有可导出的历史记录。")
             return
@@ -567,7 +657,7 @@ class HistoryWindow(QDialog):
         QMessageBox.information(self, "导出历史记录", f"已导出 {count} 条历史记录。")
 
     def export_history_to_path(self, path: str | Path, tasks: list[Task] | None = None) -> int:
-        export_tasks = list(tasks if tasks is not None else self._filtered_completed_tasks())
+        export_tasks = list(tasks if tasks is not None else self._exportable_tasks())
         export_history_csv(path, export_tasks)
         return len(export_tasks)
 
@@ -619,6 +709,15 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
 
 def _export_datetime(value) -> str:
     return value.astimezone().strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+
+def _task_completed_date(task: Task) -> date | None:
+    value = task.completed_at or task.updated_at
+    return value.astimezone().date() if value else None
+
+
+def _date_in_range(value: date | None, start: date, end: date) -> bool:
+    return value is not None and start <= value <= end
 
 
 def _history_window_style() -> str:
@@ -690,7 +789,13 @@ QFrame#historyToolbar {{
   border-radius: 8px;
   padding: 7px;
 }}
-QLineEdit#historySearch, QComboBox#historyMode {{
+QLabel#historyToolbarLabel {{
+  color: #BFD0E2;
+  font-weight: 900;
+  padding: 0 4px;
+}}
+QLineEdit#historySearch, QComboBox#historyMode, QComboBox#historyDateSelector,
+QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate {{
   background: #101827;
   font-weight: 700;
 }}

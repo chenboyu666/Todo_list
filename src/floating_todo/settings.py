@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any
 
 
 DEFAULT_GEOMETRY = {"x": 1100, "y": 120, "width": 540, "height": 620}
+DEFAULT_LOW_DISTRACTION_MODE = False
+DEFAULT_NOTIFICATION_REPEAT_MINUTES = 10
+DEFAULT_BACKGROUND_OVERLAY = 0.68
 
 
 @dataclass(frozen=True)
@@ -17,15 +20,15 @@ class AppSettings:
     close_to_tray: bool = True
     launch_on_startup: bool = False
     opacity: float = 0.96
-    low_distraction_mode: bool = False
+    low_distraction_mode: bool = DEFAULT_LOW_DISTRACTION_MODE
     notification_lead_minutes: int = 15
-    notification_repeat_minutes: int = 10
+    notification_repeat_minutes: int = DEFAULT_NOTIFICATION_REPEAT_MINUTES
     window_geometry: Mapping[str, int] = field(default_factory=lambda: MappingProxyType(dict(DEFAULT_GEOMETRY)))
     theme: str = "calm-tech-dark"
     focus_task_id: str | None = None
     background_image_path: str = ""
     background_enabled: bool = False
-    background_overlay: float = 0.68
+    background_overlay: float = DEFAULT_BACKGROUND_OVERLAY
     icon_path: str = ""
 
     def __post_init__(self) -> None:
@@ -75,8 +78,6 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
                 geometry[key] = _coerce_int(raw_geometry[key], DEFAULT_GEOMETRY[key])
     opacity = _coerce_float(data.get("opacity", 0.96), 0.96)
     opacity = max(0.3, min(1.0, opacity))
-    background_overlay = _coerce_float(data.get("background_overlay", 0.68), 0.68)
-    background_overlay = max(0.25, min(0.95, background_overlay))
     raw_focus_task_id = data.get("focus_task_id")
     raw_background_path = data.get("background_image_path", "")
     raw_icon_path = data.get("icon_path", "")
@@ -87,16 +88,25 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         close_to_tray=_coerce_bool(data.get("close_to_tray", True), True),
         launch_on_startup=_coerce_bool(data.get("launch_on_startup", False), False),
         opacity=opacity,
-        low_distraction_mode=_coerce_bool(data.get("low_distraction_mode", False), False),
+        low_distraction_mode=DEFAULT_LOW_DISTRACTION_MODE,
         notification_lead_minutes=max(1, _coerce_int(data.get("notification_lead_minutes", 15), 15)),
-        notification_repeat_minutes=max(1, _coerce_int(data.get("notification_repeat_minutes", 10), 10)),
+        notification_repeat_minutes=DEFAULT_NOTIFICATION_REPEAT_MINUTES,
         window_geometry=geometry,
         theme=str(data.get("theme", "calm-tech-dark")),
         focus_task_id=str(raw_focus_task_id) if raw_focus_task_id else None,
         background_image_path=str(raw_background_path) if raw_background_path else "",
         background_enabled=_coerce_bool(data.get("background_enabled", False), False),
-        background_overlay=background_overlay,
+        background_overlay=DEFAULT_BACKGROUND_OVERLAY,
         icon_path=str(raw_icon_path) if raw_icon_path else "",
+    )
+
+
+def remove_deprecated_setting_features(settings: AppSettings) -> AppSettings:
+    return replace(
+        settings,
+        low_distraction_mode=DEFAULT_LOW_DISTRACTION_MODE,
+        notification_repeat_minutes=DEFAULT_NOTIFICATION_REPEAT_MINUTES,
+        background_overlay=DEFAULT_BACKGROUND_OVERLAY,
     )
 
 
@@ -108,14 +118,14 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "close_to_tray": settings.close_to_tray,
         "launch_on_startup": settings.launch_on_startup,
         "opacity": settings.opacity,
-        "low_distraction_mode": settings.low_distraction_mode,
+        "low_distraction_mode": DEFAULT_LOW_DISTRACTION_MODE,
         "notification_lead_minutes": settings.notification_lead_minutes,
-        "notification_repeat_minutes": settings.notification_repeat_minutes,
+        "notification_repeat_minutes": DEFAULT_NOTIFICATION_REPEAT_MINUTES,
         "window_geometry": dict(settings.window_geometry),
         "theme": settings.theme,
         "focus_task_id": settings.focus_task_id,
         "background_image_path": settings.background_image_path,
         "background_enabled": settings.background_enabled,
-        "background_overlay": settings.background_overlay,
+        "background_overlay": DEFAULT_BACKGROUND_OVERLAY,
         "icon_path": settings.icon_path,
     }

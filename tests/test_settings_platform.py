@@ -87,12 +87,14 @@ def test_malformed_settings_fall_back_without_raising():
     assert settings_from_dict({"opacity": None}).opacity == 0.96
 
 
-def test_notification_repeat_minutes_round_trip_and_clamps_minimum():
+def test_removed_settings_are_forced_to_defaults_for_compatibility():
     settings = settings_from_dict({"notification_repeat_minutes": "12"})
 
-    assert settings.notification_repeat_minutes == 12
-    assert settings_to_dict(settings)["notification_repeat_minutes"] == 12
-    assert settings_from_dict({"notification_repeat_minutes": 0}).notification_repeat_minutes == 1
+    assert settings.notification_repeat_minutes == 10
+    assert settings_to_dict(settings)["notification_repeat_minutes"] == 10
+    assert settings_from_dict({"notification_repeat_minutes": 0}).notification_repeat_minutes == 10
+    assert settings_from_dict({"low_distraction_mode": True}).low_distraction_mode is False
+    assert settings_from_dict({"background_overlay": 0.35}).background_overlay == 0.68
 
 
 def test_boolean_strings_parse_predictably():
@@ -103,7 +105,7 @@ def test_boolean_strings_parse_predictably():
             "lock_position": "0",
             "close_to_tray": "true",
             "launch_on_startup": "1",
-            "low_distraction_mode": "false",
+            "low_distraction_mode": "true",
         }
     )
 
