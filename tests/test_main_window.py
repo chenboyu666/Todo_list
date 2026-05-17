@@ -83,6 +83,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
     assert window.minimumWidth() >= 520
+    assert window.minimumHeight() >= 560
     assert not window.empty_state_widget.isHidden()
     assert window.empty_state_label.text() == "没有进行中的任务"
     assert window.empty_state_hint_label.text() == "点击新增任务开始"
@@ -97,6 +98,21 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.focus_delete_button.isEnabled() is False
     assert window.active_count_label.text() == "0"
     assert window.today_completion_label.text() == "0%"
+
+    window.close()
+
+
+def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    window = MainWindow(MemoryStore([]))
+
+    window.resize(520, 420)
+    qapp.processEvents()
+
+    assert window.width() >= window.minimumWidth()
+    assert window.height() >= window.minimumHeight()
+    assert window.minimumHeight() >= 560
 
     window.close()
 

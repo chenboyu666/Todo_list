@@ -59,6 +59,8 @@ from floating_todo.view_models import (
 
 
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
+MAIN_WINDOW_MINIMUM_WIDTH = 520
+MAIN_WINDOW_MINIMUM_HEIGHT = 560
 
 
 class TaskStore(Protocol):
@@ -378,7 +380,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.apply_window_behavior_settings()
         self.apply_icon_settings()
-        self.setMinimumSize(520, 420)
+        self.setMinimumSize(MAIN_WINDOW_MINIMUM_WIDTH, MAIN_WINDOW_MINIMUM_HEIGHT)
         self.apply_saved_geometry()
 
         self.clock_label = ClockDisplay()
