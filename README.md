@@ -65,16 +65,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
 打包完成后，程序会生成在：
 
 ```text
-dist\Todo list\Todo list.exe
+dist\Todo list.exe
 ```
 
 可以双击运行：
 
 ```text
-dist\Todo list\Todo list.exe
+dist\Todo list.exe
 ```
-
-注意：这是 PyInstaller 的 `onedir` 打包方式，`Todo list.exe` 依赖同目录下的动态库、Qt 插件和资源文件。分享给别人时不要只发送单独的 exe，应该发送整个 `dist\Todo list` 文件夹，或者发送压缩包。
 
 ## V1.0 发布包
 
@@ -93,8 +91,10 @@ release\V1.0\Todo-list-V1.0-windows.zip
 使用者只需要解压 zip，然后双击：
 
 ```text
-Todo list\Todo list.exe
+Todo list.exe
 ```
+
+压缩包内只包含可运行的 `Todo list.exe`，不会包含快捷方式。
 
 ## 测试
 
@@ -109,10 +109,10 @@ python -m pytest -q
 打包版本会在程序目录下创建：
 
 ```text
-dist\Todo list\data\
+dist\data\
 ```
 
-任务、设置、历史记录等数据会保存在这里。移动整个 `Todo list` 文件夹时，数据也会一起移动。
+任务、设置、历史记录等数据会保存在这里。移动程序时，请把 `Todo list.exe` 和同级的 `data` 文件夹一起移动。
 
 ## 常见问题
 

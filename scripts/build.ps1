@@ -36,7 +36,7 @@ Remove-ProjectDirectory -RelativePath "dist"
 
 & ".venv\Scripts\pyinstaller.exe" @(
     "--noconfirm",
-    "--onedir",
+    "--onefile",
     "--windowed",
     "--name",
     "Todo list",
@@ -67,5 +67,5 @@ Remove-ProjectDirectory -RelativePath "dist"
     "src/floating_todo/__main__.py"
 )
 
-New-Item -ItemType Directory -Force -Path "dist/Todo list/data" | Out-Null
-Write-Host "Build complete: dist/Todo list/Todo list.exe"
+New-Item -ItemType Directory -Force -Path "dist/data" | Out-Null
+Write-Host "Build complete: dist/Todo list.exe"
