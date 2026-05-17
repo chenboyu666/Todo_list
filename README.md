@@ -22,17 +22,13 @@
 - 个性设置：支持透明度、背景图片或动图、程序图标、置顶、开机启动、最小化到托盘等设置。
 - 鼠标穿透：置顶时可开启鼠标穿透，让点击落到后方窗口；可通过托盘菜单恢复。
 
-## 运行环境
+## 开发环境
 
 - Windows 10/11
 - Python 3.10 或更高版本
 - PowerShell 或 cmd
 
-不强制使用 conda。普通 Python 虚拟环境 `.venv` 就可以运行和打包。
-
-## 从源码运行
-
-从 GitHub 下载或克隆项目后，在项目根目录执行：
+## 本地开发
 
 ```powershell
 python -m venv .venv
@@ -42,60 +38,6 @@ pip install -e .
 python -m floating_todo
 ```
 
-如果 PowerShell 提示不能激活虚拟环境，可以先执行一次：
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-如果你正在使用 cmd，也可以直接用虚拟环境里的 Python：
-
-```cmd
-.\.venv\Scripts\python -m floating_todo
-```
-
-## 打包 exe
-
-项目已经提供打包脚本：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
-```
-
-打包完成后，程序会生成在：
-
-```text
-dist\Todo list.exe
-```
-
-可以双击运行：
-
-```text
-dist\Todo list.exe
-```
-
-## V1.0 发布包
-
-本地发布文件会放在：
-
-```text
-release\V1.0\
-```
-
-推荐分享这个压缩包：
-
-```text
-release\V1.0\Todo-list-V1.0-windows.zip
-```
-
-使用者只需要解压 zip，然后双击：
-
-```text
-Todo list.exe
-```
-
-压缩包内只包含可运行的 `Todo list.exe`，不会包含快捷方式。
-
 ## 测试
 
 ```powershell
@@ -104,30 +46,26 @@ python -m pytest -q
 
 当前测试覆盖任务排序、提醒、设置、历史统计、导出、托盘、主窗口交互和打包脚本等核心逻辑。
 
-## 数据保存
+## 构建
 
-打包版本会在程序目录下创建：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
+```
+
+构建产物：
 
 ```text
-dist\data\
+dist\Todo list.exe
 ```
 
-任务、设置、历史记录等数据会保存在这里。移动程序时，请把 `Todo list.exe` 和同级的 `data` 文件夹一起移动。
+## 运行时数据
 
-## 常见问题
+程序会在运行目录下自动创建 `data` 文件夹，用于保存任务、设置和历史记录。
 
-### 运行 `.\build.ps1` 提示不是命令
-
-如果你在 cmd 里运行，需要用：
-
-```cmd
-powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
-```
-
-如果你已经在 `scripts` 目录里，则运行：
-
-```cmd
-powershell -ExecutionPolicy Bypass -File .\build.ps1
+```text
+data\
+  tasks.json
+  settings.json
 ```
 
 ## 项目结构
@@ -138,6 +76,6 @@ src\floating_todo\ui\     PySide6 界面
 src\floating_todo\assets\ 图标、字体、背景资源
 tests\                    自动化测试
 scripts\build.ps1         Windows 打包脚本
-dist\                     本地打包输出，不提交到 GitHub
-release\                  本地发布压缩包，不提交到 GitHub
+pyproject.toml            Python 项目配置
+requirements.txt          开发和打包依赖
 ```
