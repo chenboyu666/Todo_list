@@ -536,6 +536,11 @@ class MainWindow(QMainWindow):
         self.focus_pause_button.setToolTip("暂停当前任务，暂时移出进行中和提醒")
         self.focus_pause_button.clicked.connect(self.pause_focus_task)
         focus_actions.addWidget(self.focus_pause_button)
+        self.focus_resume_button = QPushButton("继续")
+        self.focus_resume_button.setObjectName("resumeTaskButton")
+        self.focus_resume_button.setToolTip("继续暂停中的当前任务")
+        self.focus_resume_button.clicked.connect(self.resume_focus_task)
+        focus_actions.addWidget(self.focus_resume_button)
         self.focus_complete_button = QPushButton("完成")
         self.focus_complete_button.setObjectName("focusCompleteButton")
         self.focus_complete_button.setToolTip("完成当前进行中的任务")
@@ -621,7 +626,11 @@ class MainWindow(QMainWindow):
     def focus_task(self) -> Task | None:
         if self.settings.focus_task_id:
             focused = next(
-                (task for task in self.tasks if task.id == self.settings.focus_task_id and task.status == "active"),
+                (
+                    task
+                    for task in self.tasks
+                    if task.id == self.settings.focus_task_id and task.status in {"active", "paused"}
+                ),
                 None,
             )
             if focused:
@@ -652,9 +661,15 @@ class MainWindow(QMainWindow):
 
     def pause_focus_task(self) -> None:
         focused = self.focus_task()
-        if focused is None:
+        if focused is None or focused.status != "active":
             return
         self.pause_task(focused.id)
+
+    def resume_focus_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None or focused.status != "paused":
+            return
+        self.resume_task(focused.id, make_focus=True)
 
     def delete_focus_task(self) -> None:
         focused = self.focus_task()
@@ -754,9 +769,8 @@ class MainWindow(QMainWindow):
         now = datetime.now(timezone.utc)
         paused = replace(self.tasks[index], status="paused", updated_at=now)
         self.tasks = [*self.tasks[:index], paused, *self.tasks[index + 1 :]]
-        if self.settings.focus_task_id == task_id:
-            self.settings = replace(self.settings, focus_task_id=None)
-            self._save_settings()
+        self.settings = replace(self.settings, focus_task_id=task_id)
+        self._save_settings()
         self.store.save_tasks(self.tasks)
         self.refresh()
         self.show_toast("已暂停", f"{paused.title}\n暂时移出进行中与提醒，需要时点继续恢复。", kind="info", duration_ms=4200)
@@ -1129,11 +1143,12 @@ class MainWindow(QMainWindow):
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
             self.focus_progress.setValue(0)
             self.focus_progress_label.setValue(0)
-            self._set_focus_action_enabled(False)
+            self._set_focus_action_state(None)
             self.empty_state_hint_label.setText("可继续暂停任务，或点击新增任务" if paused_count else "点击新增任务开始")
             self.empty_state_widget.show()
         else:
-            urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
+            is_paused_focus = focus_task.status == "paused"
+            urgency, urgency_label = ("paused", "已暂停") if is_paused_focus else deadline_urgency(focus_task.deadline, now)
             self.focus_title_label.setText(focus_task.title)
             self.focus_title_label.setToolTip(focus_task.title)
             self.focus_meta_label.setText(f"工作量 {focus_task.effort_minutes} min")
@@ -1154,7 +1169,7 @@ class MainWindow(QMainWindow):
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
             self.focus_progress.setValue(focus_task.progress)
             self.focus_progress_label.setValue(focus_task.progress)
-            self._set_focus_action_enabled(True)
+            self._set_focus_action_state(focus_task.status)
             self.empty_state_widget.hide()
         self.focus_progress.blockSignals(False)
         self.focus_progress_label.blockSignals(False)
@@ -1367,10 +1382,17 @@ class MainWindow(QMainWindow):
         self.update_task_progress(task_id, value)
 
     def _set_focus_action_enabled(self, enabled: bool) -> None:
-        for button in (self.focus_edit_button, self.focus_pause_button, self.focus_complete_button, self.focus_delete_button):
-            button.setEnabled(enabled)
-        self.focus_progress.setEnabled(enabled)
-        self.focus_progress_label.setEnabled(enabled)
+        self._set_focus_action_state("active" if enabled else None)
+
+    def _set_focus_action_state(self, status: str | None) -> None:
+        has_task = status in {"active", "paused"}
+        self.focus_edit_button.setEnabled(has_task)
+        self.focus_pause_button.setEnabled(status == "active")
+        self.focus_resume_button.setEnabled(status == "paused")
+        self.focus_complete_button.setEnabled(has_task)
+        self.focus_delete_button.setEnabled(has_task)
+        self.focus_progress.setEnabled(has_task)
+        self.focus_progress_label.setEnabled(has_task)
 
     def _set_focus_notes(self, notes: str) -> None:
         preview = _note_preview(notes, limit=92)

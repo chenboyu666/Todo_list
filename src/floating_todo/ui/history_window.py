@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSizeGrip,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -345,8 +346,10 @@ class HistoryWindow(QDialog):
         self._syncing_date_selector = False
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(820, 860)
+        self.setMinimumSize(980, 960)
+        self.resize(1080, 1040)
         self.setStyleSheet(_history_window_style())
+        self.setSizeGripEnabled(True)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
@@ -377,7 +380,7 @@ class HistoryWindow(QDialog):
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setMinimumHeight(360)
+        stats_panel.setMinimumHeight(386)
         stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(12, 10, 12, 12)
         stats_layout.setSpacing(10)
@@ -610,9 +613,17 @@ class HistoryWindow(QDialog):
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
-        scroll.setMinimumHeight(172)
+        scroll.setMinimumHeight(250)
         self.history_scroll_area = scroll
         root.addWidget(scroll, 1)
+
+        resize_row = QHBoxLayout()
+        resize_row.setContentsMargins(0, 0, 0, 0)
+        resize_row.addStretch(1)
+        self.history_resize_grip = QSizeGrip(self)
+        self.history_resize_grip.setToolTip("拖动调整历史窗口大小")
+        resize_row.addWidget(self.history_resize_grip)
+        root.addLayout(resize_row)
         self._render()
 
     def _metric_label(self, text: str, object_name: str = "historyMetricChip") -> QLabel:
@@ -627,7 +638,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(214)
+        card.setFixedHeight(224)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(11, 9, 11, 10)
@@ -1009,6 +1020,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        card.setMinimumHeight(178)
         apply_soft_shadow(card, blur=28, y_offset=10, alpha=105)
         shell = QHBoxLayout(card)
         shell.setContentsMargins(0, 0, 0, 0)
@@ -1063,6 +1075,7 @@ class HistoryWindow(QDialog):
             preview = QLabel(preview_text)
             preview.setWordWrap(True)
             preview.setObjectName("historyPreview")
+            preview.setMinimumHeight(44)
             layout.addWidget(preview)
         note_button = QPushButton("查看/编辑备注")
         note_button.setObjectName("historyNoteButton")
@@ -1084,7 +1097,7 @@ class HistoryWindow(QDialog):
             previews.append(f"完成体会：{reflection}")
         return previews or ["还没有记录备注或完成体会"]
 
-    def _compact_text(self, text: str, limit: int = 54) -> str:
+    def _compact_text(self, text: str, limit: int = 120) -> str:
         compact = " ".join(str(text or "").split())
         return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
@@ -1509,7 +1522,9 @@ QLabel#historyPreview {{
   background: #0C1421;
   border: none;
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 10px 10px;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
 }}
 """
