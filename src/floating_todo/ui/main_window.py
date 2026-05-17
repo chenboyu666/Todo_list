@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
-from math import sin
 from pathlib import Path
 from typing import Protocol
 
@@ -112,28 +111,26 @@ class ClockDisplay(QLabel):
         fill.setColorAt(1, QColor(22, 78, 73, 226))
         painter.fillPath(path, fill)
         painter.setClipPath(path)
-        self._draw_clock_stars(painter, rect)
+        self._draw_clock_sweep(painter, rect)
         painter.setClipping(False)
         painter.setPen(QPen(QColor(125, 211, 252, 90), 1.1))
         painter.drawPath(path)
         painter.end()
         super().paintEvent(event)
 
-    def _draw_clock_stars(self, painter: QPainter, rect: QRectF) -> None:
+    def _draw_clock_sweep(self, painter: QPainter, rect: QRectF) -> None:
         painter.setPen(Qt.NoPen)
-        for index in range(10):
-            x = rect.left() + 10 + ((index * 23 + self._phase * 0.7) % max(1, int(rect.width() - 20)))
-            y = rect.top() + 7 + ((index * 17 + self._phase * 0.35) % max(1, int(rect.height() - 14)))
-            twinkle = (sin((self._phase + index * 31) / 18) + 1) / 2
-            alpha = 42 + int(twinkle * 82)
-            radius = 0.9 + (index % 3) * 0.28
-            painter.setBrush(QColor(186, 230, 253, alpha))
-            painter.drawEllipse(QPointF(float(x), float(y)), radius, radius)
-            if index % 4 == 0:
-                painter.setPen(QPen(QColor(167, 243, 208, alpha), 0.8))
-                painter.drawLine(QPointF(float(x - 3), float(y)), QPointF(float(x + 3), float(y)))
-                painter.drawLine(QPointF(float(x), float(y - 3)), QPointF(float(x), float(y + 3)))
-                painter.setPen(Qt.NoPen)
+        baseline = QRectF(rect.left() + 14, rect.bottom() - 5, max(0, rect.width() - 28), 2)
+        painter.fillRect(baseline, QColor(125, 211, 252, 42))
+        sweep_width = min(44, max(24, int(rect.width() * 0.34)))
+        travel = max(1, int(baseline.width() + sweep_width))
+        x = baseline.left() - sweep_width + ((self._phase * 1.3) % travel)
+        sweep_rect = QRectF(x, baseline.top(), sweep_width, baseline.height())
+        sweep = QLinearGradient(sweep_rect.topLeft(), sweep_rect.topRight())
+        sweep.setColorAt(0, QColor(125, 211, 252, 0))
+        sweep.setColorAt(0.5, QColor(186, 230, 253, 150))
+        sweep.setColorAt(1, QColor(167, 243, 208, 0))
+        painter.fillRect(sweep_rect, sweep)
 
 
 class TitleBar(QFrame):
@@ -393,6 +390,7 @@ class MainWindow(QMainWindow):
         self.focus_countdown_label = QLabel("--:--:--")
         self.focus_countdown_label.setObjectName("focusCountdownLabel")
         self.focus_countdown_label.setAlignment(Qt.AlignCenter)
+        self.focus_countdown_label.setMinimumWidth(220)
         self.focus_priority_label = QLabel("--")
         self.focus_priority_label.setObjectName("focusPriorityLabel")
         self.focus_priority_label.setAlignment(Qt.AlignCenter)
@@ -466,6 +464,7 @@ class MainWindow(QMainWindow):
         focus_top.setContentsMargins(0, 0, 0, 0)
         focus_top.setHorizontalSpacing(10)
         focus_top.setVerticalSpacing(8)
+        self.focus_top_layout = focus_top
         self.focus_title_prefix = QLabel("进行中")
         self.focus_title_prefix.setAlignment(Qt.AlignCenter)
         self.focus_title_prefix.setMinimumHeight(34)
@@ -485,13 +484,17 @@ class MainWindow(QMainWindow):
         deadline_panel = QFrame()
         deadline_panel.setObjectName("focusDeadlinePanel")
         deadline_panel.setStyleSheet(_focus_deadline_panel_style())
+        deadline_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.focus_deadline_panel = deadline_panel
         deadline_layout = QVBoxLayout(deadline_panel)
         deadline_layout.setContentsMargins(12, 7, 12, 9)
         deadline_layout.setSpacing(4)
         self.focus_deadline_label.setAlignment(Qt.AlignCenter)
+        self.focus_deadline_label.setMinimumWidth(220)
         deadline_layout.addWidget(self.focus_deadline_label)
         deadline_layout.addWidget(self.focus_countdown_label)
         focus_top.addWidget(deadline_panel, 0, 4, 2, 1)
+        focus_top.setColumnMinimumWidth(4, 244)
         focus_top.setColumnStretch(4, 2)
         focus_layout.addLayout(focus_top)
 
@@ -533,6 +536,7 @@ class MainWindow(QMainWindow):
         focus_actions.addWidget(self.focus_delete_button)
         focus_layout.addLayout(focus_actions)
         root_layout.addWidget(self.focus_card)
+        self._sync_focus_header_layout()
 
         self.task_section_widget = QWidget()
         actions_layout = QHBoxLayout(self.task_section_widget)
@@ -934,7 +938,28 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._sync_focus_header_layout()
         self._handle_geometry_change()
+
+    def _sync_focus_header_layout(self) -> None:
+        layout = getattr(self, "focus_top_layout", None)
+        deadline_panel = getattr(self, "focus_deadline_panel", None)
+        if layout is None or deadline_panel is None:
+            return
+        layout.removeWidget(deadline_panel)
+        narrow = self.width() < 720
+        if narrow:
+            layout.addWidget(deadline_panel, 1, 0, 1, 4)
+            layout.setColumnMinimumWidth(4, 0)
+            layout.setColumnStretch(4, 0)
+            self.focus_deadline_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.focus_countdown_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            return
+        layout.addWidget(deadline_panel, 0, 4, 2, 1)
+        layout.setColumnMinimumWidth(4, 244)
+        layout.setColumnStretch(4, 2)
+        self.focus_deadline_label.setAlignment(Qt.AlignCenter)
+        self.focus_countdown_label.setAlignment(Qt.AlignCenter)
 
     def _handle_geometry_change(self) -> None:
         if not self._geometry_initialized or self._restoring_geometry:
@@ -1122,7 +1147,7 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(210 if is_expanded else 132)
+        card.setMinimumHeight(218 if is_expanded else 154)
         card.setMinimumWidth(168)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
@@ -1162,11 +1187,17 @@ class MainWindow(QMainWindow):
         title.setStyleSheet(_task_title_style(selected=is_focused))
         layout.addWidget(title)
 
+        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
+        deadline.setObjectName("activeTaskDeadline" if is_focused else "taskDeadline")
+        deadline.setWordWrap(True)
+        deadline.setMinimumHeight(28)
+        deadline.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        deadline.setStyleSheet(_deadline_label_style(urgency))
+        layout.addWidget(deadline)
+
         compact_row = QHBoxLayout()
         compact_row.setSpacing(6)
-        deadline = QLabel(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
-        deadline.setStyleSheet(_deadline_label_style(urgency))
-        compact_row.addWidget(deadline, 1)
+        compact_row.addStretch(1)
         focus_button = QPushButton("进行中" if is_focused else "置顶")
         focus_button.setToolTip("设为当前置顶任务；之后点击其它任务的置顶即可替换")
         if is_focused:
