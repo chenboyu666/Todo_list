@@ -272,7 +272,9 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     assert window.focus_complete_button.text() == "完成"
+    assert window.focus_pause_button.text() == "暂停"
     assert window.focus_delete_button.text() == "删除"
+    assert window.focus_pause_button.isEnabled()
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
     assert _countdown_display("00:00:01", True) == "00:00:01"
@@ -318,6 +320,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert store.saved_tasks is not None
     assert store.saved_tasks[0].progress == 55
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
+    assert any(button.text() == "暂停" for button in window.task_rows_container.findChildren(QPushButton))
     task_notes = window.task_rows_container.findChildren(QLabel, "taskNotesPreview")
     assert task_notes
     assert "备注：先确认接口" in task_notes[0].text()
@@ -489,9 +492,27 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
+    assert window.priority_donut_chart.minimumHeight() >= 150
+    assert window.deadline_outcome_chart.minimumHeight() >= 150
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
     assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
+    assert window.analytics_start_date.accessibleName() == "统计起始日期"
+    assert window.analytics_end_date.accessibleName() == "统计结束日期"
+    assert window.analytics_count_label.text() == "2 条"
+    assert window.analytics_all_button.text() == "全部"
+    assert window.analytics_week_button.text() == "近7日"
+    assert window.analytics_month_button.text() == "本月"
+    assert window.analytics_start_date.calendarWidget().objectName() == "historyAnalyticsStartCalendar"
+    window.analytics_start_date.setDate(window.analytics_end_date.date())
+    qapp.processEvents()
+    assert window.analytics_count_label.text() == "1 条"
+    assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 0, "P3": 0}
+    assert [value for _, value in window.completion_trend_chart.trend_points] == [1]
+    window.analytics_all_button.click()
+    qapp.processEvents()
+    assert window.analytics_count_label.text() == "2 条"
+    assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
     assert window.findChildren(QProgressBar, "historyInlineProgress")
     assert window.export_button.text() == "导出 CSV"
     assert window.export_start_date.accessibleName() == "导出起始日期"

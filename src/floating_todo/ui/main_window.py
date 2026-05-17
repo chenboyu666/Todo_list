@@ -531,6 +531,11 @@ class MainWindow(QMainWindow):
         self.focus_edit_button.setToolTip("编辑当前进行中的任务")
         self.focus_edit_button.clicked.connect(self.edit_focus_task)
         focus_actions.addWidget(self.focus_edit_button)
+        self.focus_pause_button = QPushButton("暂停")
+        self.focus_pause_button.setObjectName("focusPauseButton")
+        self.focus_pause_button.setToolTip("暂停当前任务，暂时移出进行中和提醒")
+        self.focus_pause_button.clicked.connect(self.pause_focus_task)
+        focus_actions.addWidget(self.focus_pause_button)
         self.focus_complete_button = QPushButton("完成")
         self.focus_complete_button.setObjectName("focusCompleteButton")
         self.focus_complete_button.setToolTip("完成当前进行中的任务")
@@ -645,6 +650,12 @@ class MainWindow(QMainWindow):
             return
         self.complete_task(focused.id)
 
+    def pause_focus_task(self) -> None:
+        focused = self.focus_task()
+        if focused is None:
+            return
+        self.pause_task(focused.id)
+
     def delete_focus_task(self) -> None:
         focused = self.focus_task()
         if focused is None:
@@ -735,6 +746,36 @@ class MainWindow(QMainWindow):
         self.tasks = [*self.tasks[:index], updated, *self.tasks[index + 1 :]]
         self.store.save_tasks(self.tasks)
         self.refresh()
+
+    def pause_task(self, task_id: str) -> None:
+        index = self._task_index(task_id)
+        if index is None or self.tasks[index].status != "active":
+            return
+        now = datetime.now(timezone.utc)
+        paused = replace(self.tasks[index], status="paused", updated_at=now)
+        self.tasks = [*self.tasks[:index], paused, *self.tasks[index + 1 :]]
+        if self.settings.focus_task_id == task_id:
+            self.settings = replace(self.settings, focus_task_id=None)
+            self._save_settings()
+        self.store.save_tasks(self.tasks)
+        self.refresh()
+        self.show_toast("已暂停", f"{paused.title}\n暂时移出进行中与提醒，需要时点继续恢复。", kind="info", duration_ms=4200)
+
+    def resume_task(self, task_id: str, *, make_focus: bool = False) -> None:
+        index = self._task_index(task_id)
+        if index is None or self.tasks[index].status != "paused":
+            return
+        now = datetime.now(timezone.utc)
+        resumed = replace(self.tasks[index], status="active", updated_at=now)
+        self.tasks = [*self.tasks[:index], resumed, *self.tasks[index + 1 :]]
+        if make_focus:
+            self.settings = replace(self.settings, focus_task_id=task_id)
+            self._save_settings()
+        self.store.save_tasks(self.tasks)
+        self.refresh()
+        self.show_toast("已继续", f"{resumed.title}\n已恢复到进行中任务。", kind="success", duration_ms=3800)
+        if make_focus:
+            self._pulse_widget(self.focus_card)
 
     def complete_task(self, task_id: str) -> None:
         index = self._task_index(task_id)
@@ -1064,6 +1105,7 @@ class MainWindow(QMainWindow):
         now = datetime.now(timezone.utc)
         self.process_reminders(now)
         active_count = sum(1 for task in self.tasks if task.status == "active")
+        paused_count = sum(1 for task in self.tasks if task.status == "paused")
         self.active_count_label.setText(str(active_count))
         self.today_completion_label.setText(f"{today_completion_percent(self.tasks)}%")
 
@@ -1088,6 +1130,7 @@ class MainWindow(QMainWindow):
             self.focus_progress.setValue(0)
             self.focus_progress_label.setValue(0)
             self._set_focus_action_enabled(False)
+            self.empty_state_hint_label.setText("可继续暂停任务，或点击新增任务" if paused_count else "点击新增任务开始")
             self.empty_state_widget.show()
         else:
             urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
@@ -1153,6 +1196,7 @@ class MainWindow(QMainWindow):
     def _task_row(self, row: dict[str, object], focus_task_id: str | None = None) -> QFrame:
         task_id = str(row["id"])
         urgency = str(row["urgency"])
+        is_paused = bool(row.get("is_paused"))
         is_focused = task_id == focus_task_id
         is_expanded = task_id in self.expanded_task_ids
         card = TaskRowCard(task_id, self)
@@ -1209,12 +1253,19 @@ class MainWindow(QMainWindow):
         compact_row = QHBoxLayout()
         compact_row.setSpacing(6)
         compact_row.addStretch(1)
-        focus_button = QPushButton("进行中" if is_focused else "置顶")
-        focus_button.setToolTip("设为当前置顶任务；之后点击其它任务的置顶即可替换")
-        if is_focused:
-            focus_button.setObjectName("currentTaskButton")
-        focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
-        compact_row.addWidget(focus_button)
+        if is_paused:
+            resume_button = QPushButton("继续")
+            resume_button.setObjectName("resumeTaskButton")
+            resume_button.setToolTip("恢复任务，并设为当前进行中")
+            resume_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
+            compact_row.addWidget(resume_button)
+        else:
+            focus_button = QPushButton("进行中" if is_focused else "置顶")
+            focus_button.setToolTip("设为当前置顶任务；之后点击其它任务的置顶即可替换")
+            if is_focused:
+                focus_button.setObjectName("currentTaskButton")
+            focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
+            compact_row.addWidget(focus_button)
         expand_button = QPushButton("收起" if is_expanded else "展开")
         expand_button.setObjectName("taskCollapseButton" if is_expanded else "taskExpandButton")
         expand_button.setToolTip("显示或收起详细操作")
@@ -1267,6 +1318,17 @@ class MainWindow(QMainWindow):
         detail_row.setSpacing(6)
         detail_row.addWidget(QLabel(f"工作量 {row['effort_label']}"))
         detail_row.addStretch(1)
+        if is_paused:
+            pause_button = QPushButton("继续")
+            pause_button.setObjectName("resumeTaskButton")
+            pause_button.setToolTip("恢复任务，并设为当前进行中")
+            pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
+        else:
+            pause_button = QPushButton("暂停")
+            pause_button.setObjectName("pauseTaskButton")
+            pause_button.setToolTip("暂停任务，暂时移出进行中和提醒")
+            pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.pause_task(task_id))
+        detail_row.addWidget(pause_button)
         edit_button = QPushButton("编辑")
         edit_button.setToolTip("编辑任务")
         edit_button.clicked.connect(lambda checked=False, task_id=task_id: self.edit_task(task_id))
@@ -1305,7 +1367,7 @@ class MainWindow(QMainWindow):
         self.update_task_progress(task_id, value)
 
     def _set_focus_action_enabled(self, enabled: bool) -> None:
-        for button in (self.focus_edit_button, self.focus_complete_button, self.focus_delete_button):
+        for button in (self.focus_edit_button, self.focus_pause_button, self.focus_complete_button, self.focus_delete_button):
             button.setEnabled(enabled)
         self.focus_progress.setEnabled(enabled)
         self.focus_progress_label.setEnabled(enabled)
@@ -1328,6 +1390,14 @@ URGENCY_STYLES = {
         "accent": THEME_COLORS["muted"],
         "chip_bg": "#202838",
         "chip_text": "#C9D2E4",
+    },
+    "paused": {
+        "surface": "#10141F",
+        "surface_alt": "#151C2A",
+        "selected": "#1D2738",
+        "accent": "#93A4B8",
+        "chip_bg": "#263142",
+        "chip_text": "#D6E1F0",
     },
     "normal": {
         "surface": "#111722",
@@ -1650,6 +1720,14 @@ COUNTDOWN_STYLES = {
         "end_pulse": "#222D3F",
         "accent": THEME_COLORS["muted"],
         "text": "#C9D2E4",
+    },
+    "paused": {
+        "start": "#151C28",
+        "end": "#263142",
+        "start_pulse": "#1B2432",
+        "end_pulse": "#334155",
+        "accent": "#93A4B8",
+        "text": "#D6E1F0",
     },
     "normal": {
         "start": "#0A2740",

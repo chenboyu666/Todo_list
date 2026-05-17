@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from floating_todo.domain import Task, select_focus_task, sort_tasks, task_from_dict, task_to_dict
+from floating_todo.domain import Task, select_focus_task, sort_tasks, sort_visible_tasks, task_from_dict, task_to_dict
 
 
 UTC = timezone.utc
@@ -48,6 +48,7 @@ def test_select_focus_task_returns_first_sorted_active_task():
     tasks = [
         make_task("p3", "P3", 1, 20, 0),
         make_task("p1", "P1", 4, 20, 0),
+        replace(make_task("paused-p1", "P1", 0, 200, -1), status="paused"),
     ]
 
     assert select_focus_task(tasks).title == "p1"
@@ -63,6 +64,23 @@ def test_task_json_round_trip_preserves_datetime_and_notification_state():
     restored = task_from_dict(task_to_dict(task))
 
     assert restored == task
+
+
+def test_paused_tasks_are_visible_but_not_focus_candidates():
+    active = make_task("active", "P3", 4, 20, 0)
+    paused = replace(make_task("paused", "P1", 1, 120, 0), status="paused")
+
+    assert [task.title for task in sort_tasks([active, paused])] == ["active"]
+    assert [task.title for task in sort_visible_tasks([paused, active])] == ["active", "paused"]
+    assert select_focus_task([paused]) is None
+
+
+def test_task_from_dict_accepts_paused_and_normalizes_unknown_status():
+    paused = task_from_dict({"id": "paused", "title": "paused", "status": "paused"})
+    unknown = task_from_dict({"id": "unknown", "title": "unknown", "status": "blocked"})
+
+    assert paused.status == "paused"
+    assert unknown.status == "active"
 
 
 def test_sort_tasks_normalizes_mixed_naive_and_aware_datetimes():
