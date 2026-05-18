@@ -887,6 +887,25 @@ def test_refresh_sends_due_reminders_once_and_persists_flags(qapp: QApplication)
     window.close()
 
 
+def test_reminder_toast_uses_configured_background(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    background_path = tmp_path / "reminder-bg.png"
+    background_path.write_bytes(b"placeholder")
+    settings = AppSettings(background_enabled=True, background_image_path=str(background_path))
+    window = MainWindow(MemoryStore([]), settings)
+    task = make_task("有背景提醒", task_id="toast-bg")
+
+    window.show_reminder_popup("deadline_warning", task)
+
+    popup = window._toast_popups[-1]
+    assert popup.background_enabled is True
+    assert popup.background_image_path == str(background_path)
+    assert popup.background_overlay == 0.68
+
+    window.close()
+
+
 class CloseEventProbe:
     def __init__(self) -> None:
         self.ignored = False

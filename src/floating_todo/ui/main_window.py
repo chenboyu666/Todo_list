@@ -1199,8 +1199,23 @@ class MainWindow(QMainWindow):
             return
         add_click_pulse(self.root_widget.mapFromGlobal(widget.mapToGlobal(widget.rect().center())))
 
-    def show_toast(self, title: str, message: str, *, kind: str = "info", duration_ms: int = 7000) -> FloatingToast:
-        popup = FloatingToast(title, message, kind=kind)
+    def show_toast(
+        self,
+        title: str,
+        message: str,
+        *,
+        kind: str = "info",
+        duration_ms: int = 7000,
+        use_background: bool = False,
+    ) -> FloatingToast:
+        popup = FloatingToast(
+            title,
+            message,
+            kind=kind,
+            background_enabled=use_background and self.settings.background_enabled,
+            background_image_path=self.settings.background_image_path if use_background else "",
+            background_overlay=self.settings.background_overlay,
+        )
         self._toast_popups = [toast for toast in self._toast_popups if toast.isVisible()]
         self._toast_popups.append(popup)
         popup.destroyed.connect(lambda *args, popup=popup: self._forget_toast(popup))
@@ -1257,7 +1272,7 @@ class MainWindow(QMainWindow):
         else:
             message = f"{task.title}\n建议现在重新确认优先级，先把下一步落下来。"
             kind = "danger"
-        self.show_toast(title, message, kind=kind, duration_ms=7200)
+        self.show_toast(title, message, kind=kind, duration_ms=7200, use_background=True)
 
     def refresh(self) -> None:
         self.update_clock()

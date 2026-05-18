@@ -8,9 +8,9 @@ class FakeSignal:
     def connect(self, callback) -> None:
         self.callback = callback
 
-    def emit(self) -> None:
+    def emit(self, *args) -> None:
         assert self.callback is not None
-        self.callback()
+        self.callback(*args)
 
 
 class FakeAction:
@@ -41,6 +41,7 @@ class FakeTrayIcon:
         self.icon = icon
         self.menu = None
         self.shown = False
+        self.activated = FakeSignal()
 
     @classmethod
     def isSystemTrayAvailable(cls) -> bool:
@@ -178,6 +179,18 @@ def test_tray_toggle_shows_raises_and_activates_hidden_window() -> None:
 
     assert window.calls[-3:] == ["show", "raise", "activate"]
     assert window.visible is True
+
+
+def test_tray_double_click_brings_window_to_front_without_hiding() -> None:
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    window = FakeWindow(visible=True)
+    controller = make_controller(window)
+
+    controller.tray.activated.emit(QSystemTrayIcon.DoubleClick)
+
+    assert window.visible is True
+    assert window.calls[-3:] == ["show", "raise", "activate"]
 
 
 def test_tray_quit_action_is_safe_without_application_instance() -> None:
