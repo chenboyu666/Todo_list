@@ -348,8 +348,8 @@ class HistoryWindow(QDialog):
         self._normal_geometry_before_fullscreen: QRect | None = None
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(980, 940)
-        self.resize(1120, 980)
+        self.setMinimumSize(980, 980)
+        self.resize(1160, 1040)
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
@@ -403,7 +403,7 @@ class HistoryWindow(QDialog):
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setFixedHeight(372)
+        stats_panel.setFixedHeight(392)
         self.stats_panel = stats_panel
         stats_layout = QVBoxLayout(stats_panel)
         stats_layout.setContentsMargins(12, 8, 12, 10)
@@ -605,9 +605,10 @@ class HistoryWindow(QDialog):
         self.export_start_date.dateChanged.connect(self._update_export_count)
         self.export_end_date.dateChanged.connect(self._update_export_count)
 
-        self.date_pager_widget = QWidget()
+        self.date_pager_widget = QFrame()
+        self.date_pager_widget.setObjectName("historyPagerPanel")
         date_pager_layout = QHBoxLayout(self.date_pager_widget)
-        date_pager_layout.setContentsMargins(0, 0, 0, 0)
+        date_pager_layout.setContentsMargins(10, 8, 10, 8)
         date_pager_layout.setSpacing(8)
         date_selector_label = QLabel("日期")
         date_selector_label.setObjectName("historyToolbarLabel")
@@ -638,14 +639,16 @@ class HistoryWindow(QDialog):
         self.list_layout.setVerticalSpacing(10)
 
         scroll = QScrollArea()
+        scroll.setObjectName("historyRecordsPanel")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        scroll.setViewportMargins(10, 10, 10, 10)
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         scroll.setWidget(self.container)
-        scroll.setMinimumHeight(260)
+        scroll.setMinimumHeight(300)
         self.history_scroll_area = scroll
+        self.history_records_panel = scroll
         content_layout.addWidget(scroll, 1)
 
         resize_row = QHBoxLayout()
@@ -1428,7 +1431,10 @@ QLabel#historyChartSubtitle {{
   font-weight: 700;
 }}
 QFrame#historyToolbar {{
-  background: #0C121D;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0C121D,
+    stop:0.52 #101827,
+    stop:1 #0D2024);
   border: none;
   border-radius: 8px;
   padding: 7px;
@@ -1513,6 +1519,22 @@ QLabel#historyPageLabel {{
   border-radius: 8px;
   padding: 7px 12px;
   font-weight: 900;
+}}
+QFrame#historyPagerPanel {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0A1420,
+    stop:0.54 #0D1D2B,
+    stop:1 #102822);
+  border: none;
+  border-radius: 8px;
+}}
+QScrollArea#historyRecordsPanel {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #08111C,
+    stop:0.58 #0B1724,
+    stop:1 #0E231F);
+  border: none;
+  border-radius: 8px;
 }}
 QPushButton#historyPageButton, QPushButton#historyNoteButton, QPushButton#historyExportButton {{
   background: #162033;

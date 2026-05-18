@@ -56,6 +56,30 @@ class DeadlineInputAdapter:
         return self.dialog.deadline_date_input.calendarPopup()
 
 
+class EffortInputAdapter:
+    def __init__(self, dialog: "TaskDialog") -> None:
+        self.dialog = dialog
+
+    def setValue(self, minutes: int) -> None:
+        self.dialog._set_effort_fields(minutes)
+        self.dialog._sync_deadline_from_effort()
+
+    def value(self) -> int:
+        return self.dialog._effort_minutes()
+
+    def minimum(self) -> int:
+        return 0
+
+    def maximum(self) -> int:
+        return 24 * 60
+
+    def singleStep(self) -> int:
+        return self.dialog.effort_minute_input.singleStep()
+
+    def toolTip(self) -> str:
+        return self.dialog.effort_minute_input.toolTip()
+
+
 class TaskDialog(QDialog):
     def __init__(self, parent=None, task: Task | None = None) -> None:
         super().__init__(parent)
@@ -73,12 +97,18 @@ class TaskDialog(QDialog):
         self.priority_input.setToolTip("选择任务优先级：P1 最高，P3 较低")
         self.priority_input.setAccessibleName("任务优先级")
         self.priority_combo = self.priority_input
-        self.effort_input = QSpinBox()
-        self.effort_input.setRange(0, 24 * 60)
-        self.effort_input.setSingleStep(15)
-        self.effort_input.setSuffix(" 分钟")
-        self.effort_input.setToolTip("右侧箭头每次增减 15 分钟；修改后会按当前时间同步截止时间")
-        self.effort_input.setAccessibleName("预计工作量分钟")
+        self.effort_hour_input = QSpinBox()
+        self.effort_hour_input.setRange(0, 24)
+        self.effort_hour_input.setSuffix(" 小时")
+        self.effort_hour_input.setToolTip("右侧箭头每次增减 1 小时；修改后会按当前时间同步截止时间")
+        self.effort_hour_input.setAccessibleName("预计工作量小时")
+        self.effort_minute_input = QSpinBox()
+        self.effort_minute_input.setRange(0, 59)
+        self.effort_minute_input.setSingleStep(15)
+        self.effort_minute_input.setSuffix(" 分钟")
+        self.effort_minute_input.setToolTip("右侧箭头每次增减 15 分钟；修改后会按当前时间同步截止时间")
+        self.effort_minute_input.setAccessibleName("预计工作量分钟")
+        self.effort_input = EffortInputAdapter(self)
         self.effort_spin = self.effort_input
 
         self.deadline_date_input = QDateEdit()
@@ -121,7 +151,8 @@ class TaskDialog(QDialog):
         self.deadline_date_input.dateChanged.connect(self._mark_deadline_changed)
         self.deadline_hour_input.currentTextChanged.connect(self._mark_deadline_changed)
         self.deadline_minute_input.currentTextChanged.connect(self._mark_deadline_changed)
-        self.effort_input.valueChanged.connect(self._sync_deadline_from_effort)
+        self.effort_hour_input.valueChanged.connect(self._sync_effort_from_fields)
+        self.effort_minute_input.valueChanged.connect(self._sync_effort_from_fields)
         self.progress_slider.valueChanged.connect(self._sync_progress_input_from_slider)
         self.progress_value_input.valueChanged.connect(self._sync_progress_slider_from_input)
 
@@ -148,7 +179,8 @@ class TaskDialog(QDialog):
         form.addRow("优先级", self.priority_input)
         effort_layout = QHBoxLayout()
         effort_layout.setSpacing(8)
-        effort_layout.addWidget(self.effort_input, 1)
+        effort_layout.addWidget(self.effort_hour_input, 1)
+        effort_layout.addWidget(self.effort_minute_input, 1)
         form.addRow("预计工作量", effort_layout)
 
         deadline_layout = QVBoxLayout()
@@ -189,7 +221,7 @@ class TaskDialog(QDialog):
 
         self.title_input.setText(task.title if task else "")
         self.priority_input.setCurrentText(task.priority if task else "P2")
-        self.effort_input.setValue(task.effort_minutes if task else 60)
+        self._set_effort_fields(task.effort_minutes if task else 60)
         self.deadline_date_input.setDate(QDate(deadline.year, deadline.month, deadline.day))
         self.deadline_hour_input.setCurrentText(f"{deadline.hour:02d}")
         self.deadline_minute_input.setCurrentText(f"{deadline.minute:02d}")
@@ -215,6 +247,33 @@ class TaskDialog(QDialog):
         self.progress_value_input.interpretText()
         return self.progress_value_input.value()
 
+    def _effort_minutes(self) -> int:
+        self.effort_hour_input.interpretText()
+        self.effort_minute_input.interpretText()
+        return min(24 * 60, max(0, self.effort_hour_input.value() * 60 + self.effort_minute_input.value()))
+
+    def _set_effort_fields(self, minutes: int) -> None:
+        total_minutes = min(24 * 60, max(0, int(minutes)))
+        hours, remainder = divmod(total_minutes, 60)
+        self.effort_hour_input.blockSignals(True)
+        self.effort_minute_input.blockSignals(True)
+        try:
+            self.effort_hour_input.setValue(hours)
+            self._apply_effort_minute_bounds()
+            self.effort_minute_input.setValue(remainder)
+        finally:
+            self.effort_hour_input.blockSignals(False)
+            self.effort_minute_input.blockSignals(False)
+
+    def _apply_effort_minute_bounds(self) -> None:
+        maximum = 0 if self.effort_hour_input.value() >= 24 else 59
+        if self.effort_minute_input.maximum() != maximum:
+            self.effort_minute_input.setMaximum(maximum)
+
+    def _sync_effort_from_fields(self, *args) -> None:
+        self._apply_effort_minute_bounds()
+        self._sync_deadline_from_effort()
+
     def _mark_deadline_changed(self, *args) -> None:
         self._deadline_changed = True
 
@@ -232,9 +291,9 @@ class TaskDialog(QDialog):
             self.deadline_hour_input.blockSignals(False)
             self.deadline_minute_input.blockSignals(False)
 
-    def _sync_deadline_from_effort(self, minutes: int) -> None:
+    def _sync_deadline_from_effort(self, *args) -> None:
         base = datetime.now(local_timezone()).replace(second=0, microsecond=0)
-        self._set_deadline_fields(base + timedelta(minutes=max(0, int(minutes))))
+        self._set_deadline_fields(base + timedelta(minutes=self._effort_minutes()))
         self._deadline_changed = True
 
     def _deadline(self) -> datetime | None:
@@ -262,7 +321,7 @@ class TaskDialog(QDialog):
                 self.task,
                 title=title,
                 priority=self.priority_input.currentText(),
-                effort_minutes=self.effort_input.value(),
+                effort_minutes=self._effort_minutes(),
                 deadline=deadline,
                 progress=self._progress_value(),
                 updated_at=now,
@@ -273,7 +332,7 @@ class TaskDialog(QDialog):
             id=str(uuid4()),
             title=title,
             priority=self.priority_input.currentText(),
-            effort_minutes=self.effort_input.value(),
+            effort_minutes=self._effort_minutes(),
             deadline=self._deadline(),
             progress=self._progress_value(),
             status="active",

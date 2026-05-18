@@ -84,6 +84,10 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.effort_spin.maximum() == 1440
     assert dialog.effort_spin.singleStep() == 15
     assert dialog.effort_spin.value() == 60
+    assert dialog.effort_hour_input.value() == 1
+    assert dialog.effort_minute_input.value() == 0
+    assert dialog.effort_hour_input.accessibleName() == "预计工作量小时"
+    assert dialog.effort_minute_input.accessibleName() == "预计工作量分钟"
     assert not hasattr(dialog, "effort_hint_label")
     assert not hasattr(dialog, "effort_step_hint_label")
     assert "增减 15 分钟" in dialog.effort_spin.toolTip()
@@ -236,6 +240,27 @@ def test_effort_change_updates_deadline_from_current_local_time(
     assert dialog.deadline_hour_input.currentText() == "10"
     assert dialog.deadline_minute_input.currentText() == "30"
     assert dialog.build_task().deadline == datetime(2026, 5, 14, 2, 30, tzinfo=timezone.utc)
+
+    dialog.close()
+
+
+def test_effort_hour_and_minute_inputs_build_total_minutes(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.effort_hour_input.setValue(2)
+    dialog.effort_minute_input.setValue(30)
+
+    task = dialog.build_task()
+
+    assert dialog.effort_spin.value() == 150
+    assert task.effort_minutes == 150
+
+    dialog.effort_spin.setValue(24 * 60)
+
+    assert dialog.effort_hour_input.value() == 24
+    assert dialog.effort_minute_input.value() == 0
+    assert dialog.effort_minute_input.maximum() == 0
 
     dialog.close()
 

@@ -489,9 +489,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
     assert window.minimumWidth() >= 980
-    assert window.minimumHeight() >= 940
+    assert window.minimumHeight() >= 980
     assert window.width() >= 1080
-    assert window.height() >= 980
+    assert window.height() >= 1040
     assert window.isSizeGripEnabled()
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.fullscreen_button.objectName() == "historyFullscreenButton"
@@ -506,11 +506,15 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.history_content_scroll.widgetResizable()
-    assert window.stats_panel.height() >= 372
+    assert window.stats_panel.height() >= 392
     assert window.priority_donut_chart.minimumHeight() >= 162
     assert window.deadline_outcome_chart.minimumHeight() >= 162
     assert window.priority_donut_chart.parentWidget().minimumHeight() >= 232
-    assert window.history_scroll_area.minimumHeight() >= 260
+    assert window.history_scroll_area.minimumHeight() >= 300
+    assert window.date_pager_widget.objectName() == "historyPagerPanel"
+    assert window.history_records_panel.objectName() == "historyRecordsPanel"
+    assert "historyPagerPanel" in window.styleSheet()
+    assert "historyRecordsPanel" in window.styleSheet()
     window.show()
     qapp.processEvents()
     normal_geometry = window.geometry()

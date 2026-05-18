@@ -31,6 +31,9 @@ class TrayController:
         self.sync_actions()
 
         self.tray.setContextMenu(self.menu)
+        activated = getattr(self.tray, "activated", None)
+        if activated is not None and hasattr(activated, "connect"):
+            activated.connect(self._handle_activation)
         self.tray.show()
 
     def _add_action(self, action_cls: type, label: str, callback: Callable[[], None]) -> Any:
@@ -44,9 +47,20 @@ class TrayController:
             self.window.hide()
             return
 
-        self.window.show()
+        self.show_window()
+
+    def show_window(self) -> None:
+        show_normal = getattr(self.window, "showNormal", None)
+        if callable(show_normal) and self.window.isVisible():
+            show_normal()
+        else:
+            self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+
+    def _handle_activation(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.show_window()
 
     def sync_actions(self) -> None:
         active = bool(getattr(self.window, "mouse_passthrough_active", lambda: False)())

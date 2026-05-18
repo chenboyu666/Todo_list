@@ -1,19 +1,40 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QMovie, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from floating_todo.app_resources import resolve_resource_path
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.effects import apply_soft_shadow
 
 
 class FloatingToast(QFrame):
-    def __init__(self, title: str, message: str, *, kind: str = "info", parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        *,
+        kind: str = "info",
+        parent: QWidget | None = None,
+        background_enabled: bool = False,
+        background_image_path: str = "",
+        background_overlay: float = 0.68,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("floatingToast")
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setFixedWidth(360)
+        self.kind = kind
+        self.background_enabled = bool(background_enabled)
+        self.background_image_path = str(background_image_path or "")
+        self.background_overlay = max(0.35, min(0.9, float(background_overlay)))
+        self._colors = _toast_colors(kind)
+        self._pixmap = QPixmap()
+        self._movie: QMovie | None = None
+        self._load_background()
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
         self._auto_close_timer.timeout.connect(self.close)
@@ -52,11 +73,60 @@ class FloatingToast(QFrame):
         content.addWidget(message_label)
         layout.addLayout(content, 1)
 
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if rect.isEmpty():
+            return
+
+        shape = QPainterPath()
+        shape.addRoundedRect(rect, 8, 8)
+        painter.setClipPath(shape)
+
+        background = self._current_background_pixmap()
+        if self.background_enabled and not background.isNull():
+            scaled = background.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            x = (self.width() - scaled.width()) // 2
+            y = (self.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+            painter.fillRect(self.rect(), QColor(7, 10, 18, int(self.background_overlay * 255)))
+        else:
+            gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+            gradient.setColorAt(0, QColor(self._colors["start"]))
+            gradient.setColorAt(1, QColor(self._colors["end"]))
+            painter.fillPath(shape, gradient)
+        painter.end()
+
     def show_near(self, parent: QWidget | None = None, *, duration_ms: int = 7000, stack_index: int = 0) -> None:
         self.adjustSize()
         self._position_near(parent, stack_index=stack_index)
         self.show()
         self._auto_close_timer.start(duration_ms)
+
+    def _load_background(self) -> None:
+        if not self.background_enabled:
+            return
+        path = resolve_resource_path(self.background_image_path)
+        if not path.exists():
+            return
+        if path.suffix.lower() == ".gif":
+            self._movie = QMovie(str(path))
+            self._movie.setCacheMode(QMovie.CacheAll)
+            self._movie.frameChanged.connect(lambda frame_number: self.update())
+            self._movie.start()
+            return
+        self._pixmap = QPixmap(str(path))
+
+    def _current_background_pixmap(self) -> QPixmap:
+        if self._movie is not None:
+            return self._movie.currentPixmap()
+        return self._pixmap
+
+    def closeEvent(self, event) -> None:
+        if self._movie is not None:
+            self._movie.stop()
+        super().closeEvent(event)
 
     def _position_near(self, parent: QWidget | None, *, stack_index: int) -> None:
         spacing = 10
@@ -76,18 +146,20 @@ class FloatingToast(QFrame):
         )
 
 
-def _toast_style(kind: str) -> str:
-    colors = {
+def _toast_colors(kind: str) -> dict[str, str]:
+    return {
         "success": {"accent": "#A7F3D0", "start": "#102B25", "end": "#0F4C5C", "title": "#ECFEFF"},
         "warning": {"accent": "#F6C177", "start": "#2D2414", "end": "#5A3217", "title": "#FFF0CC"},
         "danger": {"accent": "#FCA5A5", "start": "#301722", "end": "#5A1F2B", "title": "#FFE0E7"},
         "info": {"accent": THEME_COLORS["accent"], "start": "#0E1A2A", "end": "#123047", "title": "#ECFEFF"},
     }.get(kind, {"accent": THEME_COLORS["accent"], "start": "#0E1A2A", "end": "#123047", "title": "#ECFEFF"})
+
+
+def _toast_style(kind: str) -> str:
+    colors = _toast_colors(kind)
     return f"""
 QFrame#floatingToast {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 {colors["start"]},
-    stop:1 {colors["end"]});
+  background: transparent;
   border: none;
   border-radius: 8px;
 }}
