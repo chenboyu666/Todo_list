@@ -65,7 +65,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(162)
+        self.setMinimumHeight(126)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -128,7 +128,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(162)
+        self.setMinimumHeight(126)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -208,7 +208,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(162)
+        self.setMinimumHeight(126)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -348,19 +348,19 @@ class HistoryWindow(QDialog):
         self._normal_geometry_before_fullscreen: QRect | None = None
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(980, 980)
-        self.resize(1160, 1040)
+        self.setMinimumSize(960, 900)
+        self.resize(1120, 920)
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(8)
         self.title_bar = DialogTitleBar(self, self.windowTitle())
         self.title_bar.setObjectName("historyDragTitleBar")
-        self.title_bar.setMinimumHeight(54)
+        self.title_bar.setMinimumHeight(46)
         self.title_bar.setToolTip("按住此区域拖动历史窗口")
-        self.title_bar.layout.setContentsMargins(12, 6, 8, 6)
+        self.title_bar.layout.setContentsMargins(10, 4, 6, 4)
         self.title_bar.layout.setSpacing(8)
         self.title_bar.setStyleSheet(_history_title_bar_style())
         self.fullscreen_button = self.title_bar.add_action_button("□", "全屏历史窗口", self.toggle_fullscreen)
@@ -370,7 +370,7 @@ class HistoryWindow(QDialog):
         header_panel = QFrame()
         header_panel.setObjectName("historyHeaderPanel")
         header_layout = QHBoxLayout(header_panel)
-        header_layout.setContentsMargins(14, 12, 14, 12)
+        header_layout.setContentsMargins(12, 8, 12, 8)
         header_layout.setSpacing(12)
         title_stack = QVBoxLayout()
         title_stack.setContentsMargins(0, 0, 0, 0)
@@ -401,7 +401,7 @@ class HistoryWindow(QDialog):
         self.history_content.setStyleSheet("background: transparent;")
         content_layout = QVBoxLayout(self.history_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(8)
         self.history_content_layout = content_layout
         content_scroll.setWidget(self.history_content)
         root.addWidget(content_scroll, 1)
@@ -409,18 +409,18 @@ class HistoryWindow(QDialog):
         stats_panel = QFrame()
         stats_panel.setObjectName("historyStatsPanel")
         stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setFixedHeight(392)
+        stats_panel.setFixedHeight(320)
         self.stats_panel = stats_panel
         stats_layout = QVBoxLayout(stats_panel)
-        stats_layout.setContentsMargins(12, 8, 12, 10)
-        stats_layout.setSpacing(8)
+        stats_layout.setContentsMargins(9, 6, 9, 7)
+        stats_layout.setSpacing(6)
         metrics_panel = QFrame()
         metrics_panel.setObjectName("historyMetricsPanel")
         metrics_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.history_metrics_panel = metrics_panel
         metric_strip = QHBoxLayout(metrics_panel)
-        metric_strip.setContentsMargins(10, 7, 10, 7)
-        metric_strip.setSpacing(7)
+        metric_strip.setContentsMargins(8, 4, 8, 4)
+        metric_strip.setSpacing(6)
         self.priority_p1_label = self._metric_label("P1 0", "historyPriorityMetricP1")
         self.priority_p2_label = self._metric_label("P2 0", "historyPriorityMetricP2")
         self.priority_p3_label = self._metric_label("P3 0", "historyPriorityMetricP3")
@@ -450,17 +450,17 @@ class HistoryWindow(QDialog):
         analytics_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.history_analytics_panel = analytics_panel
         analytics_range = QHBoxLayout(analytics_panel)
-        analytics_range.setContentsMargins(10, 7, 10, 7)
-        analytics_range.setSpacing(8)
+        analytics_range.setContentsMargins(8, 4, 8, 4)
+        analytics_range.setSpacing(7)
         analytics_title = QLabel("统计区间")
         analytics_title.setObjectName("historyAnalyticsTitle")
         analytics_title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        analytics_title.setFixedHeight(38)
+        analytics_title.setFixedHeight(32)
         analytics_range.addWidget(analytics_title)
         self.analytics_count_label = QLabel("0 条")
         self.analytics_count_label.setObjectName("historyAnalyticsCount")
         self.analytics_count_label.setAlignment(Qt.AlignCenter)
-        self.analytics_count_label.setFixedHeight(38)
+        self.analytics_count_label.setFixedHeight(32)
         self.analytics_count_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         analytics_range.addWidget(self.analytics_count_label)
         analytics_range.addStretch(1)
@@ -495,7 +495,7 @@ class HistoryWindow(QDialog):
         analytics_to_label = QLabel("→")
         analytics_to_label.setObjectName("historyAnalyticsArrow")
         analytics_to_label.setAlignment(Qt.AlignCenter)
-        analytics_to_label.setFixedHeight(38)
+        analytics_to_label.setFixedHeight(32)
         analytics_range.addWidget(analytics_to_label)
         self.analytics_end_date = self._date_edit(
             "historyAnalyticsEndDate",
@@ -513,8 +513,8 @@ class HistoryWindow(QDialog):
         self.history_charts_panel = charts_panel
         chart_grid = QGridLayout(charts_panel)
         chart_grid.setContentsMargins(0, 0, 0, 0)
-        chart_grid.setHorizontalSpacing(9)
-        chart_grid.setVerticalSpacing(9)
+        chart_grid.setHorizontalSpacing(8)
+        chart_grid.setVerticalSpacing(8)
         self.priority_donut_chart = PriorityDonutChart()
         self.completion_trend_chart = CompletionTrendChart()
         self.deadline_outcome_chart = DeadlineOutcomeChart()
@@ -542,15 +542,15 @@ class HistoryWindow(QDialog):
         toolbar_panel = QFrame()
         toolbar_panel.setObjectName("historyToolbar")
         toolbar_layout = QVBoxLayout(toolbar_panel)
-        toolbar_layout.setContentsMargins(7, 7, 7, 7)
-        toolbar_layout.setSpacing(8)
+        toolbar_layout.setContentsMargins(6, 6, 6, 6)
+        toolbar_layout.setSpacing(6)
 
         search_panel = QFrame()
         search_panel.setObjectName("historySearchPanel")
         search_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.history_search_panel = search_panel
         search_row = QHBoxLayout(search_panel)
-        search_row.setContentsMargins(10, 7, 10, 7)
+        search_row.setContentsMargins(8, 5, 8, 5)
         search_row.setSpacing(8)
         self.search_input = QLineEdit()
         self.search_input.setObjectName("historySearch")
@@ -577,8 +577,8 @@ class HistoryWindow(QDialog):
         export_panel.setObjectName("historyExportPanel")
         export_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         export_panel_layout = QVBoxLayout(export_panel)
-        export_panel_layout.setContentsMargins(10, 9, 10, 10)
-        export_panel_layout.setSpacing(8)
+        export_panel_layout.setContentsMargins(8, 6, 8, 6)
+        export_panel_layout.setSpacing(5)
         export_header = QHBoxLayout()
         export_header.setContentsMargins(0, 0, 0, 0)
         export_header.setSpacing(8)
@@ -642,7 +642,7 @@ class HistoryWindow(QDialog):
         self.date_pager_widget = QFrame()
         self.date_pager_widget.setObjectName("historyPagerPanel")
         date_pager_layout = QHBoxLayout(self.date_pager_widget)
-        date_pager_layout.setContentsMargins(10, 8, 10, 8)
+        date_pager_layout.setContentsMargins(8, 5, 8, 5)
         date_pager_layout.setSpacing(8)
         date_selector_label = QLabel("日期")
         date_selector_label.setObjectName("historyToolbarLabel")
@@ -676,11 +676,14 @@ class HistoryWindow(QDialog):
         scroll.setObjectName("historyRecordsPanel")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setViewportMargins(10, 10, 10, 10)
+        scroll.setViewportMargins(8, 8, 8, 8)
         scroll.viewport().setAutoFillBackground(False)
-        scroll.viewport().setStyleSheet("background: transparent;")
+        scroll.viewport().setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+            " stop:0 #091423, stop:0.48 #111636, stop:1 #08251E);"
+        )
         scroll.setWidget(self.container)
-        scroll.setMinimumHeight(300)
+        scroll.setMinimumHeight(160)
         self.history_scroll_area = scroll
         self.history_records_panel = scroll
         content_layout.addWidget(scroll, 1)
@@ -719,7 +722,7 @@ class HistoryWindow(QDialog):
         label = QLabel(text)
         label.setObjectName(object_name)
         label.setAlignment(Qt.AlignCenter)
-        label.setFixedHeight(32)
+        label.setFixedHeight(28)
         label.setWordWrap(False)
         label.setToolTip(text)
         return label
@@ -729,11 +732,11 @@ class HistoryWindow(QDialog):
         card.setObjectName("historyChartCard")
         card.setProperty("historyTone", tone)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(232)
+        card.setFixedHeight(178)
         apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(11, 8, 11, 8)
-        layout.setSpacing(3)
+        layout.setContentsMargins(9, 6, 9, 6)
+        layout.setSpacing(2)
         title_label = QLabel(title)
         title_label.setObjectName("historyChartTitle")
         subtitle_label = QLabel(subtitle)
@@ -752,7 +755,7 @@ class HistoryWindow(QDialog):
         edit.setDisplayFormat("yyyy-MM-dd")
         edit.setToolTip(tooltip)
         edit.setAccessibleName(accessible_name)
-        edit.setFixedHeight(34)
+        edit.setFixedHeight(30)
         edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return edit
 
@@ -761,7 +764,7 @@ class HistoryWindow(QDialog):
         button.setObjectName(object_name)
         button.setToolTip(tooltip)
         button.setCursor(Qt.PointingHandCursor)
-        button.setFixedHeight(34)
+        button.setFixedHeight(30)
         return button
 
     def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
@@ -1287,16 +1290,16 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
 def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     chip = QFrame()
     chip.setObjectName("historyExportDateChip")
-    chip.setFixedHeight(46)
+    chip.setFixedHeight(38)
     chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     layout = QHBoxLayout(chip)
-    layout.setContentsMargins(8, 5, 7, 5)
-    layout.setSpacing(7)
+    layout.setContentsMargins(7, 4, 6, 4)
+    layout.setSpacing(6)
     label = QLabel(label_text)
     label.setObjectName("historyExportDateLabel")
     label.setAlignment(Qt.AlignCenter)
-    label.setFixedHeight(30)
-    date_edit.setFixedHeight(34)
+    label.setFixedHeight(26)
+    date_edit.setFixedHeight(30)
     date_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     layout.addWidget(label)
     layout.addWidget(date_edit, 1)
@@ -1344,9 +1347,9 @@ def _history_title_bar_style() -> str:
     return """
 QFrame#historyDragTitleBar {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #060A12,
-    stop:0.52 #0A1020,
-    stop:1 #101723);
+    stop:0 #080D1A,
+    stop:0.52 #0D1730,
+    stop:1 #132033);
   border: none;
   border-radius: 8px;
 }
@@ -1360,7 +1363,7 @@ QFrame#historyDragTitleBar QPushButton {
   background: #151D31;
   border: none;
   border-radius: 8px;
-  min-height: 38px;
+  min-height: 34px;
   font-weight: 900;
 }
 QFrame#historyDragTitleBar QPushButton:hover {
@@ -1386,7 +1389,7 @@ QFrame#historyHeaderPanel {{
 }}
 QLabel#historyTitle {{
   color: #F8FBFF;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 900;
 }}
 QLabel#historySubtitle {{
@@ -1401,15 +1404,15 @@ QLabel#historyCountChip {{
   border: none;
   border-radius: 8px;
   min-width: 72px;
-  min-height: 34px;
-  font-size: 16px;
+  min-height: 30px;
+  font-size: 15px;
   font-weight: 900;
 }}
 QFrame#historyStatsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #050A12,
-    stop:0.48 #07121F,
-    stop:1 #071B1B);
+    stop:0 #050B15,
+    stop:0.48 #081528,
+    stop:1 #081F1F);
   border: none;
   border-radius: 8px;
 }}
@@ -1423,9 +1426,9 @@ QFrame#historyMetricsPanel {{
 }}
 QFrame#historyAnalyticsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #061827,
-    stop:0.54 #0B2433,
-    stop:1 #0C302F);
+    stop:0 #07243C,
+    stop:0.52 #0B3650,
+    stop:1 #0A4843);
   border: none;
   border-radius: 8px;
 }}
@@ -1445,7 +1448,7 @@ QLabel#historyOverdueMetric {{
   border: none;
   border-radius: 8px;
   font-weight: 900;
-  font-size: 13px;
+  font-size: 12px;
   padding: 0 6px;
 }}
 QLabel#historyPriorityMetricP1 {{
@@ -1466,7 +1469,7 @@ QLabel#historyOverdueMetric {{
 }}
 QLabel#historyAnalyticsTitle {{
   color: #F8FBFF;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   padding: 0 2px;
 }}
@@ -1476,7 +1479,7 @@ QLabel#historyAnalyticsCount {{
   border: none;
   border-radius: 8px;
   min-width: 54px;
-  min-height: 28px;
+  min-height: 24px;
   font-weight: 900;
   font-size: 13px;
 }}
@@ -1485,7 +1488,7 @@ QPushButton#historyAnalyticsPresetButton {{
   background: #101827;
   border: none;
   border-radius: 8px;
-  min-height: 28px;
+  min-height: 26px;
   padding: 3px 9px;
   font-weight: 900;
 }}
@@ -1511,46 +1514,46 @@ QFrame#historyChartCard {{
 }}
 QFrame#historyChartCard[historyTone="priority"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #15100A,
-    stop:0.55 #1A1826,
-    stop:1 #1F251B);
+    stop:0 #21110A,
+    stop:0.48 #2A1721,
+    stop:1 #263210);
 }}
 QFrame#historyChartCard[historyTone="trend"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #071421,
-    stop:0.56 #0B1F35,
-    stop:1 #102A3A);
+    stop:0 #071A31,
+    stop:0.52 #0B2D52,
+    stop:1 #08364C);
 }}
 QFrame#historyChartCard[historyTone="deadline"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #160D16,
-    stop:0.56 #211324,
-    stop:1 #26161B);
+    stop:0 #221020,
+    stop:0.52 #35162B,
+    stop:1 #392015);
 }}
 QLabel#historyChartTitle {{
   color: #F8FBFF;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
 }}
 QLabel#historyChartSubtitle {{
   color: #8EA2B7;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }}
 QFrame#historyToolbar {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #060D17,
-    stop:0.52 #0B1220,
-    stop:1 #0B1D22);
+    stop:0 #071020,
+    stop:0.52 #0D1430,
+    stop:1 #0A2630);
   border: none;
   border-radius: 8px;
   padding: 7px;
 }}
 QFrame#historySearchPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #081421,
-    stop:0.52 #0D1B2E,
-    stop:1 #111A2B);
+    stop:0 #10133C,
+    stop:0.52 #102B48,
+    stop:1 #17304A);
   border: none;
   border-radius: 8px;
 }}
@@ -1561,9 +1564,9 @@ QLabel#historyToolbarLabel {{
 }}
 QFrame#historyExportPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #06151F,
-    stop:0.55 #092234,
-    stop:1 #0D3735);
+    stop:0 #073035,
+    stop:0.45 #0D3F3F,
+    stop:1 #2D2D10);
   border: none;
   border-radius: 8px;
 }}
@@ -1588,7 +1591,7 @@ QPushButton#historyExportPresetButton {{
   background: #101827;
   border: none;
   border-radius: 8px;
-  min-height: 28px;
+  min-height: 26px;
   padding: 3px 10px;
   font-weight: 900;
 }}
@@ -1599,17 +1602,17 @@ QPushButton#historyExportPresetButton:hover {{
     stop:1 #115E59);
 }}
 QFrame#historyExportDateChip {{
-  background: #070D16;
+  background: #092433;
   border: none;
   border-radius: 8px;
 }}
 QLabel#historyExportDateLabel {{
-  color: #7DD3FC;
-  background: #0D1A28;
+  color: #B9F7E8;
+  background: #104050;
   border: none;
   border-radius: 7px;
   min-width: 42px;
-  min-height: 28px;
+  min-height: 24px;
   font-weight: 900;
 }}
 QLabel#historyExportArrow {{
@@ -1621,10 +1624,10 @@ QLabel#historyExportArrow {{
 QLineEdit#historySearch, QComboBox#historyMode, QComboBox#historyDateSelector,
 QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate,
 QDateEdit#historyAnalyticsStartDate, QDateEdit#historyAnalyticsEndDate {{
-  background: #101827;
+  background: #121A2B;
   color: #ECFEFF;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   min-width: 112px;
 }}
 QLabel#historyPageLabel {{
@@ -1637,17 +1640,17 @@ QLabel#historyPageLabel {{
 }}
 QFrame#historyPagerPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0C1020,
-    stop:0.54 #111B2F,
-    stop:1 #112A2B);
+    stop:0 #18123B,
+    stop:0.5 #142B48,
+    stop:1 #0B4050);
   border: none;
   border-radius: 8px;
 }}
 QScrollArea#historyRecordsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #060B12,
-    stop:0.54 #09121D,
-    stop:1 #071F1B);
+    stop:0 #091423,
+    stop:0.48 #111636,
+    stop:1 #08251E);
   border: none;
   border-radius: 8px;
 }}
