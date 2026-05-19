@@ -51,8 +51,8 @@ def test_readme_documents_current_build_flow():
     readme = README.read_text(encoding="utf-8")
 
     assert "```powershell\npowershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\build.ps1\n```" in readme
-    assert "https://github.com/chenboyu666/Todo_list/releases/tag/v1.1" in readme
-    assert "`Todo-list-V1.1-windows.exe`，双击运行即可。" in readme
+    assert "https://github.com/chenboyu666/Todo_list/releases/tag/v1.0" in readme
+    assert "`Todo-list-V1.0-windows.exe`，双击运行即可。" in readme
     assert "dist\\Todo list.exe" in readme
     assert "data\\" in readme
     assert "release\\V1.0" not in readme
