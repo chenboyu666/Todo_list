@@ -24,7 +24,7 @@
 
 ## 发布版下载
 
-在 [Releases](https://github.com/chenboyu666/Todo_list/releases/tag/v1.0) 页面下载 `Todo-list-V1.0-windows.exe`，双击运行即可。
+在 [Releases](https://github.com/chenboyu666/Todo_list/releases/tag/v1.1) 页面下载 `Todo-list-V1.1-windows.exe`，双击运行即可。
 
 ## 开发环境
 
