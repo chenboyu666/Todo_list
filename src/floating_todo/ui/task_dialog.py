@@ -339,6 +339,7 @@ class TaskDialog(QDialog):
             created_at=now,
             updated_at=now,
             completed_at=None,
+            work_started_at=now,
             notes=self.notes_input.toPlainText(),
             notification_state=dict(DEFAULT_NOTIFICATION_STATE),
         )

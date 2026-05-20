@@ -59,6 +59,40 @@ def test_save_writes_valid_json_array(tmp_path):
     assert raw[0]["title"] == "Write spec"
 
 
+def test_load_migrates_old_active_tasks_to_work_timer_fields(tmp_path):
+    path = tmp_path / "tasks.json"
+    now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "old-active",
+                    "title": "旧任务",
+                    "priority": "P1",
+                    "effort_minutes": 45,
+                    "deadline": now.isoformat(),
+                    "progress": 10,
+                    "status": "active",
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "completed_at": None,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    store = JsonTaskStore(path)
+
+    tasks = store.load_tasks()
+    migrated = json.loads(path.read_text(encoding="utf-8"))
+
+    assert tasks[0].work_elapsed_seconds == 0
+    assert tasks[0].work_started_at is not None
+    assert migrated[0]["work_elapsed_seconds"] == 0
+    assert migrated[0]["work_started_at"]
+
+
 def test_load_json_object_missing_file_returns_shallow_default_copy(tmp_path):
     default = {"opacity": 0.96, "nested": {"kept": True}}
 

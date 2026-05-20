@@ -115,8 +115,9 @@ def test_task_rows_show_paused_tasks_after_active_tasks():
     assert [row["title"] for row in rows] == ["active-p2", "paused-p1"]
     assert rows[1]["status"] == "paused"
     assert rows[1]["is_paused"] is True
-    assert rows[1]["urgency"] == "paused"
-    assert rows[1]["urgency_label"] == "已暂停"
+    assert rows[1]["urgency"] == "critical"
+    assert rows[1]["urgency_label"] == "已暂停 · 10 分内"
+    assert rows[1]["work_timer_label"].endswith(" / 1h30m")
 
 
 def test_task_rows_accept_naive_now_from_ui_callers():

@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from floating_todo.app_identity import APP_DISPLAY_NAME, APP_STARTUP_NAME, resolved_icon_path
-from floating_todo.domain import Task, select_focus_task
+from floating_todo.domain import Task, freeze_work_timer, pause_work_timer, resume_work_timer, select_focus_task
 from floating_todo.platform_windows import current_startup_command, set_launch_on_startup
 from floating_todo.reminders import mark_event_sent, reminder_events
 from floating_todo.settings import (
@@ -58,6 +58,7 @@ from floating_todo.view_models import (
     deadline_urgency,
     task_rows,
     today_completion_percent,
+    work_timer_label,
 )
 
 
@@ -431,7 +432,7 @@ class MainWindow(QMainWindow):
         self.today_completion_label = QLabel("0%")
         self.active_count_label = QLabel("0")
         self.focus_title_label = QLabel("没有进行中的任务")
-        self.focus_meta_label = QLabel("工作量 --")
+        self.focus_meta_label = QLabel("工作计时 --")
         self.focus_deadline_label = QLabel("截止 --:--:--")
         self.focus_countdown_label = QLabel("--:--:--")
         self.focus_countdown_label.setObjectName("focusCountdownLabel")
@@ -585,8 +586,8 @@ class MainWindow(QMainWindow):
         focus_actions.addWidget(self.focus_edit_button)
         self.focus_pause_button = QPushButton("Ⅱ")
         self.focus_pause_button.setObjectName("focusPauseButton")
-        self.focus_pause_button.setToolTip("暂停当前任务，暂时移出进行中和提醒")
-        self.focus_pause_button.setAccessibleName("暂停或继续当前任务")
+        self.focus_pause_button.setToolTip("暂停工作计时，截止倒计时仍继续")
+        self.focus_pause_button.setAccessibleName("暂停或继续工作计时")
         self.focus_pause_button.setFixedSize(_scale_px(44), _scale_px(36))
         self.focus_pause_button.clicked.connect(self.toggle_focus_pause_task)
         focus_actions.addWidget(self.focus_pause_button)
@@ -831,27 +832,27 @@ class MainWindow(QMainWindow):
         if index is None or self.tasks[index].status != "active":
             return
         now = datetime.now(timezone.utc)
-        paused = replace(self.tasks[index], status="paused", updated_at=now)
+        paused = pause_work_timer(self.tasks[index], now)
         self.tasks = [*self.tasks[:index], paused, *self.tasks[index + 1 :]]
         self.settings = replace(self.settings, focus_task_id=task_id)
         self._save_settings()
         self.store.save_tasks(self.tasks)
         self.refresh()
-        self.show_toast("已暂停", f"{paused.title}\n暂时移出进行中与提醒，需要时点继续恢复。", kind="info", duration_ms=4200)
+        self.show_toast("工作计时已暂停", f"{paused.title}\n截止倒计时仍会继续，提醒也会按截止时间触发。", kind="info", duration_ms=4200)
 
     def resume_task(self, task_id: str, *, make_focus: bool = False) -> None:
         index = self._task_index(task_id)
         if index is None or self.tasks[index].status != "paused":
             return
         now = datetime.now(timezone.utc)
-        resumed = replace(self.tasks[index], status="active", updated_at=now)
+        resumed = resume_work_timer(self.tasks[index], now)
         self.tasks = [*self.tasks[:index], resumed, *self.tasks[index + 1 :]]
         if make_focus:
             self.settings = replace(self.settings, focus_task_id=task_id)
             self._save_settings()
         self.store.save_tasks(self.tasks)
         self.refresh()
-        self.show_toast("已继续", f"{resumed.title}\n已恢复到进行中任务。", kind="success", duration_ms=3800)
+        self.show_toast("工作计时已继续", f"{resumed.title}\n已恢复工作计时，并设为进行中任务。", kind="success", duration_ms=3800)
         if make_focus:
             self._pulse_widget(self.focus_card)
 
@@ -862,7 +863,8 @@ class MainWindow(QMainWindow):
         if not self.confirm_complete_task(self.tasks[index]):
             return
         now = datetime.now(timezone.utc)
-        completed = replace(self.tasks[index], status="done", progress=100, completed_at=now, updated_at=now)
+        frozen = freeze_work_timer(self.tasks[index], now)
+        completed = replace(frozen, status="done", progress=100, completed_at=now, updated_at=now)
         self.tasks = [*self.tasks[:index], completed, *self.tasks[index + 1 :]]
         if self.settings.focus_task_id == task_id:
             self.settings = replace(self.settings, focus_task_id=None)
@@ -1293,7 +1295,8 @@ class MainWindow(QMainWindow):
         if focus_task is None:
             self.focus_title_label.setText("没有进行中的任务")
             self.focus_title_label.setToolTip("")
-            self.focus_meta_label.setText("工作量 --")
+            self.focus_title_prefix.setText("进行中")
+            self.focus_meta_label.setText("工作计时 --")
             self.focus_notes_label.clear()
             self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
@@ -1312,10 +1315,13 @@ class MainWindow(QMainWindow):
             self.empty_state_widget.show()
         else:
             is_paused_focus = focus_task.status == "paused"
-            urgency, urgency_label = ("paused", "已暂停") if is_paused_focus else deadline_urgency(focus_task.deadline, now)
+            urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
+            if is_paused_focus:
+                urgency_label = f"已暂停 · {urgency_label}"
             self.focus_title_label.setText(focus_task.title)
             self.focus_title_label.setToolTip(focus_task.title)
-            self.focus_meta_label.setText(f"工作量 {focus_task.effort_minutes} min")
+            self.focus_title_prefix.setText("已暂停" if is_paused_focus else "进行中")
+            self.focus_meta_label.setText(f"工作计时 {work_timer_label(focus_task, now)}")
             self._set_focus_notes(focus_task.notes)
             self.focus_priority_label.setText(focus_task.priority)
             self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
@@ -1435,7 +1441,7 @@ class MainWindow(QMainWindow):
         if is_paused:
             resume_button = QPushButton()
             self._configure_pause_resume_button(resume_button, paused=True)
-            resume_button.setToolTip("恢复任务，并设为当前进行中")
+            resume_button.setToolTip("继续工作计时，并设为当前进行中")
             resume_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
             compact_row.addWidget(resume_button)
         else:
@@ -1495,12 +1501,12 @@ class MainWindow(QMainWindow):
 
         detail_row = QHBoxLayout()
         detail_row.setSpacing(_scale_px(6))
-        detail_row.addWidget(QLabel(f"工作量 {row['effort_label']}"))
+        detail_row.addWidget(QLabel(f"计时 {row['work_timer_label']}"))
         detail_row.addStretch(1)
         pause_button = QPushButton()
         self._configure_pause_resume_button(pause_button, paused=is_paused)
         if is_paused:
-            pause_button.setToolTip("恢复任务，并设为当前进行中")
+            pause_button.setToolTip("继续工作计时，并设为当前进行中")
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
         else:
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.pause_task(task_id))
@@ -1560,13 +1566,13 @@ class MainWindow(QMainWindow):
         if paused:
             button.setText("▶")
             button.setObjectName("resumeTaskButton")
-            button.setToolTip("继续暂停中的当前任务")
-            button.setAccessibleName("继续任务")
+            button.setToolTip("继续工作计时")
+            button.setAccessibleName("继续工作计时")
         else:
             button.setText("Ⅱ")
             button.setObjectName("focusPauseButton" if focus else "pauseTaskButton")
-            button.setToolTip("暂停任务，暂时移出进行中和提醒")
-            button.setAccessibleName("暂停任务")
+            button.setToolTip("暂停工作计时，截止倒计时仍继续")
+            button.setAccessibleName("暂停工作计时")
         button.setCursor(Qt.PointingHandCursor)
         button.setFixedSize(_scale_px(44), _scale_px(36))
         button.style().unpolish(button)
