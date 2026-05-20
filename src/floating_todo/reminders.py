@@ -18,7 +18,7 @@ def reminder_events(task: Task, now: datetime, lead_minutes: int, repeat_minutes
         raise ValueError("lead_minutes must be non-negative")
     if repeat_minutes <= 0:
         raise ValueError("repeat_minutes must be positive")
-    if task.status != "active" or task.deadline is None:
+    if task.status not in {"active", "paused"} or task.deadline is None:
         return []
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)

@@ -3,7 +3,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from floating_todo.domain import Task, select_focus_task, sort_tasks, sort_visible_tasks, task_from_dict, task_to_dict
+from floating_todo.domain import (
+    Task,
+    freeze_work_timer,
+    pause_work_timer,
+    resume_work_timer,
+    select_focus_task,
+    sort_tasks,
+    sort_visible_tasks,
+    task_from_dict,
+    task_to_dict,
+    work_elapsed_seconds,
+)
 
 
 UTC = timezone.utc
@@ -139,3 +150,31 @@ def test_task_notification_state_cannot_be_mutated_directly():
 
     with pytest.raises(TypeError):
         task.notification_state["deadline_warning_sent"] = True
+
+
+def test_work_timer_pauses_resumes_and_freezes_without_changing_deadline():
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=UTC)
+    task = replace(
+        make_task("timer", "P1", 2, 30, 0),
+        work_elapsed_seconds=30,
+        work_started_at=base,
+    )
+
+    assert work_elapsed_seconds(task, base + timedelta(seconds=45)) == 75
+
+    paused = pause_work_timer(task, base + timedelta(seconds=45))
+    assert paused.status == "paused"
+    assert paused.deadline == task.deadline
+    assert paused.work_elapsed_seconds == 75
+    assert paused.work_started_at is None
+    assert work_elapsed_seconds(paused, base + timedelta(minutes=5)) == 75
+
+    resumed = resume_work_timer(paused, base + timedelta(minutes=5))
+    assert resumed.status == "active"
+    assert resumed.work_started_at == base + timedelta(minutes=5)
+    assert work_elapsed_seconds(resumed, base + timedelta(minutes=5, seconds=30)) == 105
+
+    frozen = freeze_work_timer(resumed, base + timedelta(minutes=5, seconds=30))
+    assert frozen.status == "active"
+    assert frozen.work_elapsed_seconds == 105
+    assert frozen.work_started_at is None

@@ -277,7 +277,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     assert window.focus_complete_button.text() == "完成"
     assert window.focus_pause_button.text() == "Ⅱ"
-    assert window.focus_pause_button.toolTip() == "暂停任务，暂时移出进行中和提醒"
+    assert window.focus_pause_button.toolTip() == "暂停工作计时，截止倒计时仍继续"
     assert window.focus_title_label.maximumHeight() <= 96
     assert window.focus_delete_button.text() == "删除"
     assert window.focus_pause_button.isEnabled()
@@ -496,9 +496,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.fullscreen_button.objectName() == "historyFullscreenButton"
     assert window.fullscreen_button.toolTip() == "全屏历史窗口"
-    assert window.priority_p1_label.text() == "P1 1"
-    assert window.priority_p2_label.text() == "P2 1"
-    assert window.priority_p3_label.text() == "P3 0"
+    assert window.priority_p1_label.text() == "P1：1"
+    assert window.priority_p2_label.text() == "P2：1"
+    assert window.priority_p3_label.text() == "P3：0"
     assert window.review_metric_label.text() == "复盘 1/2"
     assert window.on_time_metric_label.text() == "准时率 100%"
     assert window.overdue_metric_label.text() == "超时 0/2"
@@ -519,6 +519,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "historyRecordsPanel" in window.styleSheet()
     assert "historySearchPanel" in window.styleSheet()
     assert "historyAnalyticsPanel" in window.styleSheet()
+    assert "historyWorkTimerChip" in window.styleSheet()
+    assert "#25135C" in window.styleSheet()
     window.show()
     qapp.processEvents()
     assert window.history_content_scroll.verticalScrollBar().maximum() == 0
@@ -650,8 +652,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     labels = rendered_history_text()
     assert not window.date_pager_widget.isHidden()
     assert "按等级 · 1-2/2 条 · 1/1 页" in window.date_page_label.text()
-    assert "P1 · 1 条" in labels
-    assert "P2 · 1 条" in labels
+    assert "P1：1 条" in labels
+    assert "P2：1 条" in labels
 
     window.close()
 
@@ -684,9 +686,9 @@ def test_history_analytics_tracks_overdue_and_no_deadline(qapp: QApplication) ->
     store = MemoryStore([on_time, overdue, no_deadline])
     window = HistoryWindow([on_time, overdue, no_deadline], store)
 
-    assert window.priority_p1_label.text() == "P1 1"
-    assert window.priority_p2_label.text() == "P2 1"
-    assert window.priority_p3_label.text() == "P3 1"
+    assert window.priority_p1_label.text() == "P1：1"
+    assert window.priority_p2_label.text() == "P2：1"
+    assert window.priority_p3_label.text() == "P3：1"
     assert window.on_time_metric_label.text() == "准时率 50%"
     assert window.overdue_metric_label.text() == "超时 1/2"
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 1, "overdue": 1, "no_deadline": 1}

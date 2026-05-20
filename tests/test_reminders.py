@@ -84,11 +84,11 @@ def test_completed_task_has_no_events():
     assert reminder_events(task, now, lead_minutes=15) == []
 
 
-def test_paused_task_has_no_events():
+def test_paused_task_still_uses_deadline_events():
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     task = replace(task_with_deadline(now), status="paused")
 
-    assert reminder_events(task, now, lead_minutes=15) == []
+    assert reminder_events(task, now, lead_minutes=15) == ["deadline_due"]
 
 
 def test_active_task_without_deadline_has_no_events():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from floating_todo.domain import Task, normalize_datetime, sort_visible_tasks
+from floating_todo.domain import Task, normalize_datetime, sort_visible_tasks, work_elapsed_seconds, work_target_seconds
 
 
 def deadline_at_label(deadline: datetime | None) -> str:
@@ -24,6 +24,30 @@ def countdown_label(deadline: datetime | None, now: datetime) -> str:
     seconds = total_seconds % 60
     label = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     return f"超时 {label}" if past else label
+
+
+def duration_clock_label(total_seconds: int) -> str:
+    total_seconds = max(0, int(total_seconds))
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def effort_short_label(minutes: int) -> str:
+    minutes = max(0, int(minutes))
+    hours, remainder = divmod(minutes, 60)
+    if hours and remainder:
+        return f"{hours}h{remainder:02d}m"
+    if hours:
+        return f"{hours}h"
+    return f"{remainder}m"
+
+
+def work_timer_label(task: Task, now: datetime) -> str:
+    elapsed = duration_clock_label(work_elapsed_seconds(task, now))
+    target_minutes = max(0, work_target_seconds(task) // 60)
+    return f"{elapsed} / {effort_short_label(target_minutes)}"
 
 
 def deadline_urgency(deadline: datetime | None, now: datetime) -> tuple[str, str]:
@@ -57,7 +81,7 @@ def task_rows(tasks: list[Task], now: datetime) -> list[dict[str, object]]:
     for task in sort_visible_tasks(tasks):
         urgency, urgency_label = deadline_urgency(task.deadline, now)
         if task.status == "paused":
-            urgency, urgency_label = "paused", "已暂停"
+            urgency_label = f"已暂停 · {urgency_label}"
         rows.append(
             {
                 "id": task.id,
@@ -67,6 +91,9 @@ def task_rows(tasks: list[Task], now: datetime) -> list[dict[str, object]]:
                 "notes": task.notes,
                 "priority": task.priority,
                 "effort_label": f"{task.effort_minutes} min",
+                "work_timer_label": work_timer_label(task, now),
+                "work_elapsed_label": duration_clock_label(work_elapsed_seconds(task, now)),
+                "work_target_label": effort_short_label(max(0, work_target_seconds(task) // 60)),
                 "deadline_label": countdown_label(task.deadline, now),
                 "deadline_at_label": deadline_at_label(task.deadline),
                 "progress": task.progress,

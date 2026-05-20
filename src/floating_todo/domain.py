@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Literal
@@ -30,6 +31,8 @@ class Task:
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    work_elapsed_seconds: int = 0
+    work_started_at: datetime | None = None
     notes: str = ""
     reflection: str = ""
     notification_state: Mapping[str, Any] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
@@ -39,6 +42,8 @@ class Task:
         object.__setattr__(self, "created_at", normalize_datetime(self.created_at))
         object.__setattr__(self, "updated_at", normalize_datetime(self.updated_at))
         object.__setattr__(self, "completed_at", normalize_datetime(self.completed_at))
+        object.__setattr__(self, "work_elapsed_seconds", max(0, int(self.work_elapsed_seconds or 0)))
+        object.__setattr__(self, "work_started_at", normalize_datetime(self.work_started_at))
 
         notification_state = dict(DEFAULT_NOTIFICATION_STATE)
         notification_state.update(self.notification_state)
@@ -87,6 +92,8 @@ def task_from_dict(data: dict[str, Any]) -> Task:
         created_at=parse_datetime(data.get("created_at")) or now,
         updated_at=parse_datetime(data.get("updated_at")) or now,
         completed_at=parse_datetime(data.get("completed_at")),
+        work_elapsed_seconds=max(0, int(data.get("work_elapsed_seconds", 0) or 0)),
+        work_started_at=parse_datetime(data.get("work_started_at")),
         notes=str(data.get("notes", "")),
         reflection=str(data.get("reflection", "")),
         notification_state=notification_state,
@@ -105,6 +112,8 @@ def task_to_dict(task: Task) -> dict[str, Any]:
         "created_at": format_datetime(task.created_at),
         "updated_at": format_datetime(task.updated_at),
         "completed_at": format_datetime(task.completed_at),
+        "work_elapsed_seconds": task.work_elapsed_seconds,
+        "work_started_at": format_datetime(task.work_started_at),
         "notes": task.notes,
         "reflection": task.reflection,
         "notification_state": dict(task.notification_state),
@@ -140,3 +149,42 @@ def _task_sort_key(task: Task) -> tuple[int, bool, datetime, int, datetime]:
 def select_focus_task(tasks: list[Task]) -> Task | None:
     sorted_tasks = sort_tasks(tasks)
     return sorted_tasks[0] if sorted_tasks else None
+
+
+def work_elapsed_seconds(task: Task, now: datetime | None = None) -> int:
+    elapsed = max(0, int(task.work_elapsed_seconds or 0))
+    if task.status != "active" or task.work_started_at is None:
+        return elapsed
+    now = normalize_datetime(now or utc_now())
+    started_at = normalize_datetime(task.work_started_at)
+    return elapsed + max(0, int((now - started_at).total_seconds()))
+
+
+def work_target_seconds(task: Task) -> int:
+    return max(0, int(task.effort_minutes or 0) * 60)
+
+
+def pause_work_timer(task: Task, now: datetime | None = None) -> Task:
+    now = normalize_datetime(now or utc_now())
+    return replace(
+        task,
+        status="paused",
+        work_elapsed_seconds=work_elapsed_seconds(task, now),
+        work_started_at=None,
+        updated_at=now,
+    )
+
+
+def resume_work_timer(task: Task, now: datetime | None = None) -> Task:
+    now = normalize_datetime(now or utc_now())
+    return replace(task, status="active", work_started_at=now, updated_at=now)
+
+
+def freeze_work_timer(task: Task, now: datetime | None = None) -> Task:
+    now = normalize_datetime(now or utc_now())
+    return replace(
+        task,
+        work_elapsed_seconds=work_elapsed_seconds(task, now),
+        work_started_at=None,
+        updated_at=now,
+    )

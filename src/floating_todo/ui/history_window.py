@@ -30,11 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from floating_todo.domain import Task
+from floating_todo.domain import Task, work_elapsed_seconds, work_target_seconds
 from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.date_controls import apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
+from floating_todo.view_models import duration_clock_label, effort_short_label
 
 
 CSV_HEADERS = [
@@ -42,6 +43,8 @@ CSV_HEADERS = [
     "标题",
     "优先级",
     "预估工作量分钟",
+    "实际工作时长",
+    "实际工作秒数",
     "截止时间",
     "进度",
     "状态",
@@ -119,7 +122,11 @@ class PriorityDonutChart(QWidget):
             painter.setPen(QColor("#D8E8F5"))
             count = self.priority_counts[priority]
             percent = round(count / total * 100) if total else 0
-            painter.drawText(QRectF(legend_x + 30, y - 2, rect.right() - legend_x - 30, 22), Qt.AlignLeft, f"{priority}  {count} · {percent}%")
+            painter.drawText(
+                QRectF(legend_x + 30, y - 2, rect.right() - legend_x - 30, 22),
+                Qt.AlignLeft,
+                f"{priority}：{count} · {percent}%",
+            )
 
 
 class CompletionTrendChart(QWidget):
@@ -421,9 +428,9 @@ class HistoryWindow(QDialog):
         metric_strip = QHBoxLayout(metrics_panel)
         metric_strip.setContentsMargins(8, 4, 8, 4)
         metric_strip.setSpacing(6)
-        self.priority_p1_label = self._metric_label("P1 0", "historyPriorityMetricP1")
-        self.priority_p2_label = self._metric_label("P2 0", "historyPriorityMetricP2")
-        self.priority_p3_label = self._metric_label("P3 0", "historyPriorityMetricP3")
+        self.priority_p1_label = self._metric_label("P1：0", "historyPriorityMetricP1")
+        self.priority_p2_label = self._metric_label("P2：0", "historyPriorityMetricP2")
+        self.priority_p3_label = self._metric_label("P3：0", "historyPriorityMetricP3")
         self.priority_mix_label = self.priority_p1_label
         self.review_metric_label = self._metric_label("复盘 0/0")
         self.on_time_metric_label = self._metric_label("准时率 --")
@@ -680,7 +687,7 @@ class HistoryWindow(QDialog):
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet(
             "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-            " stop:0 #091423, stop:0.48 #111636, stop:1 #08251E);"
+            " stop:0 #111C3F, stop:0.34 #182252, stop:0.68 #073B4C, stop:1 #073B2D);"
         )
         scroll.setWidget(self.container)
         scroll.setMinimumHeight(160)
@@ -931,9 +938,9 @@ class HistoryWindow(QDialog):
             if latest_task
             else "--"
         )
-        self.priority_p1_label.setText(f"P1 {counts['P1']}")
-        self.priority_p2_label.setText(f"P2 {counts['P2']}")
-        self.priority_p3_label.setText(f"P3 {counts['P3']}")
+        self.priority_p1_label.setText(f"P1：{counts['P1']}")
+        self.priority_p2_label.setText(f"P2：{counts['P2']}")
+        self.priority_p3_label.setText(f"P3：{counts['P3']}")
         self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
         self.on_time_metric_label.setText(f"准时率 {on_time_rate}%" if on_time_rate is not None else "准时率 --")
         self.overdue_metric_label.setText(f"超时 {overdue}/{deadline_total}")
@@ -1123,7 +1130,8 @@ class HistoryWindow(QDialog):
             self._render()
 
     def _group_header(self, title: str, count: int) -> QLabel:
-        label = QLabel(f"{title} · {count} 条")
+        separator = "：" if title in {"P1", "P2", "P3"} else " · "
+        label = QLabel(f"{title}{separator}{count} 条")
         label.setObjectName("historyGroupHeader")
         return label
 
@@ -1156,16 +1164,22 @@ class HistoryWindow(QDialog):
 
         header = QHBoxLayout()
         header.setSpacing(8)
-        priority = QLabel(task.priority)
+        priority = QLabel(f"{task.priority}：")
         priority.setObjectName(f"historyPriority{task.priority}")
         priority.setAlignment(Qt.AlignCenter)
         priority.setFixedHeight(24)
-        priority.setFixedWidth(42)
+        priority.setFixedWidth(48)
         header.addWidget(priority)
         progress = QLabel(f"{task.progress}%")
         progress.setObjectName("historyProgressChip")
         progress.setAlignment(Qt.AlignCenter)
         header.addWidget(progress)
+        work_elapsed = work_elapsed_seconds(task, task.completed_at or task.updated_at)
+        work_target = effort_short_label(max(0, work_target_seconds(task) // 60))
+        work_timer = QLabel(f"计时 {duration_clock_label(work_elapsed)} / {work_target}")
+        work_timer.setObjectName("historyWorkTimerChip")
+        work_timer.setAlignment(Qt.AlignCenter)
+        header.addWidget(work_timer)
         review_status = QLabel("已复盘" if task.notes.strip() or task.reflection.strip() else "待补记")
         review_status.setObjectName(
             "historyReviewChipDone" if task.notes.strip() or task.reflection.strip() else "historyReviewChipEmpty"
@@ -1275,6 +1289,8 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
                     "标题": task.title,
                     "优先级": task.priority,
                     "预估工作量分钟": task.effort_minutes,
+                    "实际工作时长": duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at)),
+                    "实际工作秒数": work_elapsed_seconds(task, task.completed_at or task.updated_at),
                     "截止时间": _export_datetime(task.deadline),
                     "进度": f"{task.progress}%",
                     "状态": task.status,
@@ -1410,25 +1426,28 @@ QLabel#historyCountChip {{
 }}
 QFrame#historyStatsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #050B15,
-    stop:0.48 #081528,
-    stop:1 #081F1F);
+    stop:0 #061226,
+    stop:0.34 #101A3B,
+    stop:0.68 #063442,
+    stop:1 #0A3E32);
   border: none;
   border-radius: 8px;
 }}
 QFrame#historyMetricsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0A0E1A,
-    stop:0.55 #11152A,
-    stop:1 #121E27);
+    stop:0 #15102E,
+    stop:0.36 #0D2D4E,
+    stop:0.72 #0F3B3D,
+    stop:1 #2A2B12);
   border: none;
   border-radius: 8px;
 }}
 QFrame#historyAnalyticsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #07243C,
-    stop:0.52 #0B3650,
-    stop:1 #0A4843);
+    stop:0 #052C55,
+    stop:0.34 #073E63,
+    stop:0.7 #075E59,
+    stop:1 #134E2B);
   border: none;
   border-radius: 8px;
 }}
@@ -1443,8 +1462,9 @@ QLabel#historyPriorityMetricP3,
 QLabel#historyOverdueMetric {{
   color: #D4E3F2;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #111D2C,
-    stop:1 #102A34);
+    stop:0 #17203B,
+    stop:0.55 #12334E,
+    stop:1 #0F3C43);
   border: none;
   border-radius: 8px;
   font-weight: 900;
@@ -1453,19 +1473,19 @@ QLabel#historyOverdueMetric {{
 }}
 QLabel#historyPriorityMetricP1 {{
   color: #FFE1A6;
-  background: #4E2814;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6B2E12, stop:1 #9A4C14);
 }}
 QLabel#historyPriorityMetricP2 {{
   color: #DCE7FF;
-  background: #182B60;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #20367E, stop:1 #3657B7);
 }}
 QLabel#historyPriorityMetricP3 {{
   color: #D9FBE8;
-  background: #123A33;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0D4A3D, stop:1 #15805C);
 }}
 QLabel#historyOverdueMetric {{
   color: #FFD5DF;
-  background: #3A1822;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #51172A, stop:1 #8B1D35);
 }}
 QLabel#historyAnalyticsTitle {{
   color: #F8FBFF;
@@ -1514,21 +1534,21 @@ QFrame#historyChartCard {{
 }}
 QFrame#historyChartCard[historyTone="priority"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #21110A,
-    stop:0.48 #2A1721,
-    stop:1 #263210);
+    stop:0 #2A1309,
+    stop:0.45 #3B1D2B,
+    stop:1 #33420E);
 }}
 QFrame#historyChartCard[historyTone="trend"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #071A31,
-    stop:0.52 #0B2D52,
-    stop:1 #08364C);
+    stop:0 #05264B,
+    stop:0.52 #0A3A70,
+    stop:1 #08566A);
 }}
 QFrame#historyChartCard[historyTone="deadline"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #221020,
-    stop:0.52 #35162B,
-    stop:1 #392015);
+    stop:0 #321228,
+    stop:0.52 #5A1832,
+    stop:1 #653013);
 }}
 QLabel#historyChartTitle {{
   color: #F8FBFF;
@@ -1542,18 +1562,19 @@ QLabel#historyChartSubtitle {{
 }}
 QFrame#historyToolbar {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #071020,
-    stop:0.52 #0D1430,
-    stop:1 #0A2630);
+    stop:0 #0B1534,
+    stop:0.34 #17204A,
+    stop:0.66 #073B46,
+    stop:1 #112F20);
   border: none;
   border-radius: 8px;
   padding: 7px;
 }}
 QFrame#historySearchPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #10133C,
-    stop:0.52 #102B48,
-    stop:1 #17304A);
+    stop:0 #25135C,
+    stop:0.42 #16408A,
+    stop:1 #0E6C82);
   border: none;
   border-radius: 8px;
 }}
@@ -1564,9 +1585,10 @@ QLabel#historyToolbarLabel {{
 }}
 QFrame#historyExportPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #073035,
-    stop:0.45 #0D3F3F,
-    stop:1 #2D2D10);
+    stop:0 #0A4A55,
+    stop:0.38 #0F766E,
+    stop:0.72 #365314,
+    stop:1 #713F12);
   border: none;
   border-radius: 8px;
 }}
@@ -1640,17 +1662,19 @@ QLabel#historyPageLabel {{
 }}
 QFrame#historyPagerPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #18123B,
-    stop:0.5 #142B48,
-    stop:1 #0B4050);
+    stop:0 #38135F,
+    stop:0.34 #1E3A8A,
+    stop:0.68 #0E7490,
+    stop:1 #047857);
   border: none;
   border-radius: 8px;
 }}
 QScrollArea#historyRecordsPanel {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #091423,
-    stop:0.48 #111636,
-    stop:1 #08251E);
+    stop:0 #111C3F,
+    stop:0.34 #182252,
+    stop:0.68 #073B4C,
+    stop:1 #073B2D);
   border: none;
   border-radius: 8px;
 }}
@@ -1710,6 +1734,18 @@ QLabel#historyProgressChip {{
   border: none;
   border-radius: 8px;
   min-width: 58px;
+  min-height: 24px;
+  font-weight: 900;
+}}
+QLabel#historyWorkTimerChip {{
+  color: #E0F2FE;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #1D4ED8,
+    stop:0.55 #0E7490,
+    stop:1 #047857);
+  border: none;
+  border-radius: 8px;
+  min-width: 118px;
   min-height: 24px;
   font-weight: 900;
 }}
