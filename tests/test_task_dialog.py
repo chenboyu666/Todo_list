@@ -47,7 +47,7 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
     dialog = TaskDialog()
     deadline = datetime(2026, 5, 12, 10, 30, tzinfo=timezone.utc)
     dialog.title_edit.setText("  写测试  ")
-    dialog.priority_combo.setCurrentText("P1")
+    dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P1"))
     dialog.effort_spin.setValue(90)
     dialog.deadline_edit.setDateTime(_qdatetime(deadline))
     dialog.progress_spin.setValue(25)
@@ -79,7 +79,8 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     after = datetime.now(timezone.utc)
 
     assert dialog.windowTitle() == "新增任务"
-    assert dialog.priority_combo.currentText() == "P2"
+    assert dialog.priority_combo.currentText() == "◆ 中"
+    assert dialog.priority_combo.currentData() == "P2"
     assert dialog.effort_spin.minimum() == 0
     assert dialog.effort_spin.maximum() == 1440
     assert dialog.effort_spin.singleStep() == 15
@@ -142,7 +143,7 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     parent = QMainWindow()
     dialog = TaskDialog(parent, existing)
     dialog.title_edit.setText("  更新任务  ")
-    dialog.priority_combo.setCurrentText("P3")
+    dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P3"))
     dialog.effort_spin.setValue(120)
     dialog.deadline_edit.setDateTime(_qdatetime(new_deadline))
     dialog.progress_spin.setValue(70)

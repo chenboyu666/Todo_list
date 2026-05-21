@@ -26,6 +26,7 @@ from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
 from floating_todo.ui.date_controls import apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
+from floating_todo.view_models import PRIORITY_ORDER, priority_display_label, priority_from_display
 
 
 def local_timezone():
@@ -93,8 +94,9 @@ class TaskDialog(QDialog):
         self.title_input.setPlaceholderText("任务名称")
         self.title_edit = self.title_input
         self.priority_input = QComboBox()
-        self.priority_input.addItems(["P1", "P2", "P3"])
-        self.priority_input.setToolTip("选择任务优先级：P1 最高，P3 较低")
+        for priority in PRIORITY_ORDER:
+            self.priority_input.addItem(priority_display_label(priority), priority)
+        self.priority_input.setToolTip("选择任务优先级：高优先级会以更暖的颜色突出")
         self.priority_input.setAccessibleName("任务优先级")
         self.priority_combo = self.priority_input
         self.effort_hour_input = QSpinBox()
@@ -220,7 +222,7 @@ class TaskDialog(QDialog):
         deadline = to_local_datetime(deadline)
 
         self.title_input.setText(task.title if task else "")
-        self.priority_input.setCurrentText(task.priority if task else "P2")
+        self._set_priority_value(task.priority if task else "P2")
         self._set_effort_fields(task.effort_minutes if task else 60)
         self.deadline_date_input.setDate(QDate(deadline.year, deadline.month, deadline.day))
         self.deadline_hour_input.setCurrentText(f"{deadline.hour:02d}")
@@ -242,6 +244,15 @@ class TaskDialog(QDialog):
             self.progress_slider.setValue(value)
         finally:
             self.progress_slider.blockSignals(False)
+
+    def _selected_priority(self) -> str:
+        data = self.priority_input.currentData()
+        return priority_from_display(str(data if data is not None else self.priority_input.currentText()))
+
+    def _set_priority_value(self, priority: str) -> None:
+        index = self.priority_input.findData(priority_from_display(priority))
+        fallback = self.priority_input.findData("P2")
+        self.priority_input.setCurrentIndex(index if index >= 0 else max(0, fallback))
 
     def _progress_value(self) -> int:
         self.progress_value_input.interpretText()
@@ -320,7 +331,7 @@ class TaskDialog(QDialog):
             return replace(
                 self.task,
                 title=title,
-                priority=self.priority_input.currentText(),
+                priority=self._selected_priority(),
                 effort_minutes=self._effort_minutes(),
                 deadline=deadline,
                 progress=self._progress_value(),
@@ -331,7 +342,7 @@ class TaskDialog(QDialog):
         return Task(
             id=str(uuid4()),
             title=title,
-            priority=self.priority_input.currentText(),
+            priority=self._selected_priority(),
             effort_minutes=self._effort_minutes(),
             deadline=self._deadline(),
             progress=self._progress_value(),

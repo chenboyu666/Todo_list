@@ -251,7 +251,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
     assert window.focus_top_layout.getItemPosition(deadline_index) == (2, 0, 1, 4)
 
-    window.resize(760, 620)
+    window.resize(860, 620)
     qapp.processEvents()
     title_index = window.focus_top_layout.indexOf(window.focus_title_label)
     assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
@@ -265,7 +265,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "截止" in row_labels
     assert "2026-" in row_labels
     assert "已超时" in row_labels
-    assert "进行中" in button_text
+    assert "当前" in button_text
     assert "展开" in button_text
     assert isinstance(window.task_list_layout, QGridLayout)
     assert "border: none" in _card_style("normal")
@@ -289,7 +289,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
-    assert window.focus_priority_label.text() == "P1"
+    assert window.focus_priority_label.text() == "▲ 高"
     assert "font-size: 24px" in window.focus_title_label.styleSheet()
     assert ("focusCountdownLabel", 170) not in tick_animations
     qapp.processEvents()
@@ -303,7 +303,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     window.focus_progress.setValue(67)
     assert window.focus_progress_label.text() == "67%"
     window.focus_progress.setSliderDown(False)
-    current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "进行中"]
+    current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "当前"]
     assert current_buttons[0].objectName() == "currentTaskButton"
     task_titles = window.task_rows_container.findChildren(QLabel, "activeTaskTitle")
     assert task_titles
@@ -313,6 +313,10 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert deadlines
     assert deadlines[0].wordWrap()
     assert deadlines[0].minimumHeight() >= 28
+    timers = window.task_rows_container.findChildren(QLabel, "activeTaskTimer")
+    assert timers
+    assert timers[0].text().startswith("计时 ")
+    assert timers[0].geometry().top() >= deadlines[0].geometry().bottom()
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
     expand_button.click()
     qapp.processEvents()
@@ -351,6 +355,23 @@ def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_
 
     assert window.settings.focus_task_id == "task-2"
     assert window.focus_title_label.text() == "后面的任务"
+
+    window.close()
+
+
+def test_paused_task_can_still_be_pinned_as_current(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    tasks = [make_task("当前", "task-1"), make_task("暂停候选", "task-paused", status="paused")]
+    store = MemoryStore(tasks)
+    window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
+
+    focus_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "置顶")
+    focus_button.click()
+
+    assert window.settings.focus_task_id == "task-paused"
+    assert window.focus_title_label.text() == "暂停候选"
+    assert window.focus_meta_label.text() == "暂停中"
 
     window.close()
 
@@ -496,9 +517,9 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.fullscreen_button.objectName() == "historyFullscreenButton"
     assert window.fullscreen_button.toolTip() == "全屏历史窗口"
-    assert window.priority_p1_label.text() == "P1：1"
-    assert window.priority_p2_label.text() == "P2：1"
-    assert window.priority_p3_label.text() == "P3：0"
+    assert window.priority_p1_label.text() == "▲ 高：1"
+    assert window.priority_p2_label.text() == "◆ 中：1"
+    assert window.priority_p3_label.text() == "▼ 低：0"
     assert window.review_metric_label.text() == "复盘 1/2"
     assert window.on_time_metric_label.text() == "准时率 100%"
     assert window.overdue_metric_label.text() == "超时 0/2"
@@ -652,8 +673,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     labels = rendered_history_text()
     assert not window.date_pager_widget.isHidden()
     assert "按等级 · 1-2/2 条 · 1/1 页" in window.date_page_label.text()
-    assert "P1：1 条" in labels
-    assert "P2：1 条" in labels
+    assert "▲ 高：1 条" in labels
+    assert "◆ 中：1 条" in labels
 
     window.close()
 
@@ -686,9 +707,9 @@ def test_history_analytics_tracks_overdue_and_no_deadline(qapp: QApplication) ->
     store = MemoryStore([on_time, overdue, no_deadline])
     window = HistoryWindow([on_time, overdue, no_deadline], store)
 
-    assert window.priority_p1_label.text() == "P1：1"
-    assert window.priority_p2_label.text() == "P2：1"
-    assert window.priority_p3_label.text() == "P3：1"
+    assert window.priority_p1_label.text() == "▲ 高：1"
+    assert window.priority_p2_label.text() == "◆ 中：1"
+    assert window.priority_p3_label.text() == "▼ 低：1"
     assert window.on_time_metric_label.text() == "准时率 50%"
     assert window.overdue_metric_label.text() == "超时 1/2"
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 1, "overdue": 1, "no_deadline": 1}
@@ -731,7 +752,7 @@ def test_history_window_exports_filtered_records_as_csv(qapp: QApplication, tmp_
     assert count == 1
     exported = export_path.read_text(encoding="utf-8-sig")
     assert "任务ID,标题,优先级" in exported
-    assert "done-1,完成任务,P1" in exported
+    assert "done-1,完成任务,高" in exported
     assert "交付前确认备注" in exported
     assert "下次提前拆分" in exported
     assert "done-2" not in exported
