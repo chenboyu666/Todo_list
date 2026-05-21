@@ -7,7 +7,7 @@ import os
 import pytest
 from PySide6.QtCore import QDateTime, QEvent, QPoint, QPointF, QTimeZone, Qt
 from PySide6.QtGui import QMouseEvent, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QFrame, QGridLayout, QLabel, QProgressBar, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QDateEdit, QDialog, QFrame, QGridLayout, QLabel, QProgressBar, QPushButton, QWidget
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings
@@ -95,63 +95,30 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     window.close()
 
 
-def test_progress_slider_updates_task_progress(qapp: QApplication, tmp_path) -> None:
+def test_main_surface_omits_progress_percentage_controls(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow
 
-    task = make_task("拖动进度", "task-1")
+    task = make_task("紧凑进度", "task-1")
     store = MemoryStore([task])
     window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
 
-    assert isinstance(window.focus_progress, NoWheelSlider)
+    assert not hasattr(window, "focus_progress")
+    assert not hasattr(window, "focus_progress_label")
+    assert window.focus_card.findChildren(NoWheelSlider) == []
+    assert window.focus_card.findChildren(NoWheelSpinBox) == []
+    assert "10%" not in "\n".join(label.text() for label in window.focus_card.findChildren(QLabel))
 
-    window.focus_progress.setValue(64)
+    row_text = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
+    assert "10%" not in row_text
+    assert window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue") == []
+    assert window.task_rows_container.findChildren(QLabel, "taskProgressValue") == []
 
-    assert store.saved_tasks is not None
-    assert store.saved_tasks[0].progress == 64
-    assert isinstance(window.focus_progress_label, NoWheelSpinBox)
-    assert window.focus_progress_label.value() == 64
+    next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开").click()
+    qapp.processEvents()
 
-    window.focus_progress_label.setValue(38)
-
-    assert window.focus_progress.value() == 38
-    assert store.saved_tasks is not None
-    assert store.saved_tasks[0].progress == 38
-
-    window.close()
-
-
-def test_focus_progress_slider_updates_auto_selected_task(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
-
-    task = make_task("自动聚焦进度", "task-1")
-    store = MemoryStore([task])
-    window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
-
-    window.focus_progress.setValue(72)
-
-    assert store.saved_tasks is not None
-    assert store.saved_tasks[0].progress == 72
-
-    window.close()
-
-
-def test_progress_slider_drag_defers_save_until_release(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
-
-    task = make_task("连续拖动进度", "task-1")
-    store = MemoryStore([task])
-    window = MainWindow(store, AppSettings(focus_task_id="task-1"), tmp_path / "settings.json")
-
-    window.focus_progress.setSliderDown(True)
-    window.focus_progress.setValue(43)
-
-    assert store.saved_tasks is None
-
-    window.focus_progress.setSliderDown(False)
-    window.commit_focus_progress()
-
-    assert store.saved_tasks is not None
-    assert store.saved_tasks[0].progress == 43
+    assert window.task_rows_container.findChildren(NoWheelSlider) == []
+    assert window.task_rows_container.findChildren(NoWheelSpinBox, "activeTaskProgressInput") == []
+    assert window.task_rows_container.findChildren(NoWheelSpinBox, "taskProgressInput") == []
 
     window.close()
 
@@ -271,8 +238,9 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "border: none" in _card_style("normal")
     assert "border: 1px" not in _card_style("normal")
     assert window.task_rows_container.findChildren(NoWheelSlider) == []
-    progress_values = window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue")
-    assert progress_values
+    assert window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue") == []
+    assert window.task_rows_container.findChildren(QLabel, "taskProgressValue") == []
+    assert "10%" not in row_labels
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
     assert window.focus_complete_button.text() == "完成"
@@ -285,7 +253,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
     assert _countdown_display("00:00:01", True) == "00:00:01"
-    assert "font-size: 30px" in _countdown_label_style("normal", pulse=True)
+    assert "font-size: 20px" in _countdown_label_style("normal", pulse=True)
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
@@ -298,11 +266,11 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert ("focusCountdownLabel", 170) in tick_animations
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
-    assert window.focus_progress_label.text() == "10%"
-    window.focus_progress.setSliderDown(True)
-    window.focus_progress.setValue(67)
-    assert window.focus_progress_label.text() == "67%"
-    window.focus_progress.setSliderDown(False)
+    assert window.focus_deadline_label.text().startswith("截止 2026-")
+    assert window.focus_countdown_label.text().startswith("超时 ")
+    assert window.focus_work_timer_label.text().startswith("计时 ")
+    assert " / " not in window.focus_work_timer_label.text()
+    assert not hasattr(window, "focus_progress_label")
     current_buttons = [button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "当前"]
     assert current_buttons[0].objectName() == "currentTaskButton"
     task_titles = window.task_rows_container.findChildren(QLabel, "activeTaskTitle")
@@ -316,20 +284,14 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     timers = window.task_rows_container.findChildren(QLabel, "activeTaskTimer")
     assert timers
     assert timers[0].text().startswith("计时 ")
+    assert " / " not in timers[0].text()
     assert timers[0].geometry().top() >= deadlines[0].geometry().bottom()
     expand_button = next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开")
     expand_button.click()
     qapp.processEvents()
 
-    sliders = window.task_rows_container.findChildren(NoWheelSlider)
-    assert sliders
-    assert sliders[0].objectName() == "activeTaskProgress"
-    progress_inputs = window.task_rows_container.findChildren(NoWheelSpinBox, "activeTaskProgressInput")
-    assert progress_inputs
-    assert progress_inputs[0].text() == "67%"
-    progress_inputs[0].setValue(55)
-    assert store.saved_tasks is not None
-    assert store.saved_tasks[0].progress == 55
+    assert window.task_rows_container.findChildren(NoWheelSlider) == []
+    assert window.task_rows_container.findChildren(NoWheelSpinBox, "activeTaskProgressInput") == []
     assert any(button.text() == "收起" for button in window.task_rows_container.findChildren(QPushButton))
     assert any(button.text() == "Ⅱ" for button in window.task_rows_container.findChildren(QPushButton))
     task_notes = window.task_rows_container.findChildren(QLabel, "taskNotesPreview")
@@ -556,8 +518,33 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.geometry() == normal_geometry
     assert window.fullscreen_button.text() == "□"
     assert window.analytics_count_label.height() <= 32
-    assert window.analytics_start_date_chip.height() <= 38
-    assert window.analytics_end_date_chip.height() <= 38
+    date_chips = (
+        window.analytics_start_date_chip,
+        window.analytics_end_date_chip,
+        window.export_start_date_chip,
+        window.export_end_date_chip,
+    )
+    date_edits = (
+        window.analytics_start_date,
+        window.analytics_end_date,
+        window.export_start_date,
+        window.export_end_date,
+    )
+    for chip, date_edit in zip(date_chips, date_edits):
+        chip_label = chip.findChild(QLabel, "historyExportDateLabel")
+        assert chip.height() == 36
+        assert chip.minimumWidth() >= 214
+        assert chip_label is not None
+        assert chip_label.height() == 28
+        assert chip_label.alignment() & Qt.AlignHCenter
+        assert chip_label.alignment() & Qt.AlignVCenter
+        assert date_edit.height() == 28
+        assert date_edit.minimumWidth() >= 132
+        assert date_edit.alignment() & Qt.AlignHCenter
+        assert isinstance(date_edit, QDateEdit)
+        assert abs(chip_label.geometry().center().y() - date_edit.geometry().center().y()) <= 1
+        assert abs(chip.rect().center().y() - date_edit.geometry().center().y()) <= 1
+    assert window.export_button.height() == 36
     metric_tops = {
         label.geometry().top()
         for label in (
