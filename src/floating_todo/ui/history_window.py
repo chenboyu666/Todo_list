@@ -463,20 +463,20 @@ class HistoryWindow(QDialog):
         analytics_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.history_analytics_panel = analytics_panel
         analytics_range = QHBoxLayout(analytics_panel)
-        analytics_range.setContentsMargins(8, 4, 8, 4)
-        analytics_range.setSpacing(7)
+        analytics_range.setContentsMargins(10, 5, 10, 5)
+        analytics_range.setSpacing(8)
         analytics_title = QLabel("统计区间")
         analytics_title.setObjectName("historyAnalyticsTitle")
-        analytics_title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        analytics_title.setFixedHeight(32)
+        analytics_title.setAlignment(Qt.AlignCenter)
+        analytics_title.setFixedHeight(36)
+        analytics_title.setMinimumWidth(70)
         analytics_range.addWidget(analytics_title)
         self.analytics_count_label = QLabel("0 条")
         self.analytics_count_label.setObjectName("historyAnalyticsCount")
         self.analytics_count_label.setAlignment(Qt.AlignCenter)
-        self.analytics_count_label.setFixedHeight(32)
+        self.analytics_count_label.setFixedHeight(30)
         self.analytics_count_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         analytics_range.addWidget(self.analytics_count_label)
-        analytics_range.addStretch(1)
         self.analytics_all_button = self._range_preset_button(
             "全部",
             "统计全部完成记录",
@@ -497,6 +497,7 @@ class HistoryWindow(QDialog):
         self.analytics_month_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("month"))
         for preset_button in (self.analytics_all_button, self.analytics_week_button, self.analytics_month_button):
             analytics_range.addWidget(preset_button)
+        analytics_range.addSpacing(4)
         self.analytics_start_date = self._date_edit(
             "historyAnalyticsStartDate",
             "historyAnalyticsStartCalendar",
@@ -508,7 +509,7 @@ class HistoryWindow(QDialog):
         analytics_to_label = QLabel("→")
         analytics_to_label.setObjectName("historyAnalyticsArrow")
         analytics_to_label.setAlignment(Qt.AlignCenter)
-        analytics_to_label.setFixedHeight(32)
+        analytics_to_label.setFixedHeight(36)
         analytics_range.addWidget(analytics_to_label)
         self.analytics_end_date = self._date_edit(
             "historyAnalyticsEndDate",
@@ -590,17 +591,21 @@ class HistoryWindow(QDialog):
         export_panel.setObjectName("historyExportPanel")
         export_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         export_panel_layout = QVBoxLayout(export_panel)
-        export_panel_layout.setContentsMargins(8, 6, 8, 6)
-        export_panel_layout.setSpacing(5)
+        export_panel_layout.setContentsMargins(10, 6, 10, 6)
+        export_panel_layout.setSpacing(6)
         export_header = QHBoxLayout()
         export_header.setContentsMargins(0, 0, 0, 0)
         export_header.setSpacing(8)
         export_range_label = QLabel("导出区间")
         export_range_label.setObjectName("historyExportTitle")
+        export_range_label.setAlignment(Qt.AlignCenter)
+        export_range_label.setFixedHeight(30)
+        export_range_label.setMinimumWidth(70)
         export_header.addWidget(export_range_label)
         self.export_count_label = QLabel("0 条")
         self.export_count_label.setObjectName("historyExportCount")
         self.export_count_label.setAlignment(Qt.AlignCenter)
+        self.export_count_label.setFixedHeight(30)
         export_header.addWidget(self.export_count_label)
         export_header.addStretch(1)
         self.export_all_button = self._export_preset_button("全部", "导出全部完成记录")
@@ -615,7 +620,7 @@ class HistoryWindow(QDialog):
 
         export_row = QHBoxLayout()
         export_row.setContentsMargins(0, 0, 0, 0)
-        export_row.setSpacing(8)
+        export_row.setSpacing(9)
         self.export_start_date = QDateEdit()
         self.export_start_date.setObjectName("historyExportStartDate")
         self.export_start_date.setCalendarPopup(True)
@@ -623,10 +628,12 @@ class HistoryWindow(QDialog):
         self.export_start_date.setDisplayFormat("yyyy-MM-dd")
         self.export_start_date.setToolTip("选择 CSV 导出的起始完成日期")
         self.export_start_date.setAccessibleName("导出起始日期")
-        export_row.addWidget(_export_date_chip("起始", self.export_start_date), 1)
+        self.export_start_date_chip = _export_date_chip("起始", self.export_start_date)
+        export_row.addWidget(self.export_start_date_chip, 1)
         export_to_label = QLabel("→")
         export_to_label.setObjectName("historyExportArrow")
         export_to_label.setAlignment(Qt.AlignCenter)
+        export_to_label.setFixedHeight(36)
         export_row.addWidget(export_to_label)
         self.export_end_date = QDateEdit()
         self.export_end_date.setObjectName("historyExportEndDate")
@@ -635,10 +642,12 @@ class HistoryWindow(QDialog):
         self.export_end_date.setDisplayFormat("yyyy-MM-dd")
         self.export_end_date.setToolTip("选择 CSV 导出的结束完成日期")
         self.export_end_date.setAccessibleName("导出结束日期")
-        export_row.addWidget(_export_date_chip("结束", self.export_end_date), 1)
+        self.export_end_date_chip = _export_date_chip("结束", self.export_end_date)
+        export_row.addWidget(self.export_end_date_chip, 1)
         self.export_button = QPushButton("导出 CSV")
         self.export_button.setObjectName("historyExportButton")
         self.export_button.setToolTip("导出当前搜索结果中日期范围内的历史记录表格")
+        self.export_button.setFixedHeight(36)
         self.export_button.clicked.connect(self.export_history)
         export_row.addWidget(self.export_button)
         export_panel_layout.addLayout(export_row)
@@ -768,7 +777,8 @@ class HistoryWindow(QDialog):
         edit.setDisplayFormat("yyyy-MM-dd")
         edit.setToolTip(tooltip)
         edit.setAccessibleName(accessible_name)
-        edit.setFixedHeight(30)
+        edit.setAlignment(Qt.AlignCenter)
+        edit.setFixedHeight(28)
         edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return edit
 
@@ -778,6 +788,7 @@ class HistoryWindow(QDialog):
         button.setToolTip(tooltip)
         button.setCursor(Qt.PointingHandCursor)
         button.setFixedHeight(30)
+        button.setMinimumWidth(58)
         return button
 
     def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
@@ -1313,19 +1324,22 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
 def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     chip = QFrame()
     chip.setObjectName("historyExportDateChip")
-    chip.setFixedHeight(38)
+    chip.setFixedHeight(36)
+    chip.setMinimumWidth(214)
     chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     layout = QHBoxLayout(chip)
-    layout.setContentsMargins(7, 4, 6, 4)
+    layout.setContentsMargins(6, 4, 6, 4)
     layout.setSpacing(6)
     label = QLabel(label_text)
     label.setObjectName("historyExportDateLabel")
     label.setAlignment(Qt.AlignCenter)
-    label.setFixedHeight(26)
-    date_edit.setFixedHeight(30)
+    label.setFixedSize(46, 28)
+    date_edit.setAlignment(Qt.AlignCenter)
+    date_edit.setFixedHeight(28)
+    date_edit.setMinimumWidth(132)
     date_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-    layout.addWidget(label)
-    layout.addWidget(date_edit, 1)
+    layout.addWidget(label, 0, Qt.AlignVCenter)
+    layout.addWidget(date_edit, 1, Qt.AlignVCenter)
     return chip
 
 
@@ -1641,8 +1655,9 @@ QLabel#historyExportDateLabel {{
   border: none;
   border-radius: 7px;
   min-width: 42px;
-  min-height: 24px;
+  min-height: 28px;
   font-weight: 900;
+  padding: 0;
 }}
 QLabel#historyExportArrow {{
   color: #A7F3D0;
@@ -1658,6 +1673,21 @@ QDateEdit#historyAnalyticsStartDate, QDateEdit#historyAnalyticsEndDate {{
   font-weight: 700;
   font-size: 13px;
   min-width: 112px;
+  padding: 0 22px 0 8px;
+  border: none;
+  border-radius: 7px;
+}}
+QDateEdit#historyExportStartDate::drop-down, QDateEdit#historyExportEndDate::drop-down,
+QDateEdit#historyAnalyticsStartDate::drop-down, QDateEdit#historyAnalyticsEndDate::drop-down {{
+  width: 22px;
+  border: none;
+  subcontrol-origin: padding;
+  subcontrol-position: center right;
+}}
+QDateEdit#historyExportStartDate::down-arrow, QDateEdit#historyExportEndDate::down-arrow,
+QDateEdit#historyAnalyticsStartDate::down-arrow, QDateEdit#historyAnalyticsEndDate::down-arrow {{
+  width: 9px;
+  height: 9px;
 }}
 QLabel#historyPageLabel {{
   color: #7DD3FC;

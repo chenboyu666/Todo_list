@@ -92,12 +92,13 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.empty_state_hint_label.text() == "点击新增任务开始"
     assert window.focus_title_label.text() == "没有进行中的任务"
     assert window.focus_meta_label.text() == "等待任务"
-    assert window.focus_work_timer_label.text() == "--:--:-- / --"
+    assert window.focus_countdown_label.text() == "倒计时 --:--:--"
+    assert window.focus_work_timer_label.text() == "计时 --:--:--"
     assert window.focus_deadline_label.text() == "截止 --:--:--"
     assert window.settings_button.text() == "设置"
     assert window.settings_button.toolTip() == "打开设置"
-    assert window.focus_progress.value() == 0
-    assert window.focus_progress_label.text() == "0%"
+    assert not hasattr(window, "focus_progress")
+    assert not hasattr(window, "focus_progress_label")
     assert window.focus_pause_button.isEnabled() is False
     assert window.focus_pause_button.text() == "Ⅱ"
     assert window.focus_resume_button.isEnabled() is False
@@ -276,10 +277,10 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.today_completion_label.text() == "33%"
     assert window.focus_title_label.text() == "关键交付"
     assert window.focus_meta_label.text() == "计时中"
-    assert window.focus_work_timer_label.text() == "00:00:00 / 1h30m"
+    assert window.focus_work_timer_label.text() == "计时 00:00:00"
     assert window.focus_notes_label.text() == "备注：重点关注验收口径"
-    assert window.focus_progress.value() == 60
-    assert window.focus_progress_label.text() == "60%"
+    assert not hasattr(window, "focus_progress")
+    assert not hasattr(window, "focus_progress_label")
     assert window.task_list_layout.count() == 2
 
     row_labels = window.task_rows_container.findChildren(QLabel)
@@ -288,7 +289,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert "低优先任务" in row_text
     assert "截止" in row_text
     assert "计时" in row_text
-    assert "60%" in row_text
+    assert "60%" not in row_text
     assert "重点关注验收口径" not in row_text
 
     buttons = window.task_rows_container.findChildren(QPushButton)

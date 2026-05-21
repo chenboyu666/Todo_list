@@ -41,7 +41,6 @@ from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.backdrop import AnimatedBackdrop
 from floating_todo.ui.completion_dialog import CompletionDialog
 from floating_todo.ui.confirmation_dialog import DeleteTaskDialog
-from floating_todo.ui.controls import NoWheelSlider, NoWheelSpinBox
 from floating_todo.ui.effects import (
     animate_content_swap,
     animate_value_tick,
@@ -436,33 +435,21 @@ class MainWindow(QMainWindow):
         self.focus_title_label = QLabel("没有进行中的任务")
         self.focus_meta_label = QLabel("等待任务")
         self.focus_deadline_label = QLabel("截止 --:--:--")
-        self.focus_countdown_label = QLabel("--:--:--")
+        self.focus_countdown_label = QLabel("倒计时 --:--:--")
         self.focus_countdown_label.setObjectName("focusCountdownLabel")
         self.focus_countdown_label.setAlignment(Qt.AlignCenter)
-        self.focus_countdown_label.setMinimumWidth(_scale_px(220))
-        self.focus_work_timer_label = QLabel("--:--:-- / --")
+        self.focus_countdown_label.setMinimumWidth(_scale_px(154))
+        self.focus_countdown_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.focus_work_timer_label = QLabel("计时 --:--:--")
         self.focus_work_timer_label.setObjectName("focusWorkTimerLabel")
         self.focus_work_timer_label.setAlignment(Qt.AlignCenter)
         self.focus_work_timer_label.setMinimumWidth(_scale_px(144))
+        self.focus_work_timer_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.focus_priority_label = QLabel("--")
         self.focus_priority_label.setObjectName("focusPriorityLabel")
         self.focus_priority_label.setAlignment(Qt.AlignCenter)
         self.focus_priority_label.setMinimumHeight(_scale_px(34))
         self.focus_urgency_label = QLabel("等待")
-        self.focus_progress = NoWheelSlider(Qt.Horizontal)
-        self.focus_progress.setObjectName("focusProgress")
-        self.focus_progress.setRange(0, 100)
-        self.focus_progress.valueChanged.connect(self.update_focus_progress)
-        self.focus_progress.sliderReleased.connect(self.commit_focus_progress)
-        self.focus_progress_label = NoWheelSpinBox()
-        self.focus_progress_label.setObjectName("focusProgressValue")
-        self.focus_progress_label.setRange(0, 100)
-        self.focus_progress_label.setSuffix("%")
-        self.focus_progress_label.setAlignment(Qt.AlignCenter)
-        self.focus_progress_label.setFixedWidth(_scale_px(62))
-        self.focus_progress_label.setFixedHeight(_scale_px(26))
-        self.focus_progress_label.setStyleSheet(_progress_input_style(selected=True))
-        self.focus_progress_label.valueChanged.connect(self.update_focus_progress_from_input)
         self.empty_state_label = QLabel("没有进行中的任务")
         self.empty_state_hint_label = QLabel("点击新增任务开始")
         self.task_rows_container = QWidget()
@@ -557,8 +544,8 @@ class MainWindow(QMainWindow):
         self.focus_time_row = focus_time_row
         focus_time_row.setContentsMargins(0, 0, 0, 0)
         focus_time_row.setSpacing(_scale_px(8))
-        focus_time_row.addWidget(self.focus_countdown_label, 3)
-        focus_time_row.addWidget(self.focus_work_timer_label, 2)
+        focus_time_row.addWidget(self.focus_countdown_label, 1)
+        focus_time_row.addWidget(self.focus_work_timer_label, 1)
         deadline_layout.addLayout(focus_time_row)
 
         self.focus_title_label.setStyleSheet(_focus_title_style())
@@ -579,18 +566,9 @@ class MainWindow(QMainWindow):
         self.focus_notes_label.setMaximumHeight(_scale_px(62))
         self.focus_notes_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         focus_layout.addWidget(self.focus_notes_label)
-        focus_progress_row = QHBoxLayout()
-        self.focus_progress_row = focus_progress_row
-        focus_progress_row.setSpacing(_scale_px(10))
-        progress_caption = QLabel("进度")
-        progress_caption.setObjectName("focusProgressCaption")
-        progress_caption.setAlignment(Qt.AlignCenter)
-        progress_caption.setStyleSheet(_focus_status_style(compact=True))
-        focus_progress_row.addWidget(progress_caption)
-        focus_progress_row.addWidget(self.focus_progress, 1)
-        focus_progress_row.addWidget(self.focus_progress_label)
-        focus_layout.addLayout(focus_progress_row)
         focus_actions = QHBoxLayout()
+        focus_actions.setSpacing(_scale_px(8))
+        self.focus_actions = focus_actions
         focus_actions.addStretch(1)
         self.focus_edit_button = QPushButton("编辑")
         self.focus_edit_button.setToolTip("编辑当前进行中的任务")
@@ -772,38 +750,6 @@ class MainWindow(QMainWindow):
         self._task_drag_refresh_pending = False
         if needs_refresh:
             self.refresh()
-
-    def update_focus_progress(self, value: int) -> None:
-        self._set_focus_progress_input(value)
-        if self.focus_progress.isSliderDown():
-            return
-        self._commit_focus_progress(value)
-
-    def update_focus_progress_from_input(self, value: int) -> None:
-        self.focus_progress.blockSignals(True)
-        try:
-            self.focus_progress.setValue(value)
-        finally:
-            self.focus_progress.blockSignals(False)
-        self._commit_focus_progress(value)
-
-    def commit_focus_progress(self) -> None:
-        self._commit_focus_progress(self.focus_progress.value())
-
-    def _set_focus_progress_input(self, value: int) -> None:
-        self.focus_progress_label.blockSignals(True)
-        try:
-            self.focus_progress_label.setValue(value)
-        finally:
-            self.focus_progress_label.blockSignals(False)
-
-    def _commit_focus_progress(self, value: int) -> None:
-        focused = self.focus_task()
-        if focused is None:
-            return
-        if focused.progress == value:
-            return
-        self.update_task_progress(focused.id, value)
 
     def update_task_progress(self, task_id: str, value: int) -> None:
         index = self._task_index(task_id)
@@ -1078,12 +1024,8 @@ class MainWindow(QMainWindow):
             self.focus_title_label.setMaximumHeight(_scale_px(96))
         if hasattr(self, "focus_notes_label"):
             self.focus_notes_label.setMaximumHeight(_scale_px(62))
-        if hasattr(self, "focus_progress_label"):
-            self.focus_progress_label.setFixedWidth(_scale_px(62))
-            self.focus_progress_label.setFixedHeight(_scale_px(26))
-            self.focus_progress_label.setStyleSheet(_progress_input_style(selected=True))
-        if hasattr(self, "focus_progress_row"):
-            self.focus_progress_row.setSpacing(_scale_px(10))
+        if hasattr(self, "focus_actions"):
+            self.focus_actions.setSpacing(_scale_px(8))
         if hasattr(self, "task_section_widget"):
             self.task_section_widget.setMinimumHeight(_scale_px(TASK_SECTION_MINIMUM_HEIGHT))
         if hasattr(self, "actions_layout"):
@@ -1186,9 +1128,9 @@ class MainWindow(QMainWindow):
             layout.setColumnMinimumWidth(4, 0)
             layout.setColumnStretch(4, 0)
             title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-            self.focus_deadline_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.focus_countdown_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            self.focus_work_timer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.focus_deadline_label.setAlignment(Qt.AlignCenter)
+            self.focus_countdown_label.setAlignment(Qt.AlignCenter)
+            self.focus_work_timer_label.setAlignment(Qt.AlignCenter)
             return
         layout.addWidget(title_label, 1, 0, 1, 4)
         layout.addWidget(deadline_panel, 0, 4, 2, 1)
@@ -1311,8 +1253,6 @@ class MainWindow(QMainWindow):
         self.today_completion_label.setText(f"{today_completion_percent(self.tasks)}%")
 
         focus_task = self.focus_task()
-        self.focus_progress.blockSignals(True)
-        self.focus_progress_label.blockSignals(True)
         if focus_task is None:
             self.focus_title_label.setText("没有进行中的任务")
             self.focus_title_label.setToolTip("")
@@ -1322,17 +1262,15 @@ class MainWindow(QMainWindow):
             self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
-            self.focus_countdown_label.setText("--:--:--")
+            self.focus_countdown_label.setText("倒计时 --:--:--")
             self.focus_countdown_label.setStyleSheet(_countdown_label_style("none", pulse=False))
-            self.focus_work_timer_label.setText("--:--:-- / --")
+            self.focus_work_timer_label.setText("计时 --:--:--")
             self.focus_work_timer_label.setStyleSheet(_focus_work_timer_style("none", paused=False))
             self.focus_priority_label.setText("--")
             self.focus_priority_label.setStyleSheet(_priority_chip_style("none"))
             self.focus_urgency_label.setText("等待")
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style("none"))
             self.focus_card.setStyleSheet(_card_style("normal", selected=True))
-            self.focus_progress.setValue(0)
-            self.focus_progress_label.setValue(0)
             self._set_focus_action_state(None)
             self.empty_state_hint_label.setText("可继续暂停任务，或点击新增任务" if paused_count else "点击新增任务开始")
             self.empty_state_widget.show()
@@ -1351,13 +1289,14 @@ class MainWindow(QMainWindow):
             self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
             self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
             countdown_pulse = False
-            countdown_text = _countdown_display(countdown_label(focus_task.deadline, now), countdown_pulse)
+            raw_countdown_text = countdown_label(focus_task.deadline, now)
+            countdown_text = _countdown_display(_focus_countdown_text(raw_countdown_text), countdown_pulse)
             if self.focus_countdown_label.text() != countdown_text:
                 self.focus_countdown_label.setText(countdown_text)
                 if self.isVisible():
                     animate_value_tick(self.focus_countdown_label, duration=170)
             self.focus_countdown_label.setStyleSheet(_countdown_label_style(urgency, pulse=countdown_pulse))
-            work_timer_text = work_timer_label(focus_task, now)
+            work_timer_text = f"计时 {_elapsed_work_timer_text(work_timer_label(focus_task, now))}"
             if self.focus_work_timer_label.text() != work_timer_text:
                 self.focus_work_timer_label.setText(work_timer_text)
                 if self.isVisible():
@@ -1366,12 +1305,8 @@ class MainWindow(QMainWindow):
             self.focus_urgency_label.setText(urgency_label)
             self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
             self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
-            self.focus_progress.setValue(focus_task.progress)
-            self.focus_progress_label.setValue(focus_task.progress)
             self._set_focus_action_state(focus_task.status)
             self.empty_state_widget.hide()
-        self.focus_progress.blockSignals(False)
-        self.focus_progress_label.blockSignals(False)
 
         self._render_task_rows(task_rows(self.tasks, now), focus_task.id if focus_task else None)
         self.apply_low_distraction_settings()
@@ -1417,7 +1352,7 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(_scale_px(240 if is_expanded else 184))
+        card.setMinimumHeight(_scale_px(220 if is_expanded else 184))
         card.setMinimumWidth(_scale_px(168))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
@@ -1439,12 +1374,6 @@ class MainWindow(QMainWindow):
         urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
         top.addWidget(urgency_chip)
         top.addStretch(1)
-        progress_label = QLabel(str(row["progress_label"]))
-        progress_label.setObjectName("activeTaskProgressValue" if is_focused else "taskProgressValue")
-        progress_label.setAlignment(Qt.AlignCenter)
-        progress_label.setFixedHeight(_scale_px(30))
-        progress_label.setStyleSheet(_progress_value_style(selected=is_focused))
-        top.addWidget(progress_label)
         layout.addLayout(top)
 
         title = QLabel(str(row["title"]))
@@ -1465,7 +1394,7 @@ class MainWindow(QMainWindow):
         deadline.setStyleSheet(_deadline_label_style(urgency))
         layout.addWidget(deadline)
 
-        work_timer = QLabel(f"计时 {row['work_timer_label']}")
+        work_timer = QLabel(f"计时 {_elapsed_work_timer_text(str(row['work_timer_label']))}")
         work_timer.setObjectName("activeTaskTimer" if is_focused else "taskTimer")
         work_timer.setAlignment(Qt.AlignCenter)
         work_timer.setMinimumHeight(_scale_px(28))
@@ -1506,36 +1435,6 @@ class MainWindow(QMainWindow):
             notes_label.setStyleSheet(_notes_style(selected=is_focused))
             layout.addWidget(notes_label)
 
-        progress = NoWheelSlider(Qt.Horizontal)
-        progress.setObjectName("activeTaskProgress" if is_focused else "taskProgress")
-        progress.setRange(0, 100)
-        progress.setValue(int(row["progress"]))
-        progress_input = NoWheelSpinBox()
-        progress_input.setObjectName("activeTaskProgressInput" if is_focused else "taskProgressInput")
-        progress_input.setRange(0, 100)
-        progress_input.setSuffix("%")
-        progress_input.setAlignment(Qt.AlignCenter)
-        progress_input.setFixedWidth(_scale_px(58))
-        progress_input.setFixedHeight(_scale_px(24))
-        progress_input.setValue(int(row["progress"]))
-        progress_input.setStyleSheet(_progress_input_style(selected=is_focused))
-        progress.valueChanged.connect(
-            lambda value, task_id=task_id, slider=progress, label=progress_label, value_input=progress_input: self._handle_row_progress_value(
-                task_id, slider, label, value_input, value
-            )
-        )
-        progress.sliderReleased.connect(lambda task_id=task_id, slider=progress: self.update_task_progress(task_id, slider.value()))
-        progress_input.valueChanged.connect(
-            lambda value, task_id=task_id, slider=progress, label=progress_label: self._handle_row_progress_input(
-                task_id, slider, label, value
-            )
-        )
-        progress_row = QHBoxLayout()
-        progress_row.setSpacing(_scale_px(10))
-        progress_row.addWidget(progress, 1)
-        progress_row.addWidget(progress_input)
-        layout.addLayout(progress_row)
-
         detail_row = QHBoxLayout()
         detail_row.setSpacing(_scale_px(6))
         detail_row.addStretch(1)
@@ -1562,28 +1461,6 @@ class MainWindow(QMainWindow):
         layout.addLayout(detail_row)
         return card
 
-    def _handle_row_progress_value(
-        self, task_id: str, slider: NoWheelSlider, label: QLabel, value_input: NoWheelSpinBox, value: int
-    ) -> None:
-        label.setText(f"{value}%")
-        value_input.blockSignals(True)
-        try:
-            value_input.setValue(value)
-        finally:
-            value_input.blockSignals(False)
-        if slider.isSliderDown():
-            return
-        self.update_task_progress(task_id, value)
-
-    def _handle_row_progress_input(self, task_id: str, slider: NoWheelSlider, label: QLabel, value: int) -> None:
-        label.setText(f"{value}%")
-        slider.blockSignals(True)
-        try:
-            slider.setValue(value)
-        finally:
-            slider.blockSignals(False)
-        self.update_task_progress(task_id, value)
-
     def _set_focus_action_enabled(self, enabled: bool) -> None:
         self._set_focus_action_state("active" if enabled else None)
 
@@ -1595,8 +1472,6 @@ class MainWindow(QMainWindow):
         self.focus_resume_button.setEnabled(status == "paused")
         self.focus_complete_button.setEnabled(has_task)
         self.focus_delete_button.setEnabled(has_task)
-        self.focus_progress.setEnabled(has_task)
-        self.focus_progress_label.setEnabled(has_task)
 
     def _configure_pause_resume_button(self, button: QPushButton, *, paused: bool, focus: bool = False) -> None:
         if paused:
@@ -1733,7 +1608,7 @@ def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
         f"padding: {_scale_px(5)}px {_scale_px(14)}px;"
         f"min-height: {_scale_px(42)}px;"
         f"min-width: {_scale_px(154)}px;"
-        f"font-size: {_scale_px(30)}px;"
+        f"font-size: {_scale_px(20)}px;"
         "font-weight: 900;"
         'font-family: "Cascadia Mono", "JetBrains Mono", "Segoe UI Variable", "Microsoft YaHei UI";'
         f"selection-background-color: {style['accent']};"
@@ -1761,6 +1636,18 @@ def _focus_work_timer_style(urgency: str, *, paused: bool) -> str:
 
 def _countdown_display(text: str, pulse: bool) -> str:
     return text
+
+
+def _focus_countdown_text(text: str) -> str:
+    if text.startswith("超时 "):
+        return text
+    if text == "--:--:--":
+        return "倒计时 --:--:--"
+    return f"倒计时 {text}"
+
+
+def _elapsed_work_timer_text(text: str) -> str:
+    return text.split(" / ", 1)[0]
 
 
 def _focus_title_style() -> str:
