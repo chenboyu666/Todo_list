@@ -5,6 +5,44 @@ from datetime import datetime
 from floating_todo.domain import Task, normalize_datetime, sort_visible_tasks, work_elapsed_seconds, work_target_seconds
 
 
+PRIORITY_ORDER = ("P1", "P2", "P3")
+PRIORITY_DISPLAY = {
+    "P1": {"symbol": "▲", "text": "高"},
+    "P2": {"symbol": "◆", "text": "中"},
+    "P3": {"symbol": "▼", "text": "低"},
+}
+
+
+def priority_symbol(priority: str) -> str:
+    return PRIORITY_DISPLAY.get(priority, {"symbol": "•"})["symbol"]
+
+
+def priority_text(priority: str) -> str:
+    return PRIORITY_DISPLAY.get(priority, {"text": str(priority)})["text"]
+
+
+def priority_display_label(priority: str) -> str:
+    display = PRIORITY_DISPLAY.get(priority)
+    if display is None:
+        return str(priority)
+    return f"{display['symbol']} {display['text']}"
+
+
+def priority_from_display(value: str) -> str:
+    value = str(value).strip()
+    if value in PRIORITY_DISPLAY:
+        return value
+    for priority, display in PRIORITY_DISPLAY.items():
+        candidates = {
+            display["text"],
+            f"{display['symbol']} {display['text']}",
+            f"{display['symbol']}{display['text']}",
+        }
+        if value in candidates:
+            return priority
+    return "P2"
+
+
 def deadline_at_label(deadline: datetime | None) -> str:
     if deadline is None:
         return "--"

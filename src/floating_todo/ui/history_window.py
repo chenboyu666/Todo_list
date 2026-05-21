@@ -35,7 +35,13 @@ from floating_todo.theme import THEME_COLORS
 from floating_todo.ui.date_controls import apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
-from floating_todo.view_models import duration_clock_label, effort_short_label
+from floating_todo.view_models import (
+    PRIORITY_ORDER,
+    duration_clock_label,
+    effort_short_label,
+    priority_display_label,
+    priority_text,
+)
 
 
 CSV_HEADERS = [
@@ -65,14 +71,14 @@ PRIORITY_CHART_COLORS = {
 class PriorityDonutChart(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.priority_counts = {"P1": 0, "P2": 0, "P3": 0}
+        self.priority_counts = {priority: 0 for priority in PRIORITY_ORDER}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
         self.setMinimumHeight(126)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
-        self.priority_counts = {priority: max(0, int(counts.get(priority, 0))) for priority in ("P1", "P2", "P3")}
+        self.priority_counts = {priority: max(0, int(counts.get(priority, 0))) for priority in PRIORITY_ORDER}
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -94,7 +100,7 @@ class PriorityDonutChart(QWidget):
         if total:
             start_angle = 90 * 16
             arc_rect = chart_rect.adjusted(ring_width / 2, ring_width / 2, -ring_width / 2, -ring_width / 2)
-            for priority in ("P1", "P2", "P3"):
+            for priority in PRIORITY_ORDER:
                 count = self.priority_counts[priority]
                 if not count:
                     continue
@@ -114,7 +120,7 @@ class PriorityDonutChart(QWidget):
         legend_y = rect.top() + 16
         font.setPointSize(8)
         painter.setFont(font)
-        for index, priority in enumerate(("P1", "P2", "P3")):
+        for index, priority in enumerate(PRIORITY_ORDER):
             y = legend_y + index * 25
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(PRIORITY_CHART_COLORS[priority]))
@@ -125,7 +131,7 @@ class PriorityDonutChart(QWidget):
             painter.drawText(
                 QRectF(legend_x + 30, y - 2, rect.right() - legend_x - 30, 22),
                 Qt.AlignLeft,
-                f"{priority}：{count} · {percent}%",
+                f"{priority_display_label(priority)}：{count} · {percent}%",
             )
 
 
@@ -304,7 +310,7 @@ class HistoryNoteDialog(QDialog):
         layout.setContentsMargins(14, 12, 14, 14)
         layout.setSpacing(8)
 
-        title = QLabel(f"{task.priority} · {task.title}")
+        title = QLabel(f"{priority_display_label(task.priority)} · {task.title}")
         title.setWordWrap(True)
         title.setStyleSheet("font-size: 16px; font-weight: 700;")
         layout.addWidget(title)
@@ -428,9 +434,9 @@ class HistoryWindow(QDialog):
         metric_strip = QHBoxLayout(metrics_panel)
         metric_strip.setContentsMargins(8, 4, 8, 4)
         metric_strip.setSpacing(6)
-        self.priority_p1_label = self._metric_label("P1：0", "historyPriorityMetricP1")
-        self.priority_p2_label = self._metric_label("P2：0", "historyPriorityMetricP2")
-        self.priority_p3_label = self._metric_label("P3：0", "historyPriorityMetricP3")
+        self.priority_p1_label = self._metric_label(f"{priority_display_label('P1')}：0", "historyPriorityMetricP1")
+        self.priority_p2_label = self._metric_label(f"{priority_display_label('P2')}：0", "historyPriorityMetricP2")
+        self.priority_p3_label = self._metric_label(f"{priority_display_label('P3')}：0", "historyPriorityMetricP3")
         self.priority_mix_label = self.priority_p1_label
         self.review_metric_label = self._metric_label("复盘 0/0")
         self.on_time_metric_label = self._metric_label("准时率 --")
@@ -526,7 +532,7 @@ class HistoryWindow(QDialog):
         self.completion_trend_chart = CompletionTrendChart()
         self.deadline_outcome_chart = DeadlineOutcomeChart()
         chart_grid.addWidget(
-            self._chart_card("优先级结构", "P1 / P2 / P3 完成占比", self.priority_donut_chart, "priority"),
+            self._chart_card("优先级结构", "高 / 中 / 低 完成占比", self.priority_donut_chart, "priority"),
             0,
             0,
         )
@@ -923,7 +929,7 @@ class HistoryWindow(QDialog):
         total = len(completed)
         counts = {
             priority: sum(1 for task in completed if task.priority == priority)
-            for priority in ("P1", "P2", "P3")
+            for priority in PRIORITY_ORDER
         }
         overdue = sum(1 for task in completed if _task_completed_late(task))
         no_deadline = sum(1 for task in completed if task.deadline is None)
@@ -938,9 +944,9 @@ class HistoryWindow(QDialog):
             if latest_task
             else "--"
         )
-        self.priority_p1_label.setText(f"P1：{counts['P1']}")
-        self.priority_p2_label.setText(f"P2：{counts['P2']}")
-        self.priority_p3_label.setText(f"P3：{counts['P3']}")
+        self.priority_p1_label.setText(f"{priority_display_label('P1')}：{counts['P1']}")
+        self.priority_p2_label.setText(f"{priority_display_label('P2')}：{counts['P2']}")
+        self.priority_p3_label.setText(f"{priority_display_label('P3')}：{counts['P3']}")
         self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
         self.on_time_metric_label.setText(f"准时率 {on_time_rate}%" if on_time_rate is not None else "准时率 --")
         self.overdue_metric_label.setText(f"超时 {overdue}/{deadline_total}")
@@ -982,10 +988,9 @@ class HistoryWindow(QDialog):
         sorted_tasks = sorted(tasks, key=lambda item: item.completed_at or item.updated_at, reverse=True)
         groups: dict[str, list[Task]] = {}
         if self.group_mode.currentText() == "按等级":
-            order = ["P1", "P2", "P3"]
             for task in sorted_tasks:
                 groups.setdefault(task.priority, []).append(task)
-            return [(priority, groups[priority]) for priority in order if priority in groups]
+            return [(priority, groups[priority]) for priority in PRIORITY_ORDER if priority in groups]
 
         for task in sorted_tasks:
             completed_at = task.completed_at or task.updated_at
@@ -1130,8 +1135,10 @@ class HistoryWindow(QDialog):
             self._render()
 
     def _group_header(self, title: str, count: int) -> QLabel:
-        separator = "：" if title in {"P1", "P2", "P3"} else " · "
-        label = QLabel(f"{title}{separator}{count} 条")
+        is_priority = title in PRIORITY_ORDER
+        display_title = priority_display_label(title) if is_priority else title
+        separator = "：" if is_priority else " · "
+        label = QLabel(f"{display_title}{separator}{count} 条")
         label.setObjectName("historyGroupHeader")
         return label
 
@@ -1164,11 +1171,11 @@ class HistoryWindow(QDialog):
 
         header = QHBoxLayout()
         header.setSpacing(8)
-        priority = QLabel(f"{task.priority}：")
+        priority = QLabel(f"{priority_display_label(task.priority)}：")
         priority.setObjectName(f"historyPriority{task.priority}")
         priority.setAlignment(Qt.AlignCenter)
         priority.setFixedHeight(24)
-        priority.setFixedWidth(48)
+        priority.setFixedWidth(62)
         header.addWidget(priority)
         progress = QLabel(f"{task.progress}%")
         progress.setObjectName("historyProgressChip")
@@ -1287,7 +1294,7 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
                 {
                     "任务ID": task.id,
                     "标题": task.title,
-                    "优先级": task.priority,
+                    "优先级": priority_text(task.priority),
                     "预估工作量分钟": task.effort_minutes,
                     "实际工作时长": duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at)),
                     "实际工作秒数": work_elapsed_seconds(task, task.completed_at or task.updated_at),
@@ -1534,21 +1541,21 @@ QFrame#historyChartCard {{
 }}
 QFrame#historyChartCard[historyTone="priority"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #2A1309,
-    stop:0.45 #3B1D2B,
-    stop:1 #33420E);
+    stop:0 #3A1608,
+    stop:0.45 #71310F,
+    stop:1 #5B1A2A);
 }}
 QFrame#historyChartCard[historyTone="trend"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #05264B,
-    stop:0.52 #0A3A70,
-    stop:1 #08566A);
+    stop:0 #04235C,
+    stop:0.52 #075985,
+    stop:1 #0E7490);
 }}
 QFrame#historyChartCard[historyTone="deadline"] {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #321228,
-    stop:0.52 #5A1832,
-    stop:1 #653013);
+    stop:0 #3B0A38,
+    stop:0.5 #831843,
+    stop:1 #92400E);
 }}
 QLabel#historyChartTitle {{
   color: #F8FBFF;
