@@ -64,12 +64,13 @@ dist\Todo list.exe
 
 ## 运行时数据
 
-程序会在运行目录下自动创建 `data` 文件夹，用于保存任务、设置和历史记录。
+程序会在运行目录下自动创建 `data` 文件夹，用于保存任务、设置和历史记录。自定义的单张背景图和程序图标会复制到 `data\resources`，再次启动时会继续生效。
 
 ```text
 data\
   tasks.json
   settings.json
+  resources\
 ```
 
 ## 项目结构

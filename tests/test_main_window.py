@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
@@ -739,6 +740,86 @@ def test_settings_button_acceptance_saves_applies_and_updates_startup(
     window.close()
 
 
+def test_accepting_settings_copies_custom_background_and_icon_to_data_resources(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    monkeypatch.chdir(tmp_path)
+    background = tmp_path / "picked-background.jpg"
+    icon = tmp_path / "picked-icon.ico"
+    background.write_bytes(b"background")
+    icon.write_bytes(b"icon")
+    settings_path = tmp_path / "data" / "settings.json"
+    updated = AppSettings(
+        background_enabled=True,
+        background_image_path=str(background),
+        icon_path=str(icon),
+    )
+
+    class AcceptedSettingsWindow:
+        def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
+            pass
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_settings(self) -> AppSettings:
+            return updated
+
+    monkeypatch.setattr(main_window, "SettingsWindow", AcceptedSettingsWindow)
+    window = main_window.MainWindow(MemoryStore([]), AppSettings(), settings_path)
+
+    window.open_settings()
+
+    assert window.settings.background_image_path.startswith("data:")
+    assert window.settings.icon_path.startswith("data:")
+    background_copy = tmp_path / "data" / "resources" / window.settings.background_image_path.removeprefix("data:")
+    icon_copy = tmp_path / "data" / "resources" / window.settings.icon_path.removeprefix("data:")
+    assert background_copy.read_bytes() == b"background"
+    assert icon_copy.read_bytes() == b"icon"
+    saved_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert saved_settings["background_image_path"] == window.settings.background_image_path
+    assert saved_settings["icon_path"] == window.settings.icon_path
+
+    window.close()
+
+
+def test_accepting_settings_preserves_main_window_geometry_after_flag_rebuild(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    settings_path = tmp_path / "settings.json"
+    updated = AppSettings(always_on_top=False, opacity=0.72)
+
+    class AcceptedSettingsWindow:
+        def __init__(self, settings: AppSettings, parent: object | None = None) -> None:
+            pass
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_settings(self) -> AppSettings:
+            return updated
+
+    monkeypatch.setattr(main_window, "SettingsWindow", AcceptedSettingsWindow)
+    window = main_window.MainWindow(MemoryStore([]), AppSettings(), settings_path)
+    window.setGeometry(44, 55, 720, 900)
+    original_geometry = window.geometry()
+
+    def shrinking_apply_window_behavior_settings() -> None:
+        window.resize(520, 760)
+
+    monkeypatch.setattr(window, "apply_window_behavior_settings", shrinking_apply_window_behavior_settings)
+
+    window.open_settings()
+
+    assert window.geometry() == original_geometry
+
+    window.close()
+
+
 def test_settings_preview_is_restored_when_dialog_is_cancelled(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
@@ -889,6 +970,44 @@ def test_refresh_sends_due_reminders_once_and_persists_flags(qapp: QApplication)
 
     assert sender.sent == [("任务已超时", "提醒任务")]
     assert store.save_count == 1
+
+    window.close()
+
+
+def test_random_background_folder_selects_and_rotates_images(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    first = tmp_path / "first.jpg"
+    second = tmp_path / "second.gif"
+    ignored = tmp_path / "ignored.txt"
+    first.write_bytes(b"image")
+    second.write_bytes(b"gif")
+    ignored.write_text("skip", encoding="utf-8")
+    choices: list[str] = []
+
+    def choose_first(candidates):
+        selected = candidates[0]
+        choices.append(selected.name)
+        return selected
+
+    monkeypatch.setattr(main_window.random, "choice", choose_first)
+    settings = AppSettings(
+        background_enabled=True,
+        background_random_enabled=True,
+        background_folder_path=str(tmp_path),
+        background_image_path="builtin:study",
+    )
+    window = main_window.MainWindow(MemoryStore([]), settings, tmp_path / "settings.json")
+
+    assert Path(window.root_widget.background_image_path).name == "first.jpg"
+    assert window._background_random_timer.isActive()
+
+    window.rotate_random_background()
+
+    assert Path(window.root_widget.background_image_path).name == "second.gif"
+    assert choices == ["first.jpg", "second.gif"]
 
     window.close()
 
