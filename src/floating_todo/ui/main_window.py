@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from floating_todo.app_resources import background_image_candidates, materialize_custom_resource
 from floating_todo.app_identity import APP_DISPLAY_NAME, APP_STARTUP_NAME, resolved_icon_path
 from floating_todo.domain import Task, freeze_work_timer, pause_work_timer, resume_work_timer, select_focus_task
 from floating_todo.platform_windows import current_startup_command, set_launch_on_startup
@@ -69,6 +71,7 @@ MAIN_WINDOW_MINIMUM_HEIGHT = 760
 FOCUS_CARD_MINIMUM_HEIGHT = 350
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 108
 TASK_SECTION_MINIMUM_HEIGHT = 54
+BACKGROUND_RANDOM_INTERVAL_MS = 3 * 60 * 1000
 _CURRENT_UI_SCALE = DEFAULT_UI_SCALE
 
 
@@ -418,6 +421,10 @@ class MainWindow(QMainWindow):
         self._restoring_geometry = False
         self._task_drag_active = False
         self._task_drag_refresh_pending = False
+        self._current_random_background_path = ""
+        self._current_random_background_folder = ""
+        self._background_random_timer = QTimer(self)
+        self._background_random_timer.timeout.connect(self.rotate_random_background)
         self._toast_popups: list[FloatingToast] = []
         self.expanded_task_ids: set[str] = set()
         self.tasks = self.store.load_tasks()
@@ -930,28 +937,85 @@ class MainWindow(QMainWindow):
             sync_actions()
 
     def apply_background_settings(self) -> None:
+        image_path = self._select_background_image_path(self.settings, rotate=True)
         self.root_widget.set_background_settings(
             self.settings.background_enabled,
-            self.settings.background_image_path,
+            image_path,
             DEFAULT_BACKGROUND_OVERLAY,
         )
+        self._sync_background_random_timer()
 
     def preview_settings(self, settings: AppSettings) -> None:
         self.setWindowOpacity(settings.opacity)
         self._apply_icon_for_settings(settings)
+        image_path = self._select_background_image_path(settings, rotate=True)
         self.root_widget.set_background_settings(
             settings.background_enabled,
-            settings.background_image_path,
+            image_path,
             DEFAULT_BACKGROUND_OVERLAY,
         )
 
     def restore_settings_preview(self, settings: AppSettings) -> None:
         self.setWindowOpacity(settings.opacity)
         self._apply_icon_for_settings(settings)
+        image_path = self._select_background_image_path(settings, rotate=True)
         self.root_widget.set_background_settings(
             settings.background_enabled,
-            settings.background_image_path,
+            image_path,
             DEFAULT_BACKGROUND_OVERLAY,
+        )
+        self._sync_background_random_timer()
+
+    def _select_background_image_path(self, settings: AppSettings, *, rotate: bool = False) -> str:
+        if not settings.background_enabled:
+            return settings.background_image_path
+        if not settings.background_random_enabled or not settings.background_folder_path:
+            return settings.background_image_path
+        folder = str(settings.background_folder_path)
+        candidates = background_image_candidates(folder)
+        if not candidates:
+            return settings.background_image_path
+        if folder != self._current_random_background_folder:
+            self._current_random_background_folder = folder
+            self._current_random_background_path = ""
+        if not rotate and self._current_random_background_path:
+            return self._current_random_background_path
+        pool = [path for path in candidates if str(path) != self._current_random_background_path] or candidates
+        selected = random.choice(pool)
+        self._current_random_background_path = str(selected)
+        return self._current_random_background_path
+
+    def _sync_background_random_timer(self) -> None:
+        should_run = bool(
+            self.settings.background_enabled
+            and self.settings.background_random_enabled
+            and len(background_image_candidates(self.settings.background_folder_path)) > 1
+        )
+        if should_run:
+            if not self._background_random_timer.isActive():
+                self._background_random_timer.start(BACKGROUND_RANDOM_INTERVAL_MS)
+        else:
+            self._background_random_timer.stop()
+
+    def rotate_random_background(self) -> None:
+        if not (
+            self.settings.background_enabled
+            and self.settings.background_random_enabled
+            and self.settings.background_folder_path
+        ):
+            self._background_random_timer.stop()
+            return
+        image_path = self._select_background_image_path(self.settings, rotate=True)
+        self.root_widget.set_background_settings(True, image_path, DEFAULT_BACKGROUND_OVERLAY)
+
+    def _materialize_settings_resources(self, settings: AppSettings) -> AppSettings:
+        if self.settings_path is None:
+            return settings
+        data_dir = self.settings_path.parent
+        return replace(
+            settings,
+            background_image_path=materialize_custom_resource(settings.background_image_path, data_dir, "background"),
+            icon_path=materialize_custom_resource(settings.icon_path, data_dir, "icon"),
         )
 
     def apply_low_distraction_settings(self) -> None:
@@ -1046,12 +1110,14 @@ class MainWindow(QMainWindow):
 
     def open_settings(self) -> None:
         previous_settings = self.settings
+        previous_geometry = self.geometry()
         dialog = SettingsWindow(self.settings, self)
         prepare_window_entrance(dialog)
         if dialog.exec() != QDialog.Accepted:
             self.restore_settings_preview(previous_settings)
             return
         updated_settings = remove_deprecated_setting_features(dialog.build_settings())
+        updated_settings = self._materialize_settings_resources(updated_settings)
         if updated_settings.mouse_passthrough and not updated_settings.always_on_top:
             updated_settings = replace(updated_settings, mouse_passthrough=False)
         if updated_settings.launch_on_startup != self.settings.launch_on_startup:
@@ -1075,6 +1141,8 @@ class MainWindow(QMainWindow):
             self.apply_low_distraction_settings()
             if self.settings.lock_position:
                 self.apply_saved_geometry()
+            else:
+                self.setGeometry(previous_geometry)
             self.show()
         finally:
             self._restoring_geometry = False
@@ -1178,7 +1246,7 @@ class MainWindow(QMainWindow):
             message,
             kind=kind,
             background_enabled=use_background and self.settings.background_enabled,
-            background_image_path=self.settings.background_image_path if use_background else "",
+            background_image_path=self.root_widget.background_image_path if use_background else "",
             background_overlay=self.settings.background_overlay,
         )
         self._toast_popups = [toast for toast in self._toast_popups if toast.isVisible()]
@@ -1727,21 +1795,6 @@ def _task_title_style(*, selected: bool = False) -> str:
     )
 
 
-def _progress_value_style(*, selected: bool = False) -> str:
-    if selected:
-        return (
-            f"font-weight: 800; min-width: {_scale_px(48)}px; "
-            f"padding: {_scale_px(1)}px {_scale_px(8)}px; border-radius: {_scale_px(8)}px; "
-            "color: #ECFEFF; background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            " stop:0 #155E75, stop:0.55 #0E7490, stop:1 #047857);"
-        )
-    return (
-        f"font-weight: 700; min-width: {_scale_px(48)}px; "
-        f"padding: {_scale_px(1)}px {_scale_px(8)}px; border-radius: {_scale_px(8)}px; "
-        f"color: {THEME_COLORS['accent']}; background: #102033;"
-    )
-
-
 def _task_timer_style(urgency: str, *, selected: bool = False, paused: bool = False) -> str:
     style = _urgency_style("paused" if paused else urgency)
     if selected:
@@ -1766,37 +1819,6 @@ def _task_timer_style(urgency: str, *, selected: bool = False, paused: bool = Fa
         f"font-size: {_scale_px(13)}px;"
         "font-weight: 900;"
         'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
-    )
-
-
-def _progress_input_style(*, selected: bool = False) -> str:
-    if selected:
-        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #155E75, stop:0.55 #0E7490, stop:1 #047857)"
-        color = "#ECFEFF"
-    else:
-        background = "#102033"
-        color = THEME_COLORS["accent"]
-    return (
-        "QSpinBox {"
-        f"background: {background};"
-        f"color: {color};"
-        "border: none;"
-        f"border-radius: {_scale_px(8)}px;"
-        "font-weight: 800;"
-        f"padding: {_scale_px(1)}px {_scale_px(8)}px;"
-        "selection-background-color: #1D4ED8;"
-        "}"
-        "QSpinBox:focus {"
-        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0E7490, stop:1 #16A34A);"
-        "}"
-        "QSpinBox:disabled {"
-        "color: #5F6E7E;"
-        "background: #111827;"
-        "}"
-        "QSpinBox::up-button, QSpinBox::down-button {"
-        "width: 0px;"
-        "border: none;"
-        "}"
     )
 
 

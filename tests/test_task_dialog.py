@@ -50,7 +50,6 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
     dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P1"))
     dialog.effort_spin.setValue(90)
     dialog.deadline_edit.setDateTime(_qdatetime(deadline))
-    dialog.progress_spin.setValue(25)
     dialog.notes_edit.setPlainText("用中文备注")
 
     task = dialog.build_task()
@@ -60,7 +59,7 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
     assert task.priority == "P1"
     assert task.effort_minutes == 90
     assert task.deadline == deadline
-    assert task.progress == 25
+    assert task.progress == 0
     assert task.status == "active"
     assert task.completed_at is None
     assert task.notes == "用中文备注"
@@ -92,8 +91,9 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert not hasattr(dialog, "effort_hint_label")
     assert not hasattr(dialog, "effort_step_hint_label")
     assert "增减 15 分钟" in dialog.effort_spin.toolTip()
-    assert dialog.progress_spin.minimum() == 0
-    assert dialog.progress_spin.maximum() == 100
+    assert not hasattr(dialog, "progress_slider")
+    assert not hasattr(dialog, "progress_spin")
+    assert not hasattr(dialog, "progress_input")
     assert not hasattr(dialog, "progress_hint_label")
     assert not hasattr(dialog, "progress_step_hint_label")
     assert dialog.deadline_edit.calendarPopup()
@@ -106,6 +106,7 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert "每次 15 分钟" not in visible_text
     assert "日期、小时和分钟" not in visible_text
     assert "键盘" not in visible_text
+    assert "手动进度" not in visible_text
     assert "日期" in visible_text
     assert "小时" in visible_text
     assert "分钟" in visible_text
@@ -146,7 +147,6 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P3"))
     dialog.effort_spin.setValue(120)
     dialog.deadline_edit.setDateTime(_qdatetime(new_deadline))
-    dialog.progress_spin.setValue(70)
     dialog.notes_edit.setPlainText("新备注")
 
     updated = dialog.build_task()
@@ -160,7 +160,7 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.priority == "P3"
     assert updated.effort_minutes == 120
     assert updated.deadline == new_deadline
-    assert updated.progress == 70
+    assert updated.progress == existing.progress
     assert updated.notes == "新备注"
     assert updated.updated_at > existing.updated_at
 

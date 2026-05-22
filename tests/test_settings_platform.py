@@ -44,6 +44,8 @@ def test_settings_round_trip_with_defaults():
             "opacity": 0.5,
             "ui_scale": 1.2,
             "window_geometry": {"x": 10, "y": 20, "width": 410, "height": 620},
+            "background_random_enabled": True,
+            "background_folder_path": r"C:\Wallpapers",
             "icon_path": r"C:\Icons\todo.ico",
         }
     )
@@ -53,9 +55,13 @@ def test_settings_round_trip_with_defaults():
     assert settings.close_to_tray is True
     assert settings.mouse_passthrough is False
     assert settings.icon_path == r"C:\Icons\todo.ico"
+    assert settings.background_random_enabled is True
+    assert settings.background_folder_path == r"C:\Wallpapers"
     assert settings.window_geometry["x"] == 10
     assert settings_to_dict(settings)["theme"] == "calm-tech-dark"
     assert settings_to_dict(settings)["icon_path"] == r"C:\Icons\todo.ico"
+    assert settings_to_dict(settings)["background_random_enabled"] is True
+    assert settings_to_dict(settings)["background_folder_path"] == r"C:\Wallpapers"
     assert settings_to_dict(settings)["ui_scale"] == 1.2
 
 

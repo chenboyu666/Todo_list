@@ -125,18 +125,52 @@ class InteractionEffectFilter(QObject):
         if existing is not None and not getattr(button, "_floating_todo_button_glow", False):
             return
         effect = existing if getattr(button, "_floating_todo_button_glow", False) else QGraphicsDropShadowEffect(button)
+        start_radius = effect.blurRadius() if getattr(button, "_floating_todo_button_glow", False) else 0
         color = _button_effect_color(button)
         color.setAlpha(145 if stronger else 92)
         effect.setColor(color)
         effect.setOffset(0, 0)
-        effect.setBlurRadius(22 if stronger else 16)
+        effect.setBlurRadius(start_radius)
         button.setGraphicsEffect(effect)
         button._floating_todo_button_glow = True
+        self._animate_button_glow(button, effect, 22 if stronger else 16, 90 if stronger else 150)
 
     def _clear_button_glow(self, button: QAbstractButton) -> None:
         if getattr(button, "_floating_todo_button_glow", False):
-            button.setGraphicsEffect(None)
-            button._floating_todo_button_glow = False
+            effect = button.graphicsEffect()
+            if isinstance(effect, QGraphicsDropShadowEffect):
+                self._animate_button_glow(button, effect, 0, 130, clear_when_finished=True)
+            else:
+                button.setGraphicsEffect(None)
+                button._floating_todo_button_glow = False
+
+    def _animate_button_glow(
+        self,
+        button: QAbstractButton,
+        effect: QGraphicsDropShadowEffect,
+        target_radius: int,
+        duration: int,
+        *,
+        clear_when_finished: bool = False,
+    ) -> None:
+        old_animation = getattr(button, "_floating_todo_button_glow_animation", None)
+        if old_animation is not None:
+            old_animation.stop()
+        animation = QPropertyAnimation(effect, b"blurRadius", button)
+        animation.setDuration(duration)
+        animation.setStartValue(effect.blurRadius())
+        animation.setEndValue(target_radius)
+        animation.setEasingCurve(QEasingCurve.OutCubic)
+        button._floating_todo_button_glow_animation = animation
+
+        def finish() -> None:
+            button._floating_todo_button_glow_animation = None
+            if clear_when_finished and button.graphicsEffect() is effect:
+                button.setGraphicsEffect(None)
+                button._floating_todo_button_glow = False
+
+        animation.finished.connect(finish)
+        animation.start()
 
     def _play_backdrop_pulse(self, widget: QWidget, event) -> None:
         global_pos = _event_global_pos(event, widget)

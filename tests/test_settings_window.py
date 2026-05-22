@@ -29,6 +29,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         low_distraction_mode=True,
         notification_lead_minutes=45,
         notification_repeat_minutes=12,
+        background_random_enabled=True,
+        background_folder_path=r"C:\Wallpapers",
         icon_path=r"C:\Icons\todo.ico",
     )
     dialog = SettingsWindow(settings)
@@ -58,6 +60,9 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert "▼ 展开" in dialog.icon_resource_combo.toolTip()
     assert dialog.background_resource_combo.count() == 4
     assert dialog.background_resource_combo.itemText(1) == "一二学习图"
+    assert dialog.background_random_enabled_checkbox.isChecked() is True
+    assert dialog.background_folder_path_edit.text() == r"C:\Wallpapers"
+    assert dialog.background_folder_path_edit.isHidden()
     assert dialog.icon_resource_combo.count() == 4
     assert dialog.icon_resource_combo.itemText(3) == "一二布布动图"
     assert dialog.icon_path_edit.text() == r"C:\Icons\todo.ico"
@@ -79,6 +84,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
         "透明度",
         "提前提醒分钟",
         "背景",
+        "随机背景文件夹",
+        "背景文件夹",
         "图标",
     ):
         assert label in visible_text
@@ -104,6 +111,8 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     dialog.lead_minutes_spinbox.setValue(33)
     dialog.icon_path_edit.setText(r"C:\Icons\new-todo.ico")
     dialog.background_resource_combo.setCurrentIndex(1)
+    dialog.background_folder_path_edit.setText(r"C:\Wallpapers")
+    dialog.background_random_enabled_checkbox.setChecked(True)
     dialog.icon_resource_combo.setCurrentIndex(3)
 
     updated = dialog.build_settings()
@@ -120,6 +129,8 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.notification_repeat_minutes == 10
     assert updated.background_enabled is True
     assert updated.background_image_path == "builtin:study"
+    assert updated.background_random_enabled is True
+    assert updated.background_folder_path == r"C:\Wallpapers"
     assert updated.background_overlay == 0.68
     assert updated.icon_path == "builtin:bubu-motion"
     assert dict(updated.window_geometry) == {"x": 9, "y": 8, "width": 500, "height": 400}
@@ -158,12 +169,16 @@ def test_settings_window_previews_opacity_and_background(qapp: QApplication, tmp
     dialog.opacity_slider.setValue(58)
     dialog.background_path.setText(str(image_path))
     dialog.background_enabled.setChecked(True)
+    dialog.background_folder_path_edit.setText(str(tmp_path))
+    dialog.background_random_enabled_checkbox.setChecked(True)
     dialog.icon_path_edit.setText(str(icon_path))
 
     assert previews
     assert previews[-1].opacity == 0.58
     assert previews[-1].background_image_path == str(image_path)
     assert previews[-1].background_enabled is True
+    assert previews[-1].background_random_enabled is True
+    assert previews[-1].background_folder_path == str(tmp_path)
     assert previews[-1].background_overlay == 0.68
     assert previews[-1].icon_path == str(icon_path)
 
@@ -191,6 +206,28 @@ def test_settings_window_background_picker_accepts_gif(
     assert "*.gif" in captured["filter"]
     assert dialog.background_path.text() == str(gif_path)
     assert dialog.background_enabled.isChecked() is True
+    assert dialog.background_random_enabled.isChecked() is False
+
+    dialog.close()
+
+
+def test_settings_window_background_folder_picker_enables_random_mode(
+    qapp: QApplication, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    def fake_get_existing_directory(parent, title, directory):
+        return str(tmp_path)
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", fake_get_existing_directory)
+    dialog = SettingsWindow(AppSettings())
+
+    dialog.choose_background_folder()
+
+    assert dialog.background_folder_path_edit.text() == str(tmp_path)
+    assert dialog.background_random_enabled_checkbox.isChecked() is True
+    assert dialog.background_enabled.isChecked() is True
+    assert dialog.build_settings().background_folder_path == str(tmp_path)
 
     dialog.close()
 
@@ -233,6 +270,7 @@ def test_settings_window_builtin_resources_update_path_fields(qapp: QApplication
 
     assert dialog.background_enabled.isChecked() is True
     assert dialog.background_path.text() == "builtin:food"
+    assert dialog.background_random_enabled.isChecked() is False
     assert dialog.icon_path_edit.text() == "builtin:study"
 
     dialog.background_path.setText(r"C:\custom\background.png")

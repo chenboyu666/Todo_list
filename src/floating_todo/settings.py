@@ -31,6 +31,8 @@ class AppSettings:
     focus_task_id: str | None = None
     background_image_path: str = ""
     background_enabled: bool = False
+    background_random_enabled: bool = False
+    background_folder_path: str = ""
     background_overlay: float = DEFAULT_BACKGROUND_OVERLAY
     icon_path: str = ""
     ui_scale: float = DEFAULT_UI_SCALE
@@ -86,6 +88,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
     ui_scale = round(max(MIN_UI_SCALE, min(MAX_UI_SCALE, ui_scale)), 2)
     raw_focus_task_id = data.get("focus_task_id")
     raw_background_path = data.get("background_image_path", "")
+    raw_background_folder_path = data.get("background_folder_path", "")
     raw_icon_path = data.get("icon_path", "")
     return AppSettings(
         always_on_top=_coerce_bool(data.get("always_on_top", True), True),
@@ -102,6 +105,8 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         focus_task_id=str(raw_focus_task_id) if raw_focus_task_id else None,
         background_image_path=str(raw_background_path) if raw_background_path else "",
         background_enabled=_coerce_bool(data.get("background_enabled", False), False),
+        background_random_enabled=_coerce_bool(data.get("background_random_enabled", False), False),
+        background_folder_path=str(raw_background_folder_path) if raw_background_folder_path else "",
         background_overlay=DEFAULT_BACKGROUND_OVERLAY,
         icon_path=str(raw_icon_path) if raw_icon_path else "",
         ui_scale=ui_scale,
@@ -133,6 +138,8 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "focus_task_id": settings.focus_task_id,
         "background_image_path": settings.background_image_path,
         "background_enabled": settings.background_enabled,
+        "background_random_enabled": settings.background_random_enabled,
+        "background_folder_path": settings.background_folder_path,
         "background_overlay": DEFAULT_BACKGROUND_OVERLAY,
         "icon_path": settings.icon_path,
         "ui_scale": settings.ui_scale,

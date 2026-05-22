@@ -80,6 +80,17 @@ class SettingsWindow(QDialog):
         self.background_browse_button = QPushButton("自定义")
         self.background_browse_button.setToolTip("选择本地背景图片或动图；主窗口和提醒小窗都会使用")
         self.background_browse_button.clicked.connect(self.choose_background)
+        self.background_random_enabled = QCheckBox()
+        self.background_random_enabled.setChecked(settings.background_random_enabled)
+        self.background_random_enabled_checkbox = self.background_random_enabled
+        self.background_folder_path = QLineEdit(settings.background_folder_path)
+        self.background_folder_path.setParent(self)
+        self.background_folder_path.setPlaceholderText("选择背景图片文件夹")
+        self.background_folder_path.hide()
+        self.background_folder_path_edit = self.background_folder_path
+        self.background_folder_browse_button = QPushButton("文件夹")
+        self.background_folder_browse_button.setToolTip("选择一个文件夹，程序会随机切换其中的图片或动图")
+        self.background_folder_browse_button.clicked.connect(self.choose_background_folder)
         self.icon_path = QLineEdit(settings.icon_path)
         self.icon_path.setParent(self)
         self.icon_path.setPlaceholderText("选择程序图标")
@@ -100,6 +111,7 @@ class SettingsWindow(QDialog):
             self.close_to_tray,
             self.launch_on_startup,
             self.background_enabled,
+            self.background_random_enabled,
         ):
             self._configure_toggle(checkbox)
 
@@ -118,6 +130,10 @@ class SettingsWindow(QDialog):
         background_layout.addWidget(self.background_resource, 1)
         background_layout.addWidget(self.background_browse_button)
         form.addRow("背景", background_layout)
+        form.addRow("随机背景文件夹", self.background_random_enabled)
+        background_folder_layout = QHBoxLayout()
+        background_folder_layout.addWidget(self.background_folder_browse_button)
+        form.addRow("背景文件夹", background_folder_layout)
 
         icon_layout = QHBoxLayout()
         icon_layout.addWidget(self.icon_resource, 1)
@@ -162,6 +178,18 @@ class SettingsWindow(QDialog):
         if path:
             self.background_path.setText(path)
             self.background_enabled.setChecked(True)
+            self.background_random_enabled.setChecked(False)
+
+    def choose_background_folder(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择背景图片文件夹",
+            self.background_folder_path.text(),
+        )
+        if path:
+            self.background_folder_path.setText(path)
+            self.background_random_enabled.setChecked(True)
+            self.background_enabled.setChecked(True)
 
     def choose_icon(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -175,12 +203,15 @@ class SettingsWindow(QDialog):
 
     def _connect_preview_signals(self) -> None:
         self.always_on_top.toggled.connect(self._sync_passthrough_availability)
+        self.background_random_enabled.toggled.connect(self._sync_random_background_enabled)
         self.background_resource.currentIndexChanged.connect(self.apply_background_resource)
         self.icon_resource.currentIndexChanged.connect(self.apply_icon_resource)
         self.opacity.valueChanged.connect(self._emit_preview)
         self.background_enabled.toggled.connect(self._emit_preview)
+        self.background_random_enabled.toggled.connect(self._emit_preview)
         self.background_path.textChanged.connect(self._emit_preview)
         self.background_path.textChanged.connect(lambda text: self._sync_resource_combo(self.background_resource, text))
+        self.background_folder_path.textChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(lambda text: self._sync_resource_combo(self.icon_resource, text))
 
@@ -190,11 +221,16 @@ class SettingsWindow(QDialog):
             return
         self.background_path.setText(str(value))
         self.background_enabled.setChecked(True)
+        self.background_random_enabled.setChecked(False)
 
     def apply_icon_resource(self, *args) -> None:
         value = self.icon_resource.currentData()
         if value:
             self.icon_path.setText(str(value))
+
+    def _sync_random_background_enabled(self, checked: bool) -> None:
+        if checked:
+            self.background_enabled.setChecked(True)
 
     def _sync_resource_combo(self, combo: QComboBox, value: str) -> None:
         if value and value.startswith(BUILTIN_RESOURCE_PREFIX):
@@ -237,7 +273,9 @@ class SettingsWindow(QDialog):
             notification_lead_minutes=self.lead_minutes.value(),
             notification_repeat_minutes=DEFAULT_NOTIFICATION_REPEAT_MINUTES,
             background_enabled=self.background_enabled.isChecked(),
+            background_random_enabled=self.background_random_enabled.isChecked(),
             background_image_path=self.background_path.text().strip(),
+            background_folder_path=self.background_folder_path.text().strip(),
             background_overlay=DEFAULT_BACKGROUND_OVERLAY,
             icon_path=self.icon_path.text().strip(),
         )

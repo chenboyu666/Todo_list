@@ -368,12 +368,8 @@ def test_deadline_minute_selector_supports_every_minute(qapp: QApplication) -> N
     deadline = datetime(2026, 5, 12, 10, 37, tzinfo=timezone.utc)
     dialog.deadline_edit.setDateTime(QDateTime.fromSecsSinceEpoch(int(deadline.timestamp()), QTimeZone.utc()))
 
-    assert isinstance(dialog.progress_slider, NoWheelSlider)
-    assert isinstance(dialog.progress_spin, NoWheelSpinBox)
-    dialog.progress_slider.setValue(34)
-    assert dialog.progress_spin.value() == 34
-    dialog.progress_spin.setValue(45)
-    assert dialog.progress_slider.value() == 45
+    assert not hasattr(dialog, "progress_slider")
+    assert not hasattr(dialog, "progress_spin")
     assert dialog.deadline_minute_input.count() == 60
     assert dialog.deadline_minute_input.itemText(37) == "37"
     assert dialog.build_task().deadline == deadline
@@ -906,6 +902,23 @@ def test_global_interaction_effect_filter_installs_once(qapp: QApplication) -> N
 
     assert first is second
     assert isinstance(first, InteractionEffectFilter)
+
+
+def test_button_interaction_filter_adds_animated_glow(qapp: QApplication) -> None:
+    from floating_todo.ui.effects import InteractionEffectFilter
+
+    button = QPushButton("保存")
+    effect_filter = InteractionEffectFilter()
+
+    effect_filter.eventFilter(button, QEvent(QEvent.Enter))
+
+    assert getattr(button, "_floating_todo_button_glow", False) is True
+    assert getattr(button, "_floating_todo_button_glow_animation", None) is not None
+
+    effect_filter.eventFilter(button, QEvent(QEvent.Leave))
+
+    assert getattr(button, "_floating_todo_button_glow_animation", None) is not None
+    button.close()
 
 
 def test_delete_dialog_uses_frameless_app_chrome(qapp: QApplication) -> None:
