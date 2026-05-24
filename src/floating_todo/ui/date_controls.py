@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QDate, QEvent, QLocale, QObject, Qt
+from PySide6.QtCore import QDate, QEvent, QLocale, QObject, QPoint, Qt
 from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import QAbstractSpinBox, QCalendarWidget, QComboBox, QDateEdit, QMenu, QSpinBox, QToolButton
 
@@ -17,9 +17,77 @@ class NoWheelDateEdit(QDateEdit):
         super().__init__(*args, **kwargs)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
         self.setKeyboardTracking(False)
+        self._popup_calendar: QCalendarWidget | None = None
+        self._calendar_popup_connections_ready = False
+        self.setCursor(Qt.PointingHandCursor)
 
     def wheelEvent(self, event) -> None:
         event.ignore()
+
+    def mousePressEvent(self, event) -> None:
+        super().mousePressEvent(event)
+        if self.calendarPopup() and event.button() == Qt.LeftButton:
+            self.open_calendar_popup()
+            event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        if self.calendarPopup() and event.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_F4):
+            self.open_calendar_popup()
+            event.accept()
+            return
+        if self.calendarPopup() and event.key() == Qt.Key_Down and event.modifiers() & Qt.AltModifier:
+            self.open_calendar_popup()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def attach_calendar_popup(self, calendar: QCalendarWidget) -> None:
+        self._popup_calendar = calendar
+        calendar.setWindowFlag(Qt.Popup, True)
+        calendar.setWindowFlag(Qt.FramelessWindowHint, True)
+        calendar.setFocusPolicy(Qt.StrongFocus)
+        if self._calendar_popup_connections_ready:
+            return
+
+        def sync_from_calendar() -> None:
+            selected_date = calendar.selectedDate()
+            if selected_date.isValid() and selected_date != self.date():
+                self.setDate(selected_date)
+
+        def choose_date(selected_date: QDate) -> None:
+            if selected_date.isValid():
+                self.setDate(selected_date)
+            calendar.hide()
+
+        calendar.selectionChanged.connect(sync_from_calendar)
+        calendar.clicked.connect(choose_date)
+        calendar.activated.connect(choose_date)
+        self.dateChanged.connect(lambda selected_date: calendar.setSelectedDate(selected_date))
+        self._calendar_popup_connections_ready = True
+
+    def open_calendar_popup(self) -> None:
+        calendar = self._popup_calendar or self.calendarWidget()
+        if calendar is None:
+            return
+        if not self._calendar_popup_connections_ready:
+            self.attach_calendar_popup(calendar)
+
+        calendar.setSelectedDate(self.date())
+        calendar.setCurrentPage(self.date().year(), self.date().month())
+        calendar.adjustSize()
+
+        popup_size = calendar.sizeHint()
+        target = self.mapToGlobal(QPoint(0, self.height() + 6))
+        screen = self.screen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            if target.y() + popup_size.height() > available.bottom():
+                target.setY(self.mapToGlobal(QPoint(0, 0)).y() - popup_size.height() - 6)
+            target.setX(min(max(available.left(), target.x()), max(available.left(), available.right() - popup_size.width())))
+        calendar.move(target)
+        calendar.show()
+        calendar.raise_()
+        calendar.setFocus(Qt.PopupFocusReason)
 
 
 class NoWheelSpinBox(QSpinBox):
@@ -34,7 +102,7 @@ class _YearEditEventFilter(QObject):
         self._cancel = cancel
 
     def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.KeyPress:
+        if event.type() in (QEvent.KeyPress, QEvent.ShortcutOverride):
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 self._finish()
                 event.accept()
@@ -81,6 +149,8 @@ def apply_dark_calendar_popup(date_edit: QDateEdit, object_name: str) -> QCalend
 
     _enhance_calendar_navigation(calendar)
     date_edit.setCalendarWidget(calendar)
+    if isinstance(date_edit, NoWheelDateEdit):
+        date_edit.attach_calendar_popup(calendar)
     return calendar
 
 
@@ -145,11 +215,16 @@ def _enhance_calendar_navigation(calendar: QCalendarWidget) -> None:
             calendar.setSelectedDate(selected_date_for_year(year, month))
             calendar.setCurrentPage(year, month)
         else:
-            calendar.setCurrentPage(int(editing_state["year"]), int(editing_state["month"]))
+            year = int(editing_state["year"])
+            month = int(editing_state["month"])
+            year_edit.blockSignals(True)
+            year_edit.setValue(year)
+            year_edit.blockSignals(False)
+            calendar.setCurrentPage(year, month)
+        editing_state["active"] = False
         year_edit.hide()
         year_button.show()
         year_button.setFocus(Qt.OtherFocusReason)
-        editing_state["active"] = False
 
     def finish_year_edit() -> None:
         end_year_edit(apply_value=True)

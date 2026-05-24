@@ -29,6 +29,8 @@ from floating_todo.ui.effects import apply_soft_shadow
 from floating_todo.view_models import PRIORITY_ORDER, priority_from_display, priority_text
 
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
+MAX_EFFORT_HOURS = 999
+MAX_EFFORT_MINUTES = MAX_EFFORT_HOURS * 60 + 59
 
 
 def local_timezone():
@@ -74,7 +76,7 @@ class EffortInputAdapter:
         return 0
 
     def maximum(self) -> int:
-        return 24 * 60
+        return MAX_EFFORT_MINUTES
 
     def singleStep(self) -> int:
         return self.dialog.effort_minute_input.singleStep()
@@ -112,9 +114,9 @@ class TaskDialog(QDialog):
         self.priority_combo = self.priority_input
 
         self.effort_hour_input = NoWheelSpinBox()
-        self.effort_hour_input.setRange(0, 24)
+        self.effort_hour_input.setRange(0, MAX_EFFORT_HOURS)
         self.effort_hour_input.setSuffix(" 小时")
-        self.effort_hour_input.setToolTip("右侧按钮每次增减 1 小时，修改后会按当前时间同步截止时间")
+        self.effort_hour_input.setToolTip("右侧按钮每次增减 1 小时，最多可设置 999 小时")
         self.effort_hour_input.setAccessibleName("预计工作量小时")
 
         self.effort_minute_input = NoWheelSpinBox()
@@ -129,7 +131,8 @@ class TaskDialog(QDialog):
         self.deadline_date_input = NoWheelDateEdit()
         self.deadline_date_input.setCalendarPopup(True)
         self.deadline_date_input.setDisplayFormat("yyyy-MM-dd")
-        self.deadline_date_input.setMinimumWidth(188)
+        self.deadline_date_input.setMinimumWidth(206)
+        self.deadline_date_input.setMaximumWidth(236)
         self.deadline_date_input.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         apply_dark_calendar_popup(self.deadline_date_input, "taskDeadlineCalendar")
         self.deadline_date_input.setToolTip("选择截止日期")
@@ -310,11 +313,11 @@ class TaskDialog(QDialog):
         effort_section.layout().addWidget(effort_hint)
 
         deadline_section = _section_card("截止时间", "task-deadline.svg", "taskSectionDeadline")
-        deadline_layout = QHBoxLayout()
+        deadline_layout = QVBoxLayout()
         deadline_layout.setContentsMargins(0, 0, 0, 0)
-        deadline_layout.setSpacing(10)
-        deadline_layout.addWidget(_field_group("日期", self.deadline_date_input), 7)
-        deadline_layout.addWidget(_field_group("时间", _time_pair(self.deadline_hour_input, self.deadline_minute_input)), 6)
+        deadline_layout.setSpacing(8)
+        deadline_layout.addWidget(_field_group("日期", self.deadline_date_input, compact=True))
+        deadline_layout.addWidget(_field_group("时间", _time_pair(self.deadline_hour_input, self.deadline_minute_input)))
         deadline_section.layout().addLayout(deadline_layout)
         deadline_hint = QLabel("设置截止时间有助于按时完成任务")
         deadline_hint.setObjectName("taskDialogHint")
@@ -421,10 +424,10 @@ class TaskDialog(QDialog):
     def _effort_minutes(self) -> int:
         self.effort_hour_input.interpretText()
         self.effort_minute_input.interpretText()
-        return min(24 * 60, max(0, self.effort_hour_input.value() * 60 + self.effort_minute_input.value()))
+        return min(MAX_EFFORT_MINUTES, max(0, self.effort_hour_input.value() * 60 + self.effort_minute_input.value()))
 
     def _set_effort_fields(self, minutes: int) -> None:
-        total_minutes = min(24 * 60, max(0, int(minutes)))
+        total_minutes = min(MAX_EFFORT_MINUTES, max(0, int(minutes)))
         hours, remainder = divmod(total_minutes, 60)
         self.effort_hour_input.blockSignals(True)
         self.effort_minute_input.blockSignals(True)
@@ -437,7 +440,7 @@ class TaskDialog(QDialog):
             self.effort_minute_input.blockSignals(False)
 
     def _apply_effort_minute_bounds(self) -> None:
-        maximum = 0 if self.effort_hour_input.value() >= 24 else 59
+        maximum = 59
         if self.effort_minute_input.maximum() != maximum:
             self.effort_minute_input.setMaximum(maximum)
 
@@ -542,9 +545,13 @@ def _section_card(title: str, icon_name: str, object_name: str) -> QFrame:
     return section
 
 
-def _field_group(label_text: str, control: QWidget) -> QFrame:
+def _field_group(label_text: str, control: QWidget, *, compact: bool = False) -> QFrame:
     frame = QFrame()
     frame.setObjectName("taskFieldGroup")
+    if compact:
+        frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        frame.setMinimumWidth(314)
+        frame.setMaximumWidth(346)
     layout = QHBoxLayout(frame)
     layout.setContentsMargins(10, 9, 10, 9)
     layout.setSpacing(10)
@@ -554,24 +561,36 @@ def _field_group(label_text: str, control: QWidget) -> QFrame:
     label.setAlignment(Qt.AlignCenter)
     label.setFixedWidth(56)
     layout.addWidget(label)
-    layout.addWidget(control, 1)
+    layout.addWidget(control, 0 if compact else 1)
+    if compact:
+        layout.addStretch(1)
     return frame
 
 
 def _time_pair(hour_input: NoWheelComboBox, minute_input: NoWheelComboBox) -> QWidget:
     container = QWidget()
     container.setObjectName("taskDialogTimePair")
+    container.setMinimumWidth(210)
     layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(12)
+    layout.setSpacing(6)
+    hour_input.setMinimumWidth(72)
+    minute_input.setMinimumWidth(72)
     layout.addWidget(hour_input, 1)
-    colon = QLabel(":")
-    colon.setObjectName("taskDialogColon")
-    colon.setAlignment(Qt.AlignCenter)
-    colon.setFixedWidth(16)
-    layout.addWidget(colon)
+    hour_unit = _time_unit_label("时")
+    layout.addWidget(hour_unit)
     layout.addWidget(minute_input, 1)
+    minute_unit = _time_unit_label("分")
+    layout.addWidget(minute_unit)
     return container
+
+
+def _time_unit_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("taskDialogTimeUnit")
+    label.setAlignment(Qt.AlignCenter)
+    label.setFixedWidth(22)
+    return label
 
 
 def _priority_icon_name(priority: str) -> str:
@@ -706,9 +725,17 @@ QLabel#taskDialogCounter {{
   font-weight: 700;
 }}
 QLabel#taskDialogHint,
-QLabel#taskDialogColon {{
+QLabel#taskDialogTimeUnit {{
   color: #7F97AC;
   font-size: 14px;
+}}
+QLabel#taskDialogTimeUnit {{
+  color: #D6EAFE;
+  background: rgba(13, 38, 57, 0.78);
+  border: none;
+  border-radius: 8px;
+  font-weight: 900;
+  min-height: 30px;
 }}
 QFrame#taskPriorityPreviewP1 {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4A1824, stop:1 #6B2E12);
@@ -746,14 +773,37 @@ QLineEdit {{
 QDateEdit,
 QComboBox {{
   min-height: 36px;
-  padding-right: 34px;
+  color: #ECFEFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #071321,
+    stop:1 #0B1C2E);
+  border: none;
+  border-radius: 12px;
+  padding: 0 30px 0 12px;
+  selection-background-color: #22D3EE;
+  selection-color: #03111B;
 }}
 QDateEdit::drop-down,
 QComboBox::drop-down {{
-  width: 28px;
+  width: 24px;
   subcontrol-origin: padding;
   subcontrol-position: top right;
   border: none;
+  background: rgba(16, 38, 58, 0.96);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}}
+QDateEdit::down-arrow,
+QComboBox::down-arrow {{
+  image: url("{(UI_ICON_DIR / "chevron-down.svg").as_posix()}");
+  width: 12px;
+  height: 12px;
+}}
+QDateEdit:focus,
+QComboBox:focus {{
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0A1F34,
+    stop:1 #0D3341);
 }}
 QDateEdit::up-button,
 QDateEdit::down-button,
