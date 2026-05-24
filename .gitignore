@@ -9,7 +9,12 @@ __pycache__/
 venv/
 build/
 dist/
-release/
+release/*
+!release/V1.0/
+release/V1.0/*
+!release/V1.0/*.exe
+release/V1.0/data/
 *.spec
 *.log
 *.lnk
+图像ui/
