@@ -82,20 +82,22 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     title_label = window.centralWidget().findChild(QLabel, "windowTitleLabel")
     assert title_label is not None
     assert title_label.parent().cursor().shape() == Qt.OpenHandCursor
-    assert window.close_button.text() == "×"
+    assert window.close_button.text() == ""
+    assert window.close_button.accessibleName() == "关闭"
+    assert not window.close_button.icon().isNull()
     assert window.close_button.cursor().shape() == Qt.PointingHandCursor
 
     window.set_focus_task("task-2")
 
     assert window.settings.focus_task_id == "task-2"
-    assert window.focus_title_label.text() == "拖入进行中"
+    assert window.focus_title_label.text() == "任务名称：拖入进行中"
     assert getattr(qapp, "_floating_todo_interaction_filter", None) is not None
     assert window.root_widget._click_pulses
 
     window.close()
 
 
-def test_main_surface_omits_progress_percentage_controls(qapp: QApplication, tmp_path) -> None:
+def test_main_surface_renders_progress_status_without_manual_controls(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow
 
     task = make_task("紧凑进度", "task-1")
@@ -106,12 +108,13 @@ def test_main_surface_omits_progress_percentage_controls(qapp: QApplication, tmp
     assert not hasattr(window, "focus_progress_label")
     assert window.focus_card.findChildren(NoWheelSlider) == []
     assert window.focus_card.findChildren(NoWheelSpinBox) == []
+    assert window.focus_card.findChild(QProgressBar, "focusProgressDisplay").isHidden()
     assert "10%" not in "\n".join(label.text() for label in window.focus_card.findChildren(QLabel))
 
     row_text = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
     assert "10%" not in row_text
-    assert window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue") == []
-    assert window.task_rows_container.findChildren(QLabel, "taskProgressValue") == []
+    assert all(widget.isHidden() for widget in window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue"))
+    assert all(widget.isHidden() for widget in window.task_rows_container.findChildren(QProgressBar, "activeTaskProgressDisplay"))
 
     next(button for button in window.task_rows_container.findChildren(QPushButton) if button.text() == "展开").click()
     qapp.processEvents()
@@ -210,6 +213,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     window = MainWindow(store, AppSettings(), tmp_path / "settings.json")
     window.show()
     qapp.processEvents()
+    tick_animations.clear()
 
     window.resize(620, 620)
     qapp.processEvents()
@@ -217,13 +221,17 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
     assert window.focus_top_layout.getItemPosition(deadline_index) == (2, 0, 1, 4)
+    assert window.focus_title_label.alignment() & Qt.AlignLeft
+    assert window.focus_title_label.alignment() & Qt.AlignVCenter
 
     window.resize(860, 620)
     qapp.processEvents()
     title_index = window.focus_top_layout.indexOf(window.focus_title_label)
     assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)
-    assert window.focus_top_layout.getItemPosition(deadline_index) == (0, 4, 2, 1)
+    assert window.focus_top_layout.getItemPosition(deadline_index) == (2, 0, 1, 4)
+    assert window.focus_title_label.alignment() & Qt.AlignLeft
+    assert window.focus_title_label.alignment() & Qt.AlignVCenter
 
     row_labels = "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
     button_text = "\n".join(button.text() for button in window.task_rows_container.findChildren(QPushButton))
@@ -238,8 +246,8 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "border: none" in _card_style("normal")
     assert "border: 1px" not in _card_style("normal")
     assert window.task_rows_container.findChildren(NoWheelSlider) == []
-    assert window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue") == []
-    assert window.task_rows_container.findChildren(QLabel, "taskProgressValue") == []
+    assert all(widget.isHidden() for widget in window.task_rows_container.findChildren(QLabel, "activeTaskProgressValue"))
+    assert all(widget.isHidden() for widget in window.task_rows_container.findChildren(QProgressBar, "activeTaskProgressDisplay"))
     assert "10%" not in row_labels
     assert "设为当前置顶任务" in button_tooltips
     assert window.focus_card.toolTip() == "把任务拖到这里设为进行中"
@@ -257,13 +265,14 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
-    assert window.focus_priority_label.text() == "▲ 高"
-    assert "font-size: 24px" in window.focus_title_label.styleSheet()
+    assert "高" in window.focus_priority_label.text()
+    assert "<img" in window.focus_priority_label.text()
+    assert "font-size: 25px" in window.focus_title_label.styleSheet()
     assert ("focusCountdownLabel", 170) not in tick_animations
     qapp.processEvents()
     window.focus_countdown_label.setText("00:00:00")
     window.refresh()
-    assert ("focusCountdownLabel", 170) in tick_animations
+    assert ("focusCountdownLabel", 170) not in tick_animations
     assert not window.focus_notes_label.isHidden()
     assert "备注：先确认接口" in window.focus_notes_label.text()
     assert window.focus_deadline_label.text().startswith("截止 2026-")
@@ -316,7 +325,7 @@ def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_
     focus_button.click()
 
     assert window.settings.focus_task_id == "task-2"
-    assert window.focus_title_label.text() == "后面的任务"
+    assert window.focus_title_label.text() == "任务名称：后面的任务"
 
     window.close()
 
@@ -332,7 +341,7 @@ def test_paused_task_can_still_be_pinned_as_current(qapp: QApplication, tmp_path
     focus_button.click()
 
     assert window.settings.focus_task_id == "task-paused"
-    assert window.focus_title_label.text() == "暂停候选"
+    assert window.focus_title_label.text() == "任务名称：暂停候选"
     assert window.focus_meta_label.text() == "暂停中"
 
     window.close()
@@ -351,12 +360,12 @@ def test_task_drag_defers_refresh_until_drag_finishes(qapp: QApplication, tmp_pa
 
     assert window.is_task_drag_active is True
     assert window.task_list_layout.itemAt(0).widget() is first_row
-    assert window.focus_title_label.text() == "当前"
+    assert window.focus_title_label.text() == "任务名称：当前"
 
     window.end_task_drag()
 
     assert window.is_task_drag_active is False
-    assert window.focus_title_label.text() == "后面的任务"
+    assert window.focus_title_label.text() == "任务名称：后面的任务"
 
     window.close()
 
@@ -468,16 +477,16 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     note_buttons = [button for button in window.findChildren(QPushButton) if button.text() == "查看/编辑备注"]
     assert note_buttons
     assert window.minimumWidth() >= 960
-    assert window.minimumHeight() >= 900
+    assert window.minimumHeight() >= 860
     assert window.width() >= 1080
-    assert window.height() >= 920
+    assert window.height() >= 900
     assert window.isSizeGripEnabled()
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
     assert window.fullscreen_button.objectName() == "historyFullscreenButton"
     assert window.fullscreen_button.toolTip() == "全屏历史窗口"
-    assert window.priority_p1_label.text() == "▲ 高：1"
-    assert window.priority_p2_label.text() == "◆ 中：1"
-    assert window.priority_p3_label.text() == "▼ 低：0"
+    assert window.priority_p1_label.text() == "高：1"
+    assert window.priority_p2_label.text() == "中：1"
+    assert window.priority_p3_label.text() == "低：0"
     assert window.review_metric_label.text() == "复盘 1/2"
     assert window.on_time_metric_label.text() == "准时率 100%"
     assert window.overdue_metric_label.text() == "超时 0/2"
@@ -485,10 +494,10 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.history_content_scroll.widgetResizable()
-    assert window.stats_panel.height() >= 320
-    assert window.priority_donut_chart.minimumHeight() >= 126
-    assert window.deadline_outcome_chart.minimumHeight() >= 126
-    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 178
+    assert window.stats_panel.height() <= 280
+    assert window.priority_donut_chart.minimumHeight() >= 108
+    assert window.deadline_outcome_chart.minimumHeight() >= 108
+    assert window.priority_donut_chart.parentWidget().minimumHeight() >= 150
     assert window.history_scroll_area.minimumHeight() >= 160
     assert window.date_pager_widget.objectName() == "historyPagerPanel"
     assert window.history_records_panel.objectName() == "historyRecordsPanel"
@@ -502,6 +511,8 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "#25135C" in window.styleSheet()
     window.show()
     qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_overview_scroll
+    assert window.history_sidebar_buttons["overview"].isChecked()
     assert window.history_content_scroll.verticalScrollBar().maximum() == 0
     normal_geometry = window.geometry()
     window.fullscreen_button.click()
@@ -528,15 +539,16 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     )
     for chip, date_edit in zip(date_chips, date_edits):
         chip_label = chip.findChild(QLabel, "historyExportDateLabel")
-        assert chip.height() == 36
+        assert chip.height() == 40
         assert chip.minimumWidth() >= 214
         assert chip_label is not None
-        assert chip_label.height() == 28
+        assert chip_label.height() == 32
         assert chip_label.alignment() & Qt.AlignHCenter
         assert chip_label.alignment() & Qt.AlignVCenter
-        assert date_edit.height() == 28
+        assert date_edit.height() == 32
         assert date_edit.minimumWidth() >= 132
         assert date_edit.alignment() & Qt.AlignHCenter
+        assert date_edit.alignment() & Qt.AlignVCenter
         assert isinstance(date_edit, QDateEdit)
         assert abs(chip_label.geometry().center().y() - date_edit.geometry().center().y()) <= 1
         assert abs(chip.rect().center().y() - date_edit.geometry().center().y()) <= 1
@@ -555,17 +567,13 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
         )
     }
     assert len(metric_tops) == 1
-    toolbar = window.findChild(QFrame, "historyToolbar")
-    toolbar_top = toolbar.mapTo(window, QPoint(0, 0)).y()
-    for card in window.findChildren(QFrame, "historyChartCard"):
+    for card in window.stats_panel.findChildren(QFrame, "historyChartCard"):
         assert card.geometry().bottom() <= window.stats_panel.contentsRect().bottom()
-        assert card.mapTo(window, QPoint(0, card.height())).y() < toolbar_top
         assert (
             card.findChild(QWidget, "historyPriorityDonutChart")
             or card.findChild(QWidget, "historyCompletionTrendChart")
             or card.findChild(QWidget, "historyDeadlineOutcomeChart")
         )
-    assert window.history_scroll_area.geometry().top() > window.stats_panel.geometry().bottom()
     assert window.priority_donut_chart.accessibleName() == "优先级完成结构图"
     assert window.completion_trend_chart.accessibleName() == "每日完成曲线图"
     assert window.deadline_outcome_chart.accessibleName() == "准时与超时分布图"
@@ -580,16 +588,38 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert isinstance(window.list_layout, QGridLayout)
     assert window._history_grid_columns() >= 2
     assert window.priority_p1_label.height() >= 28
+    window.history_sidebar_buttons["analysis"].click()
+    qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_analysis_scroll
+    assert window.history_sidebar_buttons["analysis"].isChecked()
+    assert not window.history_sidebar_buttons["overview"].isChecked()
+    assert window.analysis_range_label.text().startswith("统计区间 ")
+    assert window.analysis_count_label.text() == "2 条"
+    window.history_top_button.click()
+    qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_analysis_scroll
     window.analytics_start_date.setDate(window.analytics_end_date.date())
     qapp.processEvents()
     assert window.analytics_count_label.text() == "1 条"
+    assert window.analysis_count_label.text() == "1 条"
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 0, "P3": 0}
+    assert window.analysis_priority_donut_chart.priority_counts == {"P1": 1, "P2": 0, "P3": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1]
     window.analytics_all_button.click()
     qapp.processEvents()
     assert window.analytics_count_label.text() == "2 条"
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
-    assert window.findChildren(QProgressBar, "historyInlineProgress")
+    assert all(widget.isHidden() for widget in window.findChildren(QProgressBar, "historyInlineProgress"))
+    window.history_sidebar_buttons["records"].click()
+    qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_records_scroll
+    history_cards = window.history_records_panel.findChildren(QFrame, "historyCard")
+    assert history_cards
+    viewport_bottom = window.history_scroll_area.viewport().mapTo(
+        window, QPoint(0, window.history_scroll_area.viewport().height())
+    ).y()
+    first_card_bottom = history_cards[0].mapTo(window, QPoint(0, history_cards[0].height())).y()
+    assert first_card_bottom <= viewport_bottom
     assert window.export_button.text() == "导出 CSV"
     assert window.export_start_date.accessibleName() == "导出起始日期"
     assert window.export_end_date.accessibleName() == "导出结束日期"
@@ -600,13 +630,17 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert window.export_start_date.calendarWidget().objectName() == "historyExportStartCalendar"
     assert window.export_start_date.calendarWidget().firstDayOfWeek() == Qt.Monday
     assert not window.export_start_date.calendarWidget().isGridVisible()
-    assert "#070B12" in window.export_start_date.calendarWidget().styleSheet()
+    assert "#06111C" in window.export_start_date.calendarWidget().styleSheet()
     window.export_start_date.setDate(window.export_end_date.date())
     qapp.processEvents()
     assert window.export_count_label.text() == "1 条"
     window.export_all_button.click()
     qapp.processEvents()
     assert window.export_count_label.text() == "2 条"
+    window.history_sidebar_buttons["export"].click()
+    qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_export_scroll
+    assert window.findChild(QFrame, "historyExportHelpPanel") is not None
 
     labels = rendered_history_text()
     assert "已复盘" in labels
@@ -618,7 +652,7 @@ def test_history_window_is_compact_and_searchable(qapp: QApplication) -> None:
     assert "另一条记录" not in labels
     previews = window.findChildren(QLabel, "historyPreview")
     assert previews
-    assert previews[0].minimumHeight() >= 44
+    assert previews[0].minimumHeight() >= 36
 
     window.search_input.setText("交付")
     qapp.processEvents()
@@ -690,9 +724,9 @@ def test_history_analytics_tracks_overdue_and_no_deadline(qapp: QApplication) ->
     store = MemoryStore([on_time, overdue, no_deadline])
     window = HistoryWindow([on_time, overdue, no_deadline], store)
 
-    assert window.priority_p1_label.text() == "▲ 高：1"
-    assert window.priority_p2_label.text() == "◆ 中：1"
-    assert window.priority_p3_label.text() == "▼ 低：1"
+    assert window.priority_p1_label.text() == "高：1"
+    assert window.priority_p2_label.text() == "中：1"
+    assert window.priority_p3_label.text() == "低：1"
     assert window.on_time_metric_label.text() == "准时率 50%"
     assert window.overdue_metric_label.text() == "超时 1/2"
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 1, "overdue": 1, "no_deadline": 1}

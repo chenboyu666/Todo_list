@@ -6,17 +6,17 @@ def _asset_url(filename: str) -> str:
 
 
 THEME_COLORS = {
-    "background": "#080A0F",
-    "surface": "#121722",
-    "surface_alt": "#171D2A",
-    "surface_hover": "#1D2634",
-    "surface_pressed": "#252D3B",
-    "field": "#090D15",
-    "border": "#8B95AC",
+    "background": "#020A13",
+    "surface": "#071827",
+    "surface_alt": "#0B2235",
+    "surface_hover": "#12334A",
+    "surface_pressed": "#183F57",
+    "field": "#061321",
+    "border": "#6F86A1",
     "text": "#F6F8FC",
-    "muted": "#9AA4B8",
-    "accent": "#7DD3FC",
-    "accent_secondary": "#A7F3D0",
+    "muted": "#9DB2C8",
+    "accent": "#22D3EE",
+    "accent_secondary": "#5EEAD4",
     "warning": "#F6C177",
     "danger": "#FCA5A5",
 }
@@ -56,16 +56,22 @@ QFrame {{
   border: none;
 }}
 QPushButton {{
-  background: {THEME_COLORS["surface_alt"]};
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #10243A,
+    stop:0.58 {THEME_COLORS["surface_alt"]},
+    stop:1 #0A1726);
   border: none;
   border-radius: {THEME_RADIUS["control"]};
   min-height: {THEME_SPACING["button_min_height"]};
   padding: {THEME_SPACING["control_padding"]};
+  color: #EAF7FF;
+  font-weight: 800;
 }}
 QPushButton:hover {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 {THEME_COLORS["surface_hover"]},
-    stop:1 #203242);
+    stop:0 #16405A,
+    stop:0.5 #14566C,
+    stop:1 #0F766E);
 }}
 QPushButton:pressed {{
   background: {THEME_COLORS["surface_pressed"]};
@@ -138,7 +144,9 @@ QSizeGrip {{
   height: 18px;
 }}
 QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QDateEdit, QComboBox {{
-  background: {THEME_COLORS["field"]};
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #071321,
+    stop:1 #0B1C2E);
   border: none;
   border-radius: {THEME_RADIUS["control"]};
   min-height: {THEME_SPACING["control_min_height"]};
@@ -147,12 +155,14 @@ QLineEdit, QTextEdit, QSpinBox, QDateTimeEdit, QDateEdit, QComboBox {{
   selection-color: {THEME_COLORS["background"]};
 }}
 QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QDateEdit:focus, QComboBox:focus {{
-  background: #0D1420;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0A1F34,
+    stop:1 #0D3341);
 }}
 QComboBox::drop-down, QDateTimeEdit::drop-down, QDateEdit::drop-down {{
   border: none;
   width: 28px;
-  background: {THEME_COLORS["surface_alt"]};
+  background: #10263A;
   border-top-right-radius: {THEME_RADIUS["control"]};
   border-bottom-right-radius: {THEME_RADIUS["control"]};
 }}
@@ -193,7 +203,7 @@ QAbstractSpinBox::down-arrow {{
   height: 7px;
 }}
 QProgressBar {{
-  background: #0A0E15;
+  background: #071421;
   border: none;
   border-radius: {THEME_RADIUS["progress"]};
   height: 8px;
@@ -210,7 +220,7 @@ QSlider {{
   min-height: 24px;
 }}
 QSlider::groove:horizontal {{
-  background: #0A0E15;
+  background: #071421;
   border: none;
   height: 8px;
   border-radius: {THEME_RADIUS["progress"]};
@@ -223,7 +233,7 @@ QSlider::sub-page:horizontal {{
   border-radius: {THEME_RADIUS["progress"]};
 }}
 QSlider::add-page:horizontal {{
-  background: #0A0E15;
+  background: #071421;
   border-radius: {THEME_RADIUS["progress"]};
 }}
 QSlider::handle:horizontal {{
@@ -293,9 +303,11 @@ QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {{
   height: 0;
 }}
 QCheckBox {{
-  background: #0A101A;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #071321,
+    stop:1 #0C1F31);
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   min-width: 142px;
   min-height: 34px;
   padding: 4px 10px;
@@ -305,8 +317,8 @@ QCheckBox {{
 }}
 QCheckBox:hover {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0F1A2A,
-    stop:1 #102D36);
+    stop:0 #0D263B,
+    stop:1 #0F4855);
   color: #F6F8FC;
 }}
 QCheckBox:pressed {{
@@ -322,8 +334,8 @@ QCheckBox:focus {{
 }}
 QCheckBox:checked {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #123047,
-    stop:1 #115E59);
+    stop:0 #0891B2,
+    stop:1 #0F766E);
   color: #ECFEFF;
 }}
 QCheckBox:disabled {{
@@ -335,7 +347,7 @@ QCheckBox::indicator {{
   height: 18px;
   border: none;
   border-radius: 9px;
-  background: #243044;
+  background: #DCE8F4;
 }}
 QCheckBox::indicator:hover {{
   background: #2D4058;
