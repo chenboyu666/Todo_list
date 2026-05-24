@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from floating_todo.domain import (
+    DEFAULT_TASK_TAG,
     Task,
     freeze_work_timer,
     pause_work_timer,
@@ -33,6 +34,7 @@ def make_task(title, priority, deadline_hours, effort, created_minutes):
         created_at=base + timedelta(minutes=created_minutes),
         updated_at=base + timedelta(minutes=created_minutes),
         completed_at=None,
+        tag="学习",
         notes="",
         notification_state={"deadline_warning_sent": False, "deadline_due_sent": False},
     )
@@ -134,6 +136,20 @@ def test_task_from_dict_backfills_notification_state_without_mutating_input():
         "deadline_due_sent": False,
     }
     assert data["notification_state"] == {"deadline_warning_sent": True}
+
+
+def test_task_tag_round_trip_and_legacy_default():
+    task = make_task("tagged", "P2", 3, 45, 0)
+
+    payload = task_to_dict(task)
+    restored = task_from_dict(payload)
+    legacy = task_from_dict({"id": "legacy", "title": "legacy"})
+    blank = task_from_dict({"id": "blank", "title": "blank", "tag": "   "})
+
+    assert payload["tag"] == "学习"
+    assert restored.tag == "学习"
+    assert legacy.tag == DEFAULT_TASK_TAG
+    assert blank.tag == DEFAULT_TASK_TAG
 
 
 def test_same_priority_no_deadline_tasks_sort_after_dated_tasks():

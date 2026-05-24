@@ -17,6 +17,8 @@ DEFAULT_NOTIFICATION_STATE = {
     "deadline_warning_sent": False,
     "deadline_due_sent": False,
 }
+DEFAULT_TASK_TAG = "未分类"
+TASK_TAG_PRESETS = ("工作", "学习", "项目", "创作", "健康", "复盘")
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class Task:
     work_started_at: datetime | None = None
     notes: str = ""
     reflection: str = ""
+    tag: str = DEFAULT_TASK_TAG
     notification_state: Mapping[str, Any] = field(default_factory=lambda: dict(DEFAULT_NOTIFICATION_STATE))
 
     def __post_init__(self) -> None:
@@ -44,6 +47,7 @@ class Task:
         object.__setattr__(self, "completed_at", normalize_datetime(self.completed_at))
         object.__setattr__(self, "work_elapsed_seconds", max(0, int(self.work_elapsed_seconds or 0)))
         object.__setattr__(self, "work_started_at", normalize_datetime(self.work_started_at))
+        object.__setattr__(self, "tag", normalize_task_tag(self.tag))
 
         notification_state = dict(DEFAULT_NOTIFICATION_STATE)
         notification_state.update(self.notification_state)
@@ -74,6 +78,11 @@ def format_datetime(value: datetime | None) -> str | None:
     return value.isoformat()
 
 
+def normalize_task_tag(value: Any) -> str:
+    tag = str(value or "").strip()
+    return tag or DEFAULT_TASK_TAG
+
+
 def task_from_dict(data: dict[str, Any]) -> Task:
     now = utc_now()
     notification_state = dict(DEFAULT_NOTIFICATION_STATE)
@@ -96,6 +105,7 @@ def task_from_dict(data: dict[str, Any]) -> Task:
         work_started_at=parse_datetime(data.get("work_started_at")),
         notes=str(data.get("notes", "")),
         reflection=str(data.get("reflection", "")),
+        tag=normalize_task_tag(data.get("tag")),
         notification_state=notification_state,
     )
 
@@ -116,6 +126,7 @@ def task_to_dict(task: Task) -> dict[str, Any]:
         "work_started_at": format_datetime(task.work_started_at),
         "notes": task.notes,
         "reflection": task.reflection,
+        "tag": task.tag,
         "notification_state": dict(task.notification_state),
     }
 

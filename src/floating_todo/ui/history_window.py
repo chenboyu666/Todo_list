@@ -5,8 +5,8 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from floating_todo.domain import Task, work_elapsed_seconds, work_target_seconds
+from floating_todo.domain import DEFAULT_TASK_TAG, Task, normalize_task_tag, work_elapsed_seconds, work_target_seconds
 from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
@@ -49,6 +49,7 @@ from floating_todo.view_models import (
 CSV_HEADERS = [
     "任务ID",
     "标题",
+    "标签",
     "优先级",
     "预计工作量分钟",
     "实际工作时长",
@@ -74,6 +75,16 @@ PRIORITY_ICON_NAMES = {
     "P2": "priority-medium.svg",
     "P3": "priority-low.svg",
 }
+
+TAG_CHART_COLORS = [
+    "#22D3EE",
+    "#A78BFA",
+    "#F6A44D",
+    "#34D399",
+    "#F472B6",
+    "#60A5FA",
+    "#FACC15",
+]
 
 STATUS_FILTERS = [
     ("全部状态", "all"),
@@ -293,6 +304,159 @@ class DeadlineOutcomeChart(QWidget):
             painter.drawRoundedRect(QRectF(x, legend_y - 8, 22, 10), 5, 5)
             painter.setPen(QColor("#D7E5F4"))
             painter.drawText(QRectF(x + 30, legend_y - 13, 90, 20), Qt.AlignLeft | Qt.AlignVCenter, f"{label} {self.outcome_counts[key]}")
+
+
+class TagDurationChart(QWidget):
+    tag_clicked = Signal(str)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.tag_stats: list[dict[str, object]] = []
+        self._node_rects: dict[str, QRectF] = {}
+        self.setObjectName("historyTagDurationChart")
+        self.setAccessibleName("标签时长占比数据库图")
+        self.setMinimumHeight(240)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def set_stats(self, stats: list[dict[str, object]]) -> None:
+        self.tag_stats = [
+            {
+                "tag": normalize_task_tag(stat.get("tag", DEFAULT_TASK_TAG)),
+                "count": max(0, int(stat.get("count", 0))),
+                "seconds": max(0, int(stat.get("seconds", 0))),
+            }
+            for stat in stats
+        ]
+        self.update()
+
+    def node_rect_for_tag(self, tag: str) -> QRectF | None:
+        return self._node_rects.get(normalize_task_tag(tag))
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            position = QPointF(event.position()) if hasattr(event, "position") else QPointF(event.pos())
+            for tag, node_rect in self._node_rects.items():
+                if node_rect.contains(position):
+                    self.tag_clicked.emit(tag)
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(12, 12, -12, -12)
+        self._node_rects = {}
+        if rect.isEmpty():
+            return
+
+        if not self.tag_stats:
+            painter.setPen(QColor("#86A3BD"))
+            painter.drawText(rect, Qt.AlignCenter, "暂无标签数据")
+            return
+
+        total_seconds = max(1, sum(int(stat["seconds"]) for stat in self.tag_stats))
+        total_count = sum(int(stat["count"]) for stat in self.tag_stats)
+
+        core_rect = QRectF(rect.left(), rect.top() + 42, min(182.0, rect.width() * 0.22), rect.height() - 54)
+        core_gradient = QLinearGradient(core_rect.topLeft(), core_rect.bottomRight())
+        core_gradient.setColorAt(0.0, QColor("#0E7490"))
+        core_gradient.setColorAt(0.55, QColor("#12335F"))
+        core_gradient.setColorAt(1.0, QColor("#0B1728"))
+        painter.setPen(QPen(QColor(103, 232, 249, 88), 1.4))
+        painter.setBrush(QBrush(core_gradient))
+        painter.drawRoundedRect(core_rect, 18, 18)
+
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(12)
+        painter.setFont(font)
+        painter.setPen(QColor("#ECFEFF"))
+        painter.drawText(QRectF(rect.left(), rect.top(), rect.width(), 24), Qt.AlignLeft | Qt.AlignVCenter, "标签关系数据库")
+        font.setPointSize(18)
+        painter.setFont(font)
+        painter.drawText(QRectF(core_rect.left() + 16, core_rect.top() + 18, core_rect.width() - 32, 34), Qt.AlignLeft | Qt.AlignVCenter, f"{len(self.tag_stats)} 类")
+        font.setPointSize(10)
+        painter.setFont(font)
+        painter.setPen(QColor("#BDE7F4"))
+        painter.drawText(QRectF(core_rect.left() + 16, core_rect.top() + 54, core_rect.width() - 32, 22), Qt.AlignLeft | Qt.AlignVCenter, f"{total_count} 条完成记录")
+        painter.drawText(QRectF(core_rect.left() + 16, core_rect.top() + 78, core_rect.width() - 32, 22), Qt.AlignLeft | Qt.AlignVCenter, "点击节点查看任务")
+
+        anchor = QPointF(core_rect.right(), core_rect.center().y())
+        nodes = self._node_layout(rect, core_rect)
+        for index, (stat, node_rect) in enumerate(nodes):
+            tag = str(stat["tag"])
+            seconds = int(stat["seconds"])
+            ratio = _ratio_text(seconds, total_seconds)
+            color = QColor(_tag_chart_color(index))
+            control_x = anchor.x() + (node_rect.left() - anchor.x()) * 0.48
+            path = QPainterPath(anchor)
+            path.cubicTo(
+                QPointF(control_x, anchor.y()),
+                QPointF(control_x, node_rect.center().y()),
+                QPointF(node_rect.left(), node_rect.center().y()),
+            )
+            painter.setPen(QPen(QColor(color.red(), color.green(), color.blue(), 138), 2.0, Qt.SolidLine, Qt.RoundCap))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
+
+        for index, (stat, node_rect) in enumerate(nodes):
+            tag = str(stat["tag"])
+            seconds = int(stat["seconds"])
+            count = int(stat["count"])
+            ratio = _ratio_text(seconds, total_seconds)
+            duration = duration_clock_label(seconds)
+            color = QColor(_tag_chart_color(index))
+            node_gradient = QLinearGradient(node_rect.topLeft(), node_rect.bottomRight())
+            node_gradient.setColorAt(0.0, QColor(8, 21, 34, 232))
+            node_gradient.setColorAt(0.58, QColor(color.red(), color.green(), color.blue(), 88))
+            node_gradient.setColorAt(1.0, QColor(8, 21, 34, 218))
+            painter.setPen(QPen(QColor(color.red(), color.green(), color.blue(), 164), 1.6))
+            painter.setBrush(QBrush(node_gradient))
+            painter.drawRoundedRect(node_rect, 16, 16)
+            self._node_rects[tag] = QRectF(node_rect)
+
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(QPointF(node_rect.left() + 18, node_rect.top() + 18), 6, 6)
+
+            painter.setPen(QColor("#F8FBFF"))
+            font.setBold(True)
+            font.setPointSize(11)
+            painter.setFont(font)
+            painter.drawText(QRectF(node_rect.left() + 34, node_rect.top() + 7, node_rect.width() - 44, 22), Qt.AlignLeft | Qt.AlignVCenter, tag)
+            painter.setPen(QColor("#B9CCE0"))
+            font.setBold(False)
+            font.setPointSize(9)
+            painter.setFont(font)
+            painter.drawText(QRectF(node_rect.left() + 16, node_rect.top() + 34, node_rect.width() - 32, 18), Qt.AlignLeft | Qt.AlignVCenter, f"{count} 条 · {duration}")
+            painter.setPen(QColor("#DDFBFF"))
+            font.setBold(True)
+            font.setPointSize(10)
+            painter.setFont(font)
+            painter.drawText(QRectF(node_rect.right() - 56, node_rect.top() + 8, 42, 22), Qt.AlignRight | Qt.AlignVCenter, ratio)
+
+    def _node_layout(self, rect: QRectF, core_rect: QRectF) -> list[tuple[dict[str, object], QRectF]]:
+        stats = self.tag_stats[:6]
+        available_left = core_rect.right() + 38
+        available_width = max(180.0, rect.right() - available_left)
+        node_width = max(150.0, min(220.0, available_width / 2 - 10))
+        node_height = 62.0
+        row_gap = 14.0
+        col_gap = 18.0
+        rows = 2 if len(stats) > 3 else 1
+        top = rect.top() + 48 if rows == 1 else rect.top() + 42
+        nodes: list[tuple[dict[str, object], QRectF]] = []
+        for index, stat in enumerate(stats):
+            row = index % rows
+            col = index // rows
+            x = available_left + col * (node_width + col_gap)
+            y = top + row * (node_height + row_gap)
+            if x + node_width > rect.right():
+                x = rect.right() - node_width
+            nodes.append((stat, QRectF(x, y, node_width, node_height)))
+        return nodes
 
 
 class HistoryNoteDialog(QDialog):
@@ -587,24 +751,25 @@ class HistoryWindow(QDialog):
     def _build_analytics_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("historyAnalyticsPanel")
-        layout = QHBoxLayout(panel)
+        layout = QGridLayout(panel)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(10)
 
         title = QLabel("统计范围")
         title.setObjectName("historyAnalyticsTitle")
-        layout.addWidget(title)
+        layout.addWidget(title, 0, 0)
 
         self.analytics_count_label = QLabel("0 条")
         self.analytics_count_label.setObjectName("historyAnalyticsCount")
         self.analytics_count_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.analytics_count_label)
+        layout.addWidget(self.analytics_count_label, 0, 1)
 
         self.analytics_all_button = self._range_preset_button("全部", lambda: self._apply_range_preset("all"))
         self.analytics_week_button = self._range_preset_button("近7日", lambda: self._apply_range_preset("week"))
         self.analytics_month_button = self._range_preset_button("本月", lambda: self._apply_range_preset("month"))
-        for button in (self.analytics_all_button, self.analytics_week_button, self.analytics_month_button):
-            layout.addWidget(button)
+        for column, button in enumerate((self.analytics_all_button, self.analytics_week_button, self.analytics_month_button), start=2):
+            layout.addWidget(button, 0, column)
 
         self.analytics_start_date = self._date_edit(
             "historyAnalyticsStartDate",
@@ -620,26 +785,27 @@ class HistoryWindow(QDialog):
         )
         self.analytics_start_date_chip = _date_chip("开始", self.analytics_start_date)
         self.analytics_end_date_chip = _date_chip("结束", self.analytics_end_date)
-        layout.addWidget(self.analytics_start_date_chip, 1)
+        layout.addWidget(self.analytics_start_date_chip, 1, 0, 1, 3)
         arrow = QLabel("→")
         arrow.setObjectName("historyAnalyticsArrow")
         arrow.setAlignment(Qt.AlignCenter)
-        layout.addWidget(arrow)
-        layout.addWidget(self.analytics_end_date_chip, 1)
-        layout.addStretch(1)
+        layout.addWidget(arrow, 1, 3)
+        layout.addWidget(self.analytics_end_date_chip, 1, 4, 1, 4)
 
         self.sort_mode = NoWheelComboBox()
         self.sort_mode.setObjectName("historySortMode")
         for label, key in SORT_FILTERS:
             self.sort_mode.addItem(label, key)
         self.sort_mode.currentIndexChanged.connect(self._reset_page)
-        layout.addWidget(self.sort_mode)
+        layout.addWidget(self.sort_mode, 0, 5)
 
         self.apply_filter_button = QPushButton("重置筛选")
         self.apply_filter_button.setObjectName("historyActionButton")
         self.apply_filter_button.setCursor(Qt.PointingHandCursor)
         self.apply_filter_button.clicked.connect(self._reset_filters)
-        layout.addWidget(self.apply_filter_button)
+        layout.addWidget(self.apply_filter_button, 0, 6)
+        layout.setColumnStretch(4, 1)
+        layout.setColumnStretch(7, 1)
         return panel
 
     def _build_history_charts_panel(self) -> QFrame:
@@ -653,10 +819,13 @@ class HistoryWindow(QDialog):
         self.priority_donut_chart = PriorityDonutChart()
         self.completion_trend_chart = CompletionTrendChart()
         self.deadline_outcome_chart = DeadlineOutcomeChart()
+        self.tag_duration_chart = TagDurationChart()
+        self.tag_duration_chart.tag_clicked.connect(self._jump_to_tag_records)
 
         layout.addWidget(self._chart_card("优先级结构", "高 / 中 / 低完成占比", self.priority_donut_chart, "priority"), 0, 0)
         layout.addWidget(self._chart_card("完成节奏", "最近每天完成任务数量趋势", self.completion_trend_chart, "trend"), 0, 1)
         layout.addWidget(self._chart_card("准时率与超时分布", "准时、超时与无截止", self.deadline_outcome_chart, "deadline"), 0, 2)
+        layout.addWidget(self._chart_card("标签数据库", "按任务标签聚合数量、实际耗时与时长占比", self.tag_duration_chart, "tag"), 1, 0, 1, 3)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 1)
@@ -702,6 +871,14 @@ class HistoryWindow(QDialog):
             self.priority_filter.addItem(label, key)
         self.priority_filter.currentIndexChanged.connect(self._reset_page)
         filters_row.addWidget(self.priority_filter)
+
+        self.tag_filter = NoWheelComboBox()
+        self.tag_filter.setObjectName("historyTagFilter")
+        self.tag_filter.addItem("全部标签", "all")
+        for tag in _task_tags(self.tasks):
+            self.tag_filter.addItem(tag, tag)
+        self.tag_filter.currentIndexChanged.connect(self._reset_page)
+        filters_row.addWidget(self.tag_filter)
 
         self.page_size_combo = NoWheelComboBox()
         self.page_size_combo.setObjectName("historyPageSize")
@@ -829,20 +1006,31 @@ class HistoryWindow(QDialog):
         header.addWidget(self.analysis_count_label)
         layout.addLayout(header)
 
-        info_row = QHBoxLayout()
-        info_row.setSpacing(10)
+        info_grid = QGridLayout()
+        info_grid.setContentsMargins(0, 0, 0, 0)
+        info_grid.setHorizontalSpacing(10)
+        info_grid.setVerticalSpacing(10)
         self.analysis_range_label = QLabel("")
         self.analysis_range_label.setObjectName("historyAnalysisInfoChip")
-        info_row.addWidget(self.analysis_range_label, 1)
+        self.analysis_range_label.setWordWrap(True)
+        self.analysis_range_label.setMinimumWidth(0)
+        self.analysis_range_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        info_grid.addWidget(self.analysis_range_label, 0, 0)
         self.analysis_state_label = QLabel("已隐藏所有进度展示")
         self.analysis_state_label.setObjectName("historyAnalysisInfoChip")
-        info_row.addWidget(self.analysis_state_label)
-        layout.addLayout(info_row)
+        self.analysis_state_label.setWordWrap(True)
+        self.analysis_state_label.setMinimumWidth(0)
+        self.analysis_state_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        info_grid.addWidget(self.analysis_state_label, 1, 0)
+        layout.addLayout(info_grid)
 
         rhythm_row = QHBoxLayout()
         rhythm_row.setSpacing(10)
         self.analysis_rhythm_hint_label = QLabel("完成节奏 = 最近一段时间每天完成任务数量的趋势")
         self.analysis_rhythm_hint_label.setObjectName("historyAnalysisInfoChip")
+        self.analysis_rhythm_hint_label.setWordWrap(True)
+        self.analysis_rhythm_hint_label.setMinimumWidth(0)
+        self.analysis_rhythm_hint_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         rhythm_row.addWidget(self.analysis_rhythm_hint_label, 1)
         layout.addLayout(rhythm_row)
 
@@ -870,9 +1058,15 @@ class HistoryWindow(QDialog):
             self.analysis_peak_value_label,
             self.analysis_peak_detail_label,
         ) = self._analysis_insight_card("最近高峰", "完成更活跃的日期与数量")
+        (
+            insight_tag,
+            self.analysis_tag_value_label,
+            self.analysis_tag_detail_label,
+        ) = self._analysis_insight_card("主导标签", "按实际耗时统计的标签占比")
         for index, card in enumerate((insight_total, insight_priority, insight_on_time, insight_peak)):
             insights.addWidget(card, index // 2, index % 2)
             insights.setColumnStretch(index % 2, 1)
+        insights.addWidget(insight_tag, 2, 0, 1, 2)
         layout.addLayout(insights)
         return panel
 
@@ -887,9 +1081,12 @@ class HistoryWindow(QDialog):
         self.analysis_priority_donut_chart = PriorityDonutChart()
         self.analysis_completion_trend_chart = CompletionTrendChart()
         self.analysis_deadline_outcome_chart = DeadlineOutcomeChart()
+        self.analysis_tag_duration_chart = TagDurationChart()
+        self.analysis_tag_duration_chart.tag_clicked.connect(self._jump_to_tag_records)
         layout.addWidget(self._chart_card("优先级结构", "高 / 中 / 低完成占比", self.analysis_priority_donut_chart, "priority"), 0, 0)
         layout.addWidget(self._chart_card("完成节奏", "最近每天完成任务数量趋势", self.analysis_completion_trend_chart, "trend"), 0, 1)
         layout.addWidget(self._chart_card("准时率与超时分布", "准时、超时与无截止", self.analysis_deadline_outcome_chart, "deadline"), 1, 0, 1, 2)
+        layout.addWidget(self._chart_card("标签时长占比", "快速观察做了哪些类型任务", self.analysis_tag_duration_chart, "tag"), 2, 0, 1, 2)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
         return panel
@@ -1064,7 +1261,7 @@ class HistoryWindow(QDialog):
         apply_soft_shadow(card, blur=28, y_offset=10, alpha=92)
         return card
 
-    def _set_history_section(self, section: str) -> None:
+    def _set_history_section(self, section: str, *, scroll_to_top: bool = True) -> None:
         self._current_history_section = section
         if section == "analysis":
             self.history_section_stack.setCurrentWidget(self.history_analysis_scroll)
@@ -1077,10 +1274,47 @@ class HistoryWindow(QDialog):
 
         self.history_sidebar_buttons["history"].setChecked(section == "history")
         self.history_sidebar_buttons["analysis"].setChecked(section == "analysis")
-        self._scroll_current_section_to_top()
+        if scroll_to_top:
+            self._scroll_current_section_to_top()
 
     def _scroll_current_section_to_top(self) -> None:
-        self.history_content_scroll.verticalScrollBar().setValue(0)
+        self._scroll_current_section_to_value(0, animated=False)
+
+    def _scroll_current_section_to_value(self, value: int, *, animated: bool) -> None:
+        scroll_bar = self.history_content_scroll.verticalScrollBar()
+        target = max(scroll_bar.minimum(), min(int(value), scroll_bar.maximum()))
+        old_animation = getattr(self, "_history_scroll_animation", None)
+        if old_animation is not None:
+            old_animation.stop()
+            self._history_scroll_animation = None
+
+        if not animated or abs(scroll_bar.value() - target) <= 2:
+            scroll_bar.setValue(target)
+            return
+
+        animation = QPropertyAnimation(scroll_bar, b"value", self)
+        animation.setDuration(320)
+        animation.setStartValue(scroll_bar.value())
+        animation.setEndValue(target)
+        animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._history_scroll_animation = animation
+
+        def finish() -> None:
+            if getattr(self, "_history_scroll_animation", None) is animation:
+                self._history_scroll_animation = None
+
+        animation.finished.connect(finish)
+        animation.start()
+
+    def _scroll_records_list_into_view(self, *, animated: bool = True) -> None:
+        page = self.history_content_scroll.widget()
+        if page is None:
+            return
+        if page.layout() is not None:
+            page.layout().activate()
+        target = self.history_records_panel.mapTo(page, QPoint(0, 0)).y() - 12
+        self._scroll_current_section_to_value(target, animated=animated)
+        animate_content_swap(self.history_list_container, duration=220)
 
     def _open_main_workspace(self) -> None:
         parent = self.parentWidget()
@@ -1152,6 +1386,7 @@ class HistoryWindow(QDialog):
         self.search_input.clear()
         self.status_filter.setCurrentIndex(0)
         self.priority_filter.setCurrentIndex(0)
+        self.tag_filter.setCurrentIndex(0)
         self.sort_mode.setCurrentIndex(0)
         self.page_size_combo.setCurrentIndex(0)
         self._selected_page_index = 0
@@ -1185,13 +1420,16 @@ class HistoryWindow(QDialog):
     def _filtered_completed_tasks(self) -> list[Task]:
         search = self.search_input.text().strip().lower()
         selected_priority = str(self.priority_filter.currentData() or "all")
+        selected_tag = str(self.tag_filter.currentData() or "all")
         tasks: list[Task] = []
         for task in self._analytics_tasks():
             if selected_priority != "all" and task.priority != selected_priority:
                 continue
+            if selected_tag != "all" and _task_tag(task) != selected_tag:
+                continue
             if not self._status_matches(task):
                 continue
-            searchable = " ".join([task.title, task.notes, task.reflection]).lower()
+            searchable = " ".join([task.title, _task_tag(task), task.notes, task.reflection]).lower()
             if search and search not in searchable:
                 continue
             tasks.append(task)
@@ -1256,6 +1494,7 @@ class HistoryWindow(QDialog):
         status_text, detail_text, _ = self._record_status(task)
         parts = [
             f"标题：{task.title}",
+            f"标签：{_task_tag(task)}",
             f"优先级：{priority_text(task.priority)}",
             f"完成时间：{completed_text}",
             f"状态：{status_text}",
@@ -1336,6 +1575,11 @@ class HistoryWindow(QDialog):
         meta_row = QHBoxLayout()
         meta_row.setSpacing(8)
         meta_row.addWidget(self._priority_badge(task.priority))
+        tag_label = QLabel(f"#{_task_tag(task)}")
+        tag_label.setObjectName("historyTagChip")
+        tag_label.setAlignment(Qt.AlignCenter)
+        tag_label.setToolTip(f"任务标签：{_task_tag(task)}")
+        meta_row.addWidget(tag_label)
         review_label = QLabel("已复盘" if task.notes.strip() or task.reflection.strip() else "待补记")
         review_label.setObjectName("historyReviewChipDone" if task.notes.strip() or task.reflection.strip() else "historyReviewChipEmpty")
         review_label.setAlignment(Qt.AlignCenter)
@@ -1442,6 +1686,7 @@ class HistoryWindow(QDialog):
         reviewed = sum(1 for task in completed if task.notes.strip() or task.reflection.strip())
         latest_task = max(completed, key=lambda task: task.completed_at or task.updated_at, default=None)
         latest = (latest_task.completed_at or latest_task.updated_at).astimezone().strftime("%m-%d %H:%M") if latest_task else "--"
+        tag_stats = _tag_duration_stats(completed)
 
         self.priority_p1_label.setText(f"高：{counts['P1']}")
         self.priority_p2_label.setText(f"中：{counts['P2']}")
@@ -1455,9 +1700,11 @@ class HistoryWindow(QDialog):
         self.priority_donut_chart.set_counts(counts)
         self.completion_trend_chart.set_points(_completion_trend(completed))
         self.deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
+        self.tag_duration_chart.set_stats(tag_stats)
         self.analysis_priority_donut_chart.set_counts(counts)
         self.analysis_completion_trend_chart.set_points(_completion_trend(completed))
         self.analysis_deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
+        self.analysis_tag_duration_chart.set_stats(tag_stats)
 
         dominant_priority = max(PRIORITY_ORDER, key=lambda priority: (counts[priority], -PRIORITY_ORDER.index(priority))) if total else "P2"
         trend_points = _completion_trend(completed)
@@ -1467,6 +1714,14 @@ class HistoryWindow(QDialog):
         dominant_ratio = f"占比 {_ratio_text(counts[dominant_priority], total)}" if total else "暂无完成记录"
         peak_text = f"{peak_point[0].strftime('%m-%d')} · {peak_point[1]} 条" if peak_point else "--"
         peak_detail = "最近没有形成可分析的完成峰值" if peak_point is None else "当天完成数量达到当前区间峰值"
+        dominant_tag = tag_stats[0] if tag_stats else None
+        total_tag_seconds = sum(int(stat["seconds"]) for stat in tag_stats)
+        tag_value = str(dominant_tag["tag"]) if dominant_tag else "--"
+        tag_detail = (
+            f"时长占比 {_ratio_text(int(dominant_tag['seconds']), total_tag_seconds)} · {dominant_tag['count']} 条"
+            if dominant_tag
+            else "当前区间暂无可统计标签"
+        )
 
         self.analysis_total_value_label.setText(f"{total} 条")
         self.analysis_total_detail_label.setText("当前统计区间内的完成记录" if total else "当前统计区间内还没有完成记录")
@@ -1476,6 +1731,8 @@ class HistoryWindow(QDialog):
         self.analysis_on_time_detail_label.setText("只统计已设置截止时间的完成记录" if deadline_total else "当前区间内没有设置截止时间的完成记录")
         self.analysis_peak_value_label.setText(peak_text)
         self.analysis_peak_detail_label.setText(peak_detail)
+        self.analysis_tag_value_label.setText(tag_value)
+        self.analysis_tag_detail_label.setText(tag_detail)
         self.analysis_pending_notes_chip.setText(f"待补记 {pending_notes} 条")
         self.analysis_reviewed_chip.setText(f"已复盘 {reviewed}/{total}")
         self.analysis_overdue_chip.setText(f"超时完成 {overdue}/{deadline_total}")
@@ -1523,14 +1780,18 @@ class HistoryWindow(QDialog):
         self._sync_pagination(filtered)
         self._render_records(self._paged_tasks(filtered))
 
-    def _jump_to_history_records(self, *, status: str = "all", priority: str = "all", search: str = "") -> None:
-        self._set_history_section("history")
+    def _jump_to_history_records(self, *, status: str = "all", priority: str = "all", tag: str = "all", search: str = "") -> None:
+        self._set_history_section("history", scroll_to_top=False)
         self.search_input.setText(search)
         self.status_filter.setCurrentIndex(max(0, self.status_filter.findData(status)))
         self.priority_filter.setCurrentIndex(max(0, self.priority_filter.findData(priority)))
+        self.tag_filter.setCurrentIndex(max(0, self.tag_filter.findData(tag)))
         self._selected_page_index = 0
         self._render()
-        self._scroll_current_section_to_top()
+        self._scroll_records_list_into_view(animated=True)
+
+    def _jump_to_tag_records(self, tag: str) -> None:
+        self._jump_to_history_records(tag=normalize_task_tag(tag))
 
     def export_history(self) -> None:
         tasks = self._exportable_tasks()
@@ -1589,6 +1850,7 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
                 {
                     "任务ID": task.id,
                     "标题": task.title,
+                    "标签": _task_tag(task),
                     "优先级": priority_text(task.priority),
                     "预计工作量分钟": task.effort_minutes,
                     "实际工作时长": duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at)),
@@ -1624,6 +1886,38 @@ def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
 
 def _ratio_text(value: int, total: int) -> str:
     return "0%" if total <= 0 else f"{round(value / total * 100)}%"
+
+
+def _task_tag(task: Task) -> str:
+    return normalize_task_tag(getattr(task, "tag", DEFAULT_TASK_TAG))
+
+
+def _task_tags(tasks: list[Task]) -> list[str]:
+    tags = {_task_tag(task) for task in tasks}
+    return sorted(tags, key=lambda tag: (tag == DEFAULT_TASK_TAG, tag))
+
+
+def _tag_duration_seconds(task: Task) -> int:
+    actual = work_elapsed_seconds(task, task.completed_at or task.updated_at)
+    return actual if actual > 0 else work_target_seconds(task)
+
+
+def _tag_duration_stats(tasks: list[Task]) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, int]] = {}
+    for task in tasks:
+        tag = _task_tag(task)
+        if tag not in grouped:
+            grouped[tag] = {"count": 0, "seconds": 0}
+        grouped[tag]["count"] += 1
+        grouped[tag]["seconds"] += max(0, _tag_duration_seconds(task))
+    return [
+        {"tag": tag, "count": values["count"], "seconds": values["seconds"]}
+        for tag, values in sorted(grouped.items(), key=lambda item: (-item[1]["seconds"], item[0]))
+    ]
+
+
+def _tag_chart_color(index: int) -> str:
+    return TAG_CHART_COLORS[index % len(TAG_CHART_COLORS)]
 
 
 def _export_datetime(value) -> str:
@@ -1907,6 +2201,7 @@ QLabel#historyExportArrow {
 QLineEdit#historySearch,
 QComboBox#historyStatusFilter,
 QComboBox#historyPriorityFilter,
+QComboBox#historyTagFilter,
 QComboBox#historySortMode,
 QComboBox#historyPageSize,
 QDateEdit#historyAnalyticsStartDate,
@@ -1982,6 +2277,12 @@ QFrame#historyChartCard[historyTone="deadline"] {
     stop:0.5 #0F766E,
     stop:1 #166534);
 }
+QFrame#historyChartCard[historyTone="tag"] {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #111827,
+    stop:0.46 #162A52,
+    stop:1 #0B4A5E);
+}
 QFrame#historyPagerPanel {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #101A33,
@@ -2033,6 +2334,7 @@ QLabel#historyPriorityP2,
 QLabel#historyPriorityP3,
 QLabel#historyReviewChipDone,
 QLabel#historyReviewChipEmpty,
+QLabel#historyTagChip,
 QLabel#historyStatusOnTime,
 QLabel#historyStatusOverdue,
 QLabel#historyStatusNeutral {
@@ -2046,6 +2348,7 @@ QLabel#historyPriorityP2 { color: #DCE7FF; background: #1B2F69; }
 QLabel#historyPriorityP3 { color: #D9FBE8; background: #123B34; }
 QLabel#historyReviewChipDone { color: #D7FEE6; background: #0D5947; min-height: 28px; }
 QLabel#historyReviewChipEmpty { color: #FDE68A; background: #6B4E16; min-height: 28px; }
+QLabel#historyTagChip { color: #BFF7FF; background: #114357; min-height: 28px; }
 QLabel#historyStatusOnTime { color: #D7FEE6; background: #0D5947; }
 QLabel#historyStatusOverdue { color: #FFD5DF; background: #7C1D34; }
 QLabel#historyStatusNeutral { color: #D6E4F4; background: #334155; }

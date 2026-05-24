@@ -771,8 +771,8 @@ def test_history_window_exports_filtered_records_as_csv(qapp: QApplication, tmp_
 
     assert count == 1
     exported = export_path.read_text(encoding="utf-8-sig")
-    assert "任务ID,标题,优先级" in exported
-    assert "done-1,完成任务,高" in exported
+    assert "任务ID,标题,标签,优先级" in exported
+    assert "done-1,完成任务,未分类,高" in exported
     assert "交付前确认备注" in exported
     assert "下次提前拆分" in exported
     assert "done-2" not in exported

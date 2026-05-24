@@ -38,6 +38,7 @@ def make_task() -> Task:
         created_at=now,
         updated_at=now + timedelta(minutes=1),
         completed_at=now + timedelta(hours=2),
+        tag="项目",
         notes="旧备注",
         notification_state={"deadline_warning_sent": True, "deadline_due_sent": False},
     )
@@ -49,6 +50,7 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
     dialog = TaskDialog()
     deadline = datetime(2026, 5, 12, 10, 30, tzinfo=timezone.utc)
     dialog.title_edit.setText("  写测试  ")
+    dialog.tag_combo.setCurrentIndex(dialog.tag_combo.findData("学习"))
     dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P1"))
     dialog.effort_spin.setValue(90)
     dialog.deadline_edit.setDateTime(_qdatetime(deadline))
@@ -58,6 +60,7 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
 
     assert task.id
     assert task.title == "写测试"
+    assert task.tag == "学习"
     assert task.priority == "P1"
     assert task.effort_minutes == 90
     assert task.deadline == deadline
@@ -82,6 +85,18 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.windowTitle() == "新增任务"
     assert dialog.priority_combo.currentText() == "中"
     assert dialog.priority_combo.currentData() == "P2"
+    assert [dialog.tag_combo.itemText(index) for index in range(dialog.tag_combo.count())] == [
+        "工作",
+        "学习",
+        "项目",
+        "创作",
+        "健康",
+        "复盘",
+        "自定义",
+    ]
+    assert dialog.tag_combo.findText("做饭") == -1
+    assert dialog.tag_combo.currentData() == "工作"
+    assert dialog.custom_tag_input.isHidden()
     assert dialog.effort_spin.minimum() == 0
     assert dialog.effort_spin.maximum() == MAX_EFFORT_MINUTES
     assert dialog.effort_spin.singleStep() == 15
@@ -154,6 +169,8 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     dialog = TaskDialog(parent, existing)
     dialog.title_edit.setText("  更新任务  ")
     dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P3"))
+    dialog.tag_combo.setCurrentIndex(dialog.tag_combo.findData("自定义"))
+    dialog.custom_tag_input.setText("健身")
     dialog.effort_spin.setValue(120)
     dialog.deadline_edit.setDateTime(_qdatetime(new_deadline))
     dialog.notes_edit.setPlainText("新备注")
@@ -166,6 +183,7 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
     assert updated.completed_at == existing.completed_at
     assert dict(updated.notification_state) == DEFAULT_NOTIFICATION_STATE
     assert updated.title == "更新任务"
+    assert updated.tag == "健身"
     assert updated.priority == "P3"
     assert updated.effort_minutes == 120
     assert updated.deadline == new_deadline
@@ -175,6 +193,20 @@ def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication)
 
     dialog.close()
     parent.close()
+
+
+def test_edit_dialog_loads_existing_custom_tag(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    existing = replace(make_task(), tag="写作")
+    dialog = TaskDialog(None, existing)
+
+    assert dialog.tag_combo.currentData() == "自定义"
+    assert not dialog.custom_tag_input.isHidden()
+    assert dialog.custom_tag_input.text() == "写作"
+    assert dialog.build_task().tag == "写作"
+
+    dialog.close()
 
 
 def test_edit_dialog_preserves_notification_state_when_deadline_is_unchanged(qapp: QApplication) -> None:
@@ -309,7 +341,7 @@ def test_dialog_keeps_deadline_row_visible_and_uses_svg_icons(qapp: QApplication
     assert not hero_icon.pixmap().isNull()
 
     section_icons = dialog.findChildren(QLabel, "taskSectionIcon")
-    assert len(section_icons) == 5
+    assert len(section_icons) == 6
     assert all(icon.pixmap() is not None and not icon.pixmap().isNull() for icon in section_icons)
     preview_icons = dialog.findChildren(QLabel, "taskPriorityPreviewIcon")
     assert len(preview_icons) == 3
