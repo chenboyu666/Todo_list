@@ -217,6 +217,9 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
 
     window.resize(620, 620)
     qapp.processEvents()
+    strip_index = window.focus_top_layout.indexOf(window.focus_status_strip)
+    assert window.focus_top_layout.getItemPosition(strip_index) == (0, 0, 1, 4)
+    assert window.focus_priority_label.parentWidget() is window.focus_status_strip
     title_index = window.focus_top_layout.indexOf(window.focus_title_label)
     assert window.focus_top_layout.getItemPosition(title_index) == (1, 0, 1, 4)
     deadline_index = window.focus_top_layout.indexOf(window.focus_deadline_panel)

@@ -956,7 +956,7 @@ class HistoryWindow(QDialog):
         layout = QHBoxLayout(shell)
         layout.setContentsMargins(10, 9, 10, 9)
         layout.setSpacing(8)
-        layout.addWidget(self._icon_chip(icon_name, size=14, object_name="historyMetricIcon"))
+        layout.addWidget(self._icon_chip(icon_name, size=16, object_name="historyMetricIcon"))
         label = QLabel(text)
         label.setObjectName(object_name)
         label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -1819,7 +1819,7 @@ QFrame#historyMetricShellP3,
 QFrame#historyMetricShellOverdue {
   border: none;
   border-radius: 16px;
-  min-height: 62px;
+  min-height: 68px;
 }
 QFrame#historyMetricShellP1 {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6B2E12, stop:1 #9A4C14);
@@ -1843,7 +1843,7 @@ QLabel#historyMetricChip,
 QLabel#historyOverdueMetric {
   background: transparent;
   font-weight: 900;
-  font-size: 13px;
+  font-size: 16px;
 }
 QLabel#historyPriorityMetricP1 { color: #FFE1A6; }
 QLabel#historyPriorityMetricP2 { color: #DCE7FF; }

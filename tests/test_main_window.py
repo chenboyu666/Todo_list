@@ -291,6 +291,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.today_completion_label.text() == "33%"
     assert window.focus_title_label.text() == "任务名称：关键交付"
     assert window.focus_meta_label.text() == "计时中"
+    assert window.focus_meta_label.isHidden()
     assert window.focus_work_timer_label.text() == "计时 00:00:00"
     assert window.focus_notes_label.text() == "备注：重点关注验收口径"
     assert not hasattr(window, "focus_progress")
@@ -450,6 +451,42 @@ def test_timer_timeout_updates_live_labels_without_reloading_or_rebuilding_rows(
     assert window.focus_title_label.text() == "任务名称：定时刷新任务"
     assert window.task_rows_container.findChild(QFrame, "taskRow-定时刷新任务") is first_card
     assert window.focus_countdown_label.text().startswith("倒计时 ")
+
+    window.close()
+
+
+def test_live_refresh_keeps_focus_and_row_urgency_labels_in_sync(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.main_window as main_window
+    from floating_todo.ui.main_window import MainWindow
+
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        current = base
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current if tz is not None else cls.current.replace(tzinfo=None)
+
+    monkeypatch.setattr(main_window, "datetime", FrozenDateTime)
+    task = make_task("同步标签", task_id="sync-task", deadline_delta=timedelta(minutes=11))
+    store = MemoryStore([task])
+    window = MainWindow(store, AppSettings(focus_task_id="sync-task"))
+    first_card = window.task_rows_container.findChild(QFrame, "taskRow-sync-task")
+    row_urgency = window.task_rows_container.findChild(QLabel, "activeTaskUrgency")
+
+    assert row_urgency is not None
+    assert row_urgency.text() == window.focus_urgency_label.text()
+
+    FrozenDateTime.current = base + timedelta(minutes=2)
+    window._clock_timer.timeout.emit()
+    qapp.processEvents()
+
+    assert window.task_rows_container.findChild(QFrame, "taskRow-sync-task") is first_card
+    assert row_urgency.text() == window.focus_urgency_label.text()
+    assert row_urgency.text() == "10 分内"
 
     window.close()
 

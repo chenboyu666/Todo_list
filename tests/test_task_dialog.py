@@ -73,7 +73,7 @@ def test_new_dialog_builds_active_task_from_fields(qapp: QApplication) -> None:
 
 
 def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
-    from floating_todo.ui.task_dialog import TaskDialog
+    from floating_todo.ui.task_dialog import MAX_EFFORT_MINUTES, TaskDialog
 
     before = datetime.now(timezone.utc)
     dialog = TaskDialog()
@@ -83,7 +83,7 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert dialog.priority_combo.currentText() == "中"
     assert dialog.priority_combo.currentData() == "P2"
     assert dialog.effort_spin.minimum() == 0
-    assert dialog.effort_spin.maximum() == 1440
+    assert dialog.effort_spin.maximum() == MAX_EFFORT_MINUTES
     assert dialog.effort_spin.singleStep() == 15
     assert dialog.effort_spin.value() == 60
     assert dialog.effort_hour_input.value() == 1
@@ -102,6 +102,7 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert not hasattr(dialog, "priority_hint_label")
     assert not hasattr(dialog, "deadline_hint_label")
     assert dialog.deadline_date_input.calendarWidget().objectName() == "taskDeadlineCalendar"
+    assert dialog.deadline_date_input.maximumWidth() <= 236
     assert "#06111C" in dialog.deadline_date_input.calendarWidget().styleSheet()
     assert dialog.deadline_date_input.buttonSymbols() == QAbstractSpinBox.NoButtons
     assert "QAbstractItemView::item:selected" in dialog.deadline_date_input.calendarWidget().styleSheet()
@@ -253,6 +254,44 @@ def test_effort_change_updates_deadline_from_current_local_time(
     dialog.close()
 
 
+def test_deadline_date_click_opens_calendar_popup(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    calendar = dialog.deadline_date_input.calendarWidget()
+    assert not calendar.isVisible()
+
+    QTest.mouseClick(dialog.deadline_date_input, Qt.LeftButton, pos=dialog.deadline_date_input.rect().center())
+    qapp.processEvents()
+
+    assert calendar.isVisible()
+
+    calendar.hide()
+    dialog.close()
+
+
+def test_deadline_time_pair_uses_unit_labels_without_colon_overlap(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    unit_labels = dialog.findChildren(QLabel, "taskDialogTimeUnit")
+    assert [label.text() for label in unit_labels] == ["时", "分"]
+    assert not dialog.findChildren(QLabel, "taskDialogColon")
+
+    hour_unit = unit_labels[0]
+    minute_unit = unit_labels[1]
+    assert dialog.deadline_hour_input.geometry().right() < hour_unit.geometry().left()
+    assert dialog.deadline_minute_input.geometry().right() < minute_unit.geometry().left()
+
+    dialog.close()
+
+
 def test_dialog_keeps_deadline_row_visible_and_uses_svg_icons(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 
@@ -395,7 +434,7 @@ def test_notes_editor_keeps_enter_for_newline(qapp: QApplication) -> None:
 
 
 def test_effort_hour_and_minute_inputs_build_total_minutes(qapp: QApplication) -> None:
-    from floating_todo.ui.task_dialog import TaskDialog
+    from floating_todo.ui.task_dialog import MAX_EFFORT_HOURS, MAX_EFFORT_MINUTES, TaskDialog
 
     dialog = TaskDialog()
     dialog.effort_hour_input.setValue(2)
@@ -406,11 +445,12 @@ def test_effort_hour_and_minute_inputs_build_total_minutes(qapp: QApplication) -
     assert dialog.effort_spin.value() == 150
     assert task.effort_minutes == 150
 
-    dialog.effort_spin.setValue(24 * 60)
+    dialog.effort_spin.setValue(MAX_EFFORT_MINUTES)
 
-    assert dialog.effort_hour_input.value() == 24
-    assert dialog.effort_minute_input.value() == 0
-    assert dialog.effort_minute_input.maximum() == 0
+    assert dialog.effort_hour_input.value() == MAX_EFFORT_HOURS
+    assert dialog.effort_minute_input.value() == 59
+    assert dialog.effort_minute_input.maximum() == 59
+    assert dialog.build_task().effort_minutes == MAX_EFFORT_MINUTES
 
     dialog.close()
 

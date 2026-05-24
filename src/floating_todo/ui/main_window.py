@@ -661,12 +661,19 @@ class MainWindow(QMainWindow):
         self.focus_meta_label.setStyleSheet(_focus_meta_style())
         self.focus_urgency_label.setAlignment(Qt.AlignCenter)
         self.focus_urgency_label.setMinimumHeight(_scale_px(40))
-        for index, widget in enumerate(
-            (self.focus_title_prefix, self.focus_priority_label, self.focus_urgency_label, self.focus_meta_label)
-        ):
+        self.focus_status_strip = QFrame()
+        self.focus_status_strip.setObjectName("focusStatusStrip")
+        self.focus_status_strip.setStyleSheet(_focus_status_strip_style())
+        self.focus_status_strip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.focus_status_layout = QHBoxLayout(self.focus_status_strip)
+        self.focus_status_layout.setContentsMargins(_scale_px(8), _scale_px(6), _scale_px(8), _scale_px(6))
+        self.focus_status_layout.setSpacing(_scale_px(10))
+        for widget in (self.focus_title_prefix, self.focus_priority_label, self.focus_urgency_label, self.focus_meta_label):
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setMinimumWidth(_scale_px(128))
-            focus_top.addWidget(widget, 0, index, Qt.AlignLeft | Qt.AlignVCenter)
+            self.focus_status_layout.addWidget(widget)
+        focus_top.addWidget(self.focus_status_strip, 0, 0, 1, 4, Qt.AlignLeft | Qt.AlignVCenter)
+        for index in range(4):
             focus_top.setColumnStretch(index, 0)
 
         deadline_panel = QFrame()
@@ -1365,6 +1372,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "focus_top_layout"):
             self.focus_top_layout.setHorizontalSpacing(_scale_px(12))
             self.focus_top_layout.setVerticalSpacing(_scale_px(10))
+            self.focus_status_strip.setStyleSheet(_focus_status_strip_style())
+            self.focus_status_layout.setContentsMargins(_scale_px(8), _scale_px(6), _scale_px(8), _scale_px(6))
+            self.focus_status_layout.setSpacing(_scale_px(10))
             self.focus_title_prefix.setMinimumHeight(_scale_px(40))
             self.focus_priority_label.setMinimumHeight(_scale_px(40))
             self.focus_urgency_label.setMinimumHeight(_scale_px(40))
@@ -1520,10 +1530,14 @@ class MainWindow(QMainWindow):
 
     def _sync_focus_header_layout(self) -> None:
         layout = getattr(self, "focus_top_layout", None)
+        status_strip = getattr(self, "focus_status_strip", None)
         deadline_panel = getattr(self, "focus_deadline_panel", None)
         title_label = getattr(self, "focus_title_label", None)
         if layout is None or deadline_panel is None or title_label is None:
             return
+        if status_strip is not None:
+            layout.removeWidget(status_strip)
+            layout.addWidget(status_strip, 0, 0, 1, 4, Qt.AlignLeft | Qt.AlignVCenter)
         layout.removeWidget(deadline_panel)
         layout.removeWidget(title_label)
         layout.addWidget(title_label, 1, 0, 1, 4)
@@ -1658,7 +1672,8 @@ class MainWindow(QMainWindow):
         now = datetime.now(timezone.utc)
         self.process_reminders(now)
         rows = self._task_rows_for_view(now)
-        self._render_summary_and_focus(now, rows)
+        focus_task = self._render_summary_and_focus(now, rows)
+        self._sync_task_row_live_labels(rows, focus_task.id if focus_task else None)
         self.apply_low_distraction_settings()
 
     def _render_summary_and_focus(self, now: datetime, rows: list[dict[str, object]]) -> Task | None:
@@ -1678,6 +1693,7 @@ class MainWindow(QMainWindow):
             self.focus_title_label.setToolTip("")
             self.focus_title_prefix.setText("进行中")
             self.focus_meta_label.setText("等待任务")
+            self.focus_meta_label.show()
             self.focus_notes_label.clear()
             self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
@@ -1709,6 +1725,7 @@ class MainWindow(QMainWindow):
         self.focus_title_label.setToolTip(focus_task.title)
         self.focus_title_prefix.setText("已暂停" if is_paused_focus else "进行中")
         self.focus_meta_label.setText("暂停中" if is_paused_focus else "计时中")
+        self.focus_meta_label.setVisible(is_paused_focus)
         self._set_focus_notes(focus_task.notes)
         self.focus_priority_label.setText(_priority_inline_markup(focus_task.priority, size=_scale_px(13)))
         self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
@@ -1755,6 +1772,40 @@ class MainWindow(QMainWindow):
         if rows:
             add_index = len(rows)
             self.task_list_layout.addWidget(self._add_task_tile(), add_index // columns, add_index % columns)
+
+    def _sync_task_row_live_labels(self, rows: list[dict[str, object]], focus_task_id: str | None) -> None:
+        displayed_cards = self.task_rows_container.findChildren(TaskRowCard)
+        displayed_ids = [card.task_id for card in displayed_cards]
+        row_ids = [str(row["id"]) for row in rows]
+        if displayed_ids != row_ids:
+            self._render_task_rows(rows, focus_task_id)
+            return
+
+        for row in rows:
+            task_id = str(row["id"])
+            urgency = str(row["urgency"])
+            is_paused = bool(row.get("is_paused"))
+            is_focused = task_id == focus_task_id
+            card = self.task_rows_container.findChild(TaskRowCard, f"taskRow-{task_id}")
+            if card is None:
+                self._render_task_rows(rows, focus_task_id)
+                return
+
+            card.setStyleSheet(_card_style(urgency, selected=is_focused))
+            urgency_chip = card.findChild(QLabel, "activeTaskUrgency" if is_focused else "taskUrgency")
+            if urgency_chip is not None:
+                urgency_chip.setText(str(row["urgency_label"]))
+                urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
+
+            deadline = card.findChild(QLabel, "activeTaskDeadline" if is_focused else "taskDeadline")
+            if deadline is not None:
+                deadline.setText(f"截止 {row['deadline_at_label']} · {row['deadline_label']}")
+                deadline.setStyleSheet(_deadline_label_style(urgency))
+
+            work_timer = card.findChild(QLabel, "activeTaskTimer" if is_focused else "taskTimer")
+            if work_timer is not None:
+                work_timer.setText(f"计时 {_elapsed_work_timer_text(str(row['work_timer_label']))}")
+                work_timer.setStyleSheet(_task_timer_style(urgency, selected=is_focused, paused=is_paused))
 
     def _task_grid_columns(self) -> int:
         width = self.task_scroll_area.viewport().width() if hasattr(self, "task_scroll_area") else self.width()
@@ -1812,6 +1863,7 @@ class MainWindow(QMainWindow):
         priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
         top.addWidget(priority)
         urgency_chip = QLabel(str(row["urgency_label"]))
+        urgency_chip.setObjectName("activeTaskUrgency" if is_focused else "taskUrgency")
         urgency_chip.setAlignment(Qt.AlignCenter)
         urgency_chip.setFixedHeight(_scale_px(30))
         urgency_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -2402,6 +2454,16 @@ def _focus_status_style(*, compact: bool = False) -> str:
         "font-weight: 900;"
         f"padding: {_scale_px(5)}px {_scale_px(10)}px;"
         f"min-width: {_scale_px(56 if compact else 72)}px;"
+    )
+
+
+def _focus_status_strip_style() -> str:
+    return (
+        "QFrame#focusStatusStrip {"
+        "background: rgba(3, 18, 30, 0.28);"
+        "border: none;"
+        f"border-radius: {_scale_px(12)}px;"
+        "}"
     )
 
 
