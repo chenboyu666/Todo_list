@@ -10,7 +10,7 @@ from floating_todo.view_models import (
 )
 
 
-def make_task(title, progress, status="active", deadline_delta=None, priority="P1"):
+def make_task(title, progress, status="active", deadline_delta=None, priority="P1", tag="学习"):
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     return Task(
         id=title,
@@ -23,6 +23,7 @@ def make_task(title, progress, status="active", deadline_delta=None, priority="P
         created_at=now,
         updated_at=now,
         completed_at=now if status == "done" else None,
+        tag=tag,
         notes="",
         notification_state={"deadline_warning_sent": False, "deadline_due_sent": False},
     )
@@ -81,6 +82,7 @@ def test_task_rows_include_priority_deadline_and_progress():
     rows = task_rows([make_task("a", 30, deadline_delta=timedelta(0))], now)
 
     assert rows[0]["title"] == "a"
+    assert rows[0]["tag"] == "学习"
     assert rows[0]["notes"] == ""
     assert rows[0]["progress_label"] == "30%"
     assert rows[0]["deadline_label"] == "00:00:00"

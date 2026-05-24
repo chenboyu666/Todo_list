@@ -1862,6 +1862,15 @@ class MainWindow(QMainWindow):
         priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
         top.addWidget(priority)
+        tag_name = str(row.get("tag", "未分类"))
+        tag_chip = QLabel(f"#{tag_name if len(tag_name) <= 6 else tag_name[:6] + '...'}")
+        tag_chip.setObjectName("activeTaskTag" if is_focused else "taskTag")
+        tag_chip.setAlignment(Qt.AlignCenter)
+        tag_chip.setFixedHeight(_scale_px(30))
+        tag_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        tag_chip.setStyleSheet(_task_tag_chip_style(selected=is_focused))
+        tag_chip.setToolTip(f"任务标签：{tag_name}")
+        top.addWidget(tag_chip)
         urgency_chip = QLabel(str(row["urgency_label"]))
         urgency_chip.setObjectName("activeTaskUrgency" if is_focused else "taskUrgency")
         urgency_chip.setAlignment(Qt.AlignCenter)
@@ -2704,6 +2713,16 @@ def _priority_chip_style(priority: str) -> str:
         f"padding: {_scale_px(5)}px {_scale_px(10)}px; border-radius: {_scale_px(8)}px; "
         f"min-width: {_scale_px(72)}px; "
         f"background: {style['background']}; color: {style['text']};"
+    )
+
+
+def _task_tag_chip_style(*, selected: bool = False) -> str:
+    return (
+        f"font-size: {_scale_px(13)}px; font-weight: 900; "
+        f"padding: {_scale_px(5)}px {_scale_px(9)}px; border-radius: {_scale_px(8)}px; "
+        f"min-width: {_scale_px(54)}px; "
+        f"background: {'#155E75' if selected else '#10263A'}; "
+        f"color: {'#DDFBFF' if selected else '#BDE7F4'};"
     )
 
 

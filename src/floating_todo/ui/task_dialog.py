@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
+from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, DEFAULT_TASK_TAG, TASK_TAG_PRESETS, Task, normalize_task_tag
 from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
@@ -31,6 +31,8 @@ from floating_todo.view_models import PRIORITY_ORDER, priority_from_display, pri
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
 MAX_EFFORT_HOURS = 999
 MAX_EFFORT_MINUTES = MAX_EFFORT_HOURS * 60 + 59
+CUSTOM_TASK_TAG_LABEL = "自定义"
+DEFAULT_NEW_TASK_TAG = "工作"
 
 
 def local_timezone():
@@ -100,6 +102,22 @@ class TaskDialog(QDialog):
         self.title_input.setPlaceholderText("请输入任务名称")
         self.title_input.setMaxLength(100)
         self.title_edit = self.title_input
+
+        self.tag_input = NoWheelComboBox()
+        self.tag_input.setObjectName("taskTagCombo")
+        for tag in TASK_TAG_PRESETS:
+            self.tag_input.addItem(tag, tag)
+        self.tag_input.addItem(CUSTOM_TASK_TAG_LABEL, CUSTOM_TASK_TAG_LABEL)
+        self.tag_input.setToolTip("给任务选择一个标签，便于历史统计按类型观察耗时")
+        self.tag_input.setAccessibleName("任务标签")
+        self.tag_combo = self.tag_input
+
+        self.custom_tag_input = QLineEdit()
+        self.custom_tag_input.setObjectName("taskCustomTagInput")
+        self.custom_tag_input.setPlaceholderText("输入自定义标签")
+        self.custom_tag_input.setMaxLength(24)
+        self.custom_tag_input.setToolTip("输入自定义任务标签")
+        self.custom_tag_input.setAccessibleName("自定义任务标签")
 
         self.priority_input = NoWheelComboBox()
         self.priority_input.setIconSize(QSize(16, 16))
@@ -174,6 +192,7 @@ class TaskDialog(QDialog):
         self.deadline_date_input.dateChanged.connect(self._mark_deadline_changed)
         self.deadline_hour_input.currentTextChanged.connect(self._mark_deadline_changed)
         self.deadline_minute_input.currentTextChanged.connect(self._mark_deadline_changed)
+        self.tag_input.currentIndexChanged.connect(self._sync_custom_tag_visibility)
         self.effort_hour_input.valueChanged.connect(self._sync_effort_from_fields)
         self.effort_minute_input.valueChanged.connect(self._sync_effort_from_fields)
         self.title_input.textChanged.connect(self._sync_counters)
@@ -191,7 +210,7 @@ class TaskDialog(QDialog):
             if watched is self.notes_input or self.notes_input.isAncestorOf(watched):
                 return False
             popup_visible = False
-            if watched in {self.priority_input, self.deadline_hour_input, self.deadline_minute_input}:
+            if watched in {self.priority_input, self.tag_input, self.deadline_hour_input, self.deadline_minute_input}:
                 popup_visible = watched.view().isVisible()
             if watched is self.deadline_date_input:
                 calendar = self.deadline_date_input.calendarWidget()
@@ -284,6 +303,19 @@ class TaskDialog(QDialog):
         title_section.layout().addWidget(title_hint)
         panel_layout.addWidget(title_section)
 
+        tag_section = _section_card("任务标签", "record-note.svg", "taskSectionTag")
+        tag_layout = QHBoxLayout()
+        tag_layout.setContentsMargins(0, 0, 0, 0)
+        tag_layout.setSpacing(10)
+        tag_layout.addWidget(self.tag_input, 1)
+        tag_layout.addWidget(self.custom_tag_input, 1)
+        tag_section.layout().addLayout(tag_layout)
+        tag_hint = QLabel("标签会进入历史统计，用来观察不同类型任务的数量和耗时占比")
+        tag_hint.setObjectName("taskDialogHint")
+        tag_hint.setWordWrap(True)
+        tag_section.layout().addWidget(tag_hint)
+        panel_layout.addWidget(tag_section)
+
         priority_section = _section_card("优先级", "task-priority.svg", "taskSectionPriority")
         priority_grid = QGridLayout()
         priority_grid.setContentsMargins(0, 0, 0, 0)
@@ -360,6 +392,8 @@ class TaskDialog(QDialog):
     def _install_submit_shortcuts(self) -> None:
         watched = [
             self.title_input,
+            self.tag_input,
+            self.custom_tag_input,
             self.priority_input,
             self.effort_hour_input,
             self.effort_minute_input,
@@ -398,6 +432,7 @@ class TaskDialog(QDialog):
         deadline = to_local_datetime(deadline)
 
         self.title_input.setText(task.title if task else "")
+        self._set_tag_value(task.tag if task else DEFAULT_NEW_TASK_TAG)
         self._set_priority_value(task.priority if task else "P2")
         self._set_effort_fields(task.effort_minutes if task else 60)
         self.deadline_date_input.setDate(QDate(deadline.year, deadline.month, deadline.day))
@@ -412,6 +447,29 @@ class TaskDialog(QDialog):
     def _selected_priority(self) -> str:
         data = self.priority_input.currentData()
         return priority_from_display(str(data if data is not None else self.priority_input.currentText()))
+
+    def _selected_tag(self) -> str:
+        data = str(self.tag_input.currentData() or self.tag_input.currentText())
+        if data == CUSTOM_TASK_TAG_LABEL:
+            return normalize_task_tag(self.custom_tag_input.text() or DEFAULT_TASK_TAG)
+        return normalize_task_tag(data)
+
+    def _set_tag_value(self, tag: str) -> None:
+        normalized = normalize_task_tag(tag)
+        index = self.tag_input.findData(normalized)
+        if index >= 0:
+            self.tag_input.setCurrentIndex(index)
+            self.custom_tag_input.clear()
+        else:
+            custom_index = self.tag_input.findData(CUSTOM_TASK_TAG_LABEL)
+            self.tag_input.setCurrentIndex(custom_index if custom_index >= 0 else self.tag_input.count() - 1)
+            self.custom_tag_input.setText(normalized)
+        self._sync_custom_tag_visibility()
+
+    def _sync_custom_tag_visibility(self, *args) -> None:
+        is_custom = self.tag_input.currentData() == CUSTOM_TASK_TAG_LABEL
+        self.custom_tag_input.setVisible(is_custom)
+        self.custom_tag_input.setEnabled(is_custom)
 
     def _set_priority_value(self, priority: str) -> None:
         index = self.priority_input.findData(priority_from_display(priority))
@@ -492,6 +550,7 @@ class TaskDialog(QDialog):
             return replace(
                 self.task,
                 title=title,
+                tag=self._selected_tag(),
                 priority=self._selected_priority(),
                 effort_minutes=self._effort_minutes(),
                 deadline=deadline,
@@ -503,6 +562,7 @@ class TaskDialog(QDialog):
         return Task(
             id=str(uuid4()),
             title=title,
+            tag=self._selected_tag(),
             priority=self._selected_priority(),
             effort_minutes=self._effort_minutes(),
             deadline=self._deadline(),
@@ -689,6 +749,7 @@ QLabel#taskDialogHeroSubtitle {{
   font-weight: 700;
 }}
 QFrame#taskSectionTitle,
+QFrame#taskSectionTag,
 QFrame#taskSectionPriority,
 QFrame#taskSectionEffort,
 QFrame#taskSectionDeadline,
@@ -769,6 +830,17 @@ QLabel#taskPriorityPreviewSubtitle {{
 }}
 QLineEdit {{
   min-height: 38px;
+}}
+QLineEdit#taskCustomTagInput {{
+  color: #ECFEFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #071321,
+    stop:1 #0B1C2E);
+  border: none;
+  border-radius: 12px;
+  padding: 0 12px;
+  selection-background-color: #22D3EE;
+  selection-color: #03111B;
 }}
 QDateEdit,
 QComboBox {{

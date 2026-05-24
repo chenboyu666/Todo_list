@@ -33,7 +33,7 @@ def qapp() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
-def make_task(title: str, task_id: str, *, status: str = "active", notes: str = "") -> Task:
+def make_task(title: str, task_id: str, *, status: str = "active", notes: str = "", tag: str = "工作") -> Task:
     now = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     return Task(
         id=task_id,
@@ -46,6 +46,7 @@ def make_task(title: str, task_id: str, *, status: str = "active", notes: str = 
         created_at=now,
         updated_at=now,
         completed_at=now if status == "done" else None,
+        tag=tag,
         notes=notes,
         notification_state={},
     )
@@ -87,14 +88,16 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
             self.main_activated += 1
 
     first = replace(
-        make_task("完成任务", "done-1", status="done", notes="交付前确认了备注"),
+        make_task("完成任务", "done-1", status="done", notes="交付前确认了备注", tag="学习"),
         reflection="复盘后决定提前拆分任务",
+        work_elapsed_seconds=3600,
     )
     second = replace(
-        make_task("另一条记录", "done-2", status="done"),
+        make_task("另一条记录", "done-2", status="done", tag="项目"),
         priority="P2",
         completed_at=first.completed_at - timedelta(days=1),
         updated_at=first.updated_at - timedelta(days=1),
+        work_elapsed_seconds=2400,
     )
     parent = ParentWindow()
     store = MemoryStore([first, second])
@@ -123,6 +126,40 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert window.on_time_metric_label.text() == "准时率 100%"
     assert window.overdue_metric_label.text() == "超时 0/2"
     assert window.priority_donut_chart.priority_counts == {"P1": 1, "P2": 1, "P3": 0}
+    assert window.tag_filter.findData("学习") >= 0
+    assert window.tag_duration_chart.tag_stats[:2] == [
+        {"tag": "学习", "count": 1, "seconds": 3600},
+        {"tag": "项目", "count": 1, "seconds": 2400},
+    ]
+    window.show()
+    qapp.processEvents()
+    chart_pixmap = QPixmap(window.tag_duration_chart.size())
+    chart_pixmap.fill(Qt.transparent)
+    chart_painter = QPainter(chart_pixmap)
+    window.tag_duration_chart.render(chart_painter, QPoint(0, 0))
+    chart_painter.end()
+    learning_node = window.tag_duration_chart.node_rect_for_tag("学习")
+    assert learning_node is not None
+    QTest.mouseClick(window.tag_duration_chart, Qt.LeftButton, pos=learning_node.center().toPoint())
+    qapp.processEvents()
+    assert window.history_section_stack.currentWidget() is window.history_tasks_scroll
+    assert window.tag_filter.currentData() == "学习"
+    assert [label.text() for label in window.findChildren(QLabel, "historyRecordTitle")] == ["完成任务"]
+    scroll_bar = window.history_content_scroll.verticalScrollBar()
+    records_target = min(
+        scroll_bar.maximum(),
+        max(0, window.history_records_panel.mapTo(window.history_tasks_page, QPoint(0, 0)).y() - 12),
+    )
+    assert records_target > 0
+    scroll_animation = getattr(window, "_history_scroll_animation", None)
+    assert scroll_animation is not None
+    assert scroll_animation.duration() >= 280
+    QTest.qWait(360)
+    qapp.processEvents()
+    assert abs(scroll_bar.value() - records_target) <= 2
+    window.tag_filter.setCurrentIndex(window.tag_filter.findData("all"))
+    qapp.processEvents()
+    assert window.analysis_tag_duration_chart.tag_stats == window.tag_duration_chart.tag_stats
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.history_tasks_scroll.horizontalScrollBar().maximum() == 0
@@ -148,6 +185,8 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert window.analysis_total_value_label.text() == "2 条"
     assert "<img" in window.analysis_priority_value_label.text()
     assert any(label in window.analysis_priority_value_label.text() for label in ("高", "中", "低"))
+    assert window.analysis_tag_value_label.text() == "学习"
+    assert "60%" in window.analysis_tag_detail_label.text()
     assert window.analysis_needs_notes_button.text() == "查看待补记"
     window.analysis_reviewed_button.click()
     qapp.processEvents()
@@ -189,26 +228,29 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
 
     base = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
     first = replace(
-        make_task("完成任务", "done-1", status="done", notes="交付前确认备注"),
+        make_task("完成任务", "done-1", status="done", notes="交付前确认备注", tag="学习"),
         reflection="下次提前拆分",
         priority="P1",
         completed_at=base,
         updated_at=base,
         deadline=base + timedelta(hours=1),
+        work_elapsed_seconds=3600,
     )
     second = replace(
-        make_task("超时记录", "done-2", status="done"),
+        make_task("超时记录", "done-2", status="done", tag="创作"),
         priority="P2",
         completed_at=base - timedelta(days=1),
         updated_at=base - timedelta(days=1),
         deadline=base - timedelta(days=1, hours=1),
+        work_elapsed_seconds=1800,
     )
     third = replace(
-        make_task("无截止记录", "done-3", status="done"),
+        make_task("无截止记录", "done-3", status="done", tag="学习"),
         priority="P3",
         completed_at=base - timedelta(days=2),
         updated_at=base - timedelta(days=2),
         deadline=None,
+        work_elapsed_seconds=900,
     )
     store = MemoryStore([first, second, third])
     window = HistoryWindow([first, second, third], store)
@@ -229,6 +271,11 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
     assert "完成任务" in titles
     assert "超时记录" not in titles
 
+    window.search_input.setText("学习")
+    qapp.processEvents()
+    assert window.count_label.text() == "2 条"
+    assert {label.text() for label in window.findChildren(QLabel, "historyRecordTitle")} == {"完成任务", "无截止记录"}
+
     window.search_input.clear()
     window.status_filter.setCurrentIndex(window.status_filter.findData("overdue"))
     qapp.processEvents()
@@ -246,6 +293,11 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
     assert [label.text() for label in window.findChildren(QLabel, "historyRecordTitle")] == ["超时记录"]
 
     window.priority_filter.setCurrentIndex(window.priority_filter.findData("all"))
+    window.tag_filter.setCurrentIndex(window.tag_filter.findData("学习"))
+    qapp.processEvents()
+    assert [label.text() for label in window.findChildren(QLabel, "historyRecordTitle")] == ["完成任务", "无截止记录"]
+
+    window.tag_filter.setCurrentIndex(window.tag_filter.findData("all"))
     window.export_start_date.setDate(window.export_end_date.date())
     qapp.processEvents()
 
@@ -253,8 +305,8 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
     count = window.export_history_to_path(export_path)
     assert count == 1
     exported = export_path.read_text(encoding="utf-8-sig")
-    assert "任务ID,标题,优先级" in exported
-    assert "done-1,完成任务,高" in exported
+    assert "任务ID,标题,标签,优先级" in exported
+    assert "done-1,完成任务,学习,高" in exported
     assert "交付前确认备注" in exported
     assert "下次提前拆分" in exported
     assert "done-2" not in exported
@@ -282,6 +334,7 @@ def test_history_workspace_filters_ignore_mouse_wheel_changes(qapp: QApplication
 
     original_status = window.status_filter.currentIndex()
     original_priority = window.priority_filter.currentIndex()
+    original_tag = window.tag_filter.currentIndex()
     original_page_size = window.page_size_combo.currentIndex()
     original_sort = window.sort_mode.currentIndex()
     original_date = window.analytics_start_date.date()
@@ -303,6 +356,7 @@ def test_history_workspace_filters_ignore_mouse_wheel_changes(qapp: QApplication
     for widget in (
         window.status_filter,
         window.priority_filter,
+        window.tag_filter,
         window.page_size_combo,
         window.sort_mode,
         window.analytics_start_date,
@@ -313,6 +367,7 @@ def test_history_workspace_filters_ignore_mouse_wheel_changes(qapp: QApplication
 
     assert window.status_filter.currentIndex() == original_status
     assert window.priority_filter.currentIndex() == original_priority
+    assert window.tag_filter.currentIndex() == original_tag
     assert window.page_size_combo.currentIndex() == original_page_size
     assert window.sort_mode.currentIndex() == original_sort
     assert window.analytics_start_date.date() == original_date
@@ -411,9 +466,12 @@ def test_history_workspace_pagination_record_menu_and_chart_render(
     card = window.findChildren(QFrame, "historyCard")[0]
     menu_button = card.findChild(QWidget, "historyMoreButton")
     priority_icon = card.findChild(QLabel, "historyPriorityIcon")
+    tag_chip = card.findChild(QLabel, "historyTagChip")
     assert priority_icon is not None
     assert priority_icon.pixmap() is not None
     assert not priority_icon.pixmap().isNull()
+    assert tag_chip is not None
+    assert tag_chip.text()
     assert menu_button is not None
     assert not menu_button.icon().isNull()
     menu = menu_button.menu()
@@ -434,7 +492,9 @@ def test_history_workspace_pagination_record_menu_and_chart_render(
         window.priority_donut_chart,
         window.completion_trend_chart,
         window.deadline_outcome_chart,
+        window.tag_duration_chart,
         window.analysis_priority_donut_chart,
+        window.analysis_tag_duration_chart,
     ):
         chart.resize(240, 160)
         pixmap = QPixmap(chart.size())

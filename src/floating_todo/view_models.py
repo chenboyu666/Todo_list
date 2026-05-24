@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from floating_todo.domain import Task, normalize_datetime, sort_visible_tasks, work_elapsed_seconds, work_target_seconds
+from floating_todo.domain import Task, normalize_datetime, normalize_task_tag, sort_visible_tasks, work_elapsed_seconds, work_target_seconds
 
 
 PRIORITY_ORDER = ("P1", "P2", "P3")
@@ -127,6 +127,7 @@ def task_rows(tasks: list[Task], now: datetime) -> list[dict[str, object]]:
                 "status": task.status,
                 "is_paused": task.status == "paused",
                 "notes": task.notes,
+                "tag": normalize_task_tag(getattr(task, "tag", "")),
                 "priority": task.priority,
                 "effort_label": f"{task.effort_minutes} min",
                 "work_timer_label": work_timer_label(task, now),
