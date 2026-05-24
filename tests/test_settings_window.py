@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 
 import pytest
-from PySide6.QtWidgets import QApplication, QCheckBox, QFileDialog, QLabel, QMainWindow
+from PySide6.QtCore import QPoint
+from PySide6.QtWidgets import QApplication, QCheckBox, QFileDialog, QLabel, QMainWindow, QPushButton
 
 from floating_todo.settings import AppSettings
 
@@ -62,13 +63,27 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.background_resource_combo.itemText(1) == "一二学习图"
     assert dialog.background_random_enabled_checkbox.isChecked() is True
     assert dialog.background_folder_path_edit.text() == r"C:\Wallpapers"
-    assert dialog.background_folder_path_edit.isHidden()
+    assert dialog.background_folder_path_edit.isHidden() is False
     assert dialog.icon_resource_combo.count() == 4
     assert dialog.icon_resource_combo.itemText(3) == "一二布布动图"
     assert dialog.icon_path_edit.text() == r"C:\Icons\todo.ico"
     assert dialog.background_path.isHidden()
     assert dialog.icon_path_edit.isHidden()
     assert dialog.icon_resource_combo.itemText(0) == "自定义图标"
+    assert dialog.title_bar is not None
+    assert dialog.scroll_area.widgetResizable()
+    dialog.show()
+    qapp.processEvents()
+    title_icon = dialog.findChild(QLabel, "settingsTitleIcon")
+    assert title_icon is not None
+    assert title_icon.pixmap() is not None
+    assert not title_icon.pixmap().isNull()
+    assert not dialog.title_bar.findChild(QPushButton, "settingsCloseButton").icon().isNull()
+    assert all(not button.icon().isNull() for button in dialog.sidebar_buttons)
+    save_top = dialog.save_button.mapTo(dialog, QPoint(0, 0)).y()
+    cancel_top = dialog.cancel_button.mapTo(dialog, QPoint(0, 0)).y()
+    assert save_top >= dialog.scroll_area.geometry().bottom()
+    assert cancel_top >= dialog.scroll_area.geometry().bottom()
 
     visible_text = "\n".join(
         [widget.text() for widget in dialog.findChildren(QCheckBox)]

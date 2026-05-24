@@ -5,8 +5,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from PySide6.QtCore import QDate, QDateTime, QTimeZone
-from PySide6.QtWidgets import QApplication, QLabel, QMainWindow
+from PySide6.QtCore import QDate, QDateTime, QPoint, QPointF, Qt, QTimeZone
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QAbstractSpinBox, QLabel, QMainWindow, QSpinBox, QToolButton
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 
@@ -78,7 +80,7 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     after = datetime.now(timezone.utc)
 
     assert dialog.windowTitle() == "新增任务"
-    assert dialog.priority_combo.currentText() == "◆ 中"
+    assert dialog.priority_combo.currentText() == "中"
     assert dialog.priority_combo.currentData() == "P2"
     assert dialog.effort_spin.minimum() == 0
     assert dialog.effort_spin.maximum() == 1440
@@ -100,7 +102,13 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     assert not hasattr(dialog, "priority_hint_label")
     assert not hasattr(dialog, "deadline_hint_label")
     assert dialog.deadline_date_input.calendarWidget().objectName() == "taskDeadlineCalendar"
-    assert "#070B12" in dialog.deadline_date_input.calendarWidget().styleSheet()
+    assert "#06111C" in dialog.deadline_date_input.calendarWidget().styleSheet()
+    assert dialog.deadline_date_input.buttonSymbols() == QAbstractSpinBox.NoButtons
+    assert "QAbstractItemView::item:selected" in dialog.deadline_date_input.calendarWidget().styleSheet()
+    assert "qt_calendar_prevmonth" in dialog.deadline_date_input.calendarWidget().styleSheet()
+    assert dialog.scroll_area.widgetResizable()
+    assert dialog.title_counter_label.text() == "0/100"
+    assert dialog.notes_counter_label.text() == "0/500"
     visible_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
     assert "P1 最优先" not in visible_text
     assert "每次 15 分钟" not in visible_text
@@ -242,6 +250,147 @@ def test_effort_change_updates_deadline_from_current_local_time(
     assert dialog.deadline_minute_input.currentText() == "30"
     assert dialog.build_task().deadline == datetime(2026, 5, 14, 2, 30, tzinfo=timezone.utc)
 
+    dialog.close()
+
+
+def test_dialog_keeps_deadline_row_visible_and_uses_svg_icons(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog.scroll_area.horizontalScrollBar().maximum() == 0
+    assert dialog.deadline_date_input.minimumWidth() >= 180
+    assert dialog.panel.maximumWidth() < dialog.scroll_area.viewport().width()
+
+    hero_icon = dialog.findChild(QLabel, "taskDialogHeroIcon")
+    assert hero_icon is not None
+    assert hero_icon.pixmap() is not None
+    assert not hero_icon.pixmap().isNull()
+
+    section_icons = dialog.findChildren(QLabel, "taskSectionIcon")
+    assert len(section_icons) == 5
+    assert all(icon.pixmap() is not None and not icon.pixmap().isNull() for icon in section_icons)
+    preview_icons = dialog.findChildren(QLabel, "taskPriorityPreviewIcon")
+    assert len(preview_icons) == 3
+    assert all(icon.pixmap() is not None and not icon.pixmap().isNull() for icon in preview_icons)
+    assert not dialog.priority_combo.itemIcon(0).isNull()
+    assert not dialog.priority_combo.itemIcon(1).isNull()
+    assert not dialog.priority_combo.itemIcon(2).isNull()
+
+    dialog.close()
+
+
+def test_deadline_calendar_allows_direct_year_edit_and_updates_task(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.title_input.setText("year-edit")
+    dialog.deadline_date_input.setDate(QDate(2026, 5, 24))
+    dialog.deadline_hour_input.setCurrentText("09")
+    dialog.deadline_minute_input.setCurrentText("30")
+    calendar = dialog.deadline_date_input.calendarWidget()
+    calendar.show()
+    qapp.processEvents()
+
+    year_button = calendar.findChild(QToolButton, "qt_calendar_yearbutton")
+    year_edit = calendar.findChild(QSpinBox, "qt_calendar_yearedit")
+    assert year_button is not None
+    assert year_edit is not None
+
+    QTest.mouseClick(year_button, Qt.LeftButton)
+    qapp.processEvents()
+    assert not year_edit.isHidden()
+    year_line_edit = year_edit.lineEdit()
+    assert year_line_edit is not None
+    year_line_edit.setFocus(Qt.OtherFocusReason)
+    year_line_edit.selectAll()
+    QTest.keyClicks(year_line_edit, "2028")
+    QTest.keyClick(year_line_edit, Qt.Key_Return)
+    qapp.processEvents()
+
+    assert calendar.yearShown() == 2028
+    assert dialog.deadline_date_input.date().year() == 2028
+    assert dialog.build_task().deadline.year == 2028
+
+    QTest.mouseClick(year_button, Qt.LeftButton)
+    qapp.processEvents()
+    year_edit.setValue(2031)
+    year_line_edit.setFocus(Qt.OtherFocusReason)
+    QTest.keyClick(year_line_edit, Qt.Key_Escape)
+    qapp.processEvents()
+    assert year_edit.isHidden()
+    assert calendar.yearShown() == 2028
+    assert dialog.deadline_date_input.date().year() == 2028
+
+    dialog.close()
+
+
+def test_deadline_controls_ignore_mouse_wheel_changes(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    original_date = dialog.deadline_date_input.date()
+    original_hour = dialog.deadline_hour_input.currentText()
+    original_minute = dialog.deadline_minute_input.currentText()
+
+    def wheel(widget) -> None:
+        event = QWheelEvent(
+            QPointF(10, 10),
+            QPointF(10, 10),
+            QPoint(0, 0),
+            QPoint(0, 120),
+            Qt.NoButton,
+            Qt.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        QApplication.sendEvent(widget, event)
+
+    wheel(dialog.deadline_date_input)
+    wheel(dialog.deadline_hour_input)
+    wheel(dialog.deadline_minute_input)
+
+    assert dialog.deadline_date_input.date() == original_date
+    assert dialog.deadline_hour_input.currentText() == original_hour
+    assert dialog.deadline_minute_input.currentText() == original_minute
+
+    dialog.close()
+
+
+def test_single_line_controls_can_submit_with_enter(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.title_input.setText("回车保存任务")
+    called: list[bool] = []
+    dialog.accept = lambda: called.append(True)  # type: ignore[method-assign]
+
+    dialog.title_input.setFocus()
+    QTest.keyClick(dialog.title_input, Qt.Key_Return)
+
+    assert called == [True]
+    dialog.close()
+
+
+def test_notes_editor_keeps_enter_for_newline(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.title_input.setText("备注换行")
+    called: list[bool] = []
+    dialog.accept = lambda: called.append(True)  # type: ignore[method-assign]
+
+    dialog.notes_input.setFocus()
+    dialog.notes_input.setPlainText("第一行")
+    QTest.keyClick(dialog.notes_input, Qt.Key_Return)
+
+    assert called == []
+    assert "\n" in dialog.notes_input.toPlainText()
     dialog.close()
 
 

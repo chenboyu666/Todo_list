@@ -5,34 +5,36 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QDate, QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
-    QFrame,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QSizeGrip,
+    QSizePolicy,
     QSpinBox,
+    QStackedWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from floating_todo.domain import Task, work_elapsed_seconds, work_target_seconds
-from floating_todo.theme import THEME_COLORS
-from floating_todo.ui.date_controls import apply_dark_calendar_popup
+from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
 from floating_todo.view_models import (
@@ -48,7 +50,7 @@ CSV_HEADERS = [
     "任务ID",
     "标题",
     "优先级",
-    "预估工作量分钟",
+    "预计工作量分钟",
     "实际工作时长",
     "实际工作秒数",
     "截止时间",
@@ -67,6 +69,38 @@ PRIORITY_CHART_COLORS = {
     "P3": "#A7F3D0",
 }
 
+PRIORITY_ICON_NAMES = {
+    "P1": "priority-high.svg",
+    "P2": "priority-medium.svg",
+    "P3": "priority-low.svg",
+}
+
+STATUS_FILTERS = [
+    ("全部状态", "all"),
+    ("准时完成", "on_time"),
+    ("超时完成", "overdue"),
+    ("无截止", "no_deadline"),
+    ("已复盘", "reviewed"),
+    ("待补记", "needs_notes"),
+]
+
+PRIORITY_FILTERS = [
+    ("全部优先级", "all"),
+    ("高", "P1"),
+    ("中", "P2"),
+    ("低", "P3"),
+]
+
+SORT_FILTERS = [
+    ("按完成时间", "completed"),
+    ("按优先级", "priority"),
+    ("按实际耗时", "effort"),
+    ("按标题", "title"),
+]
+
+PAGE_SIZES = [8, 12, 16, 24]
+UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
+
 
 class PriorityDonutChart(QWidget):
     def __init__(self, parent=None) -> None:
@@ -74,7 +108,7 @@ class PriorityDonutChart(QWidget):
         self.priority_counts = {priority: 0 for priority in PRIORITY_ORDER}
         self.setObjectName("historyPriorityDonutChart")
         self.setAccessibleName("优先级完成结构图")
-        self.setMinimumHeight(126)
+        self.setMinimumHeight(140)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, counts: dict[str, int]) -> None:
@@ -84,16 +118,15 @@ class PriorityDonutChart(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(6, 4, -6, -6)
+        rect = QRectF(self.rect()).adjusted(8, 8, -8, -8)
         if rect.isEmpty():
             return
         total = sum(self.priority_counts.values())
-        diameter = min(86.0, rect.height() - 16, rect.width() * 0.42)
-        chart_rect = QRectF(rect.left() + 4, rect.center().y() - diameter / 2, diameter, diameter)
-        center = chart_rect.center()
+        diameter = min(96.0, rect.height() - 24, rect.width() * 0.42)
+        chart_rect = QRectF(rect.left() + 6, rect.center().y() - diameter / 2, diameter, diameter)
         ring_width = max(13.0, diameter * 0.18)
 
-        painter.setPen(QPen(QColor("#162235"), ring_width, Qt.SolidLine, Qt.RoundCap))
+        painter.setPen(QPen(QColor("#14253A"), ring_width, Qt.SolidLine, Qt.RoundCap))
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(chart_rect.adjusted(ring_width / 2, ring_width / 2, -ring_width / 2, -ring_width / 2))
 
@@ -112,26 +145,24 @@ class PriorityDonutChart(QWidget):
         painter.setPen(QColor("#F8FBFF"))
         font = painter.font()
         font.setBold(True)
-        font.setPointSize(13)
+        font.setPointSize(14)
         painter.setFont(font)
         painter.drawText(chart_rect, Qt.AlignCenter, str(total))
 
         legend_x = chart_rect.right() + 18
-        legend_y = rect.top() + 16
-        font.setPointSize(8)
+        legend_y = rect.top() + 18
+        font.setPointSize(10)
         painter.setFont(font)
         for index, priority in enumerate(PRIORITY_ORDER):
-            y = legend_y + index * 25
+            chip_rect = QRectF(legend_x, legend_y + index * 28, 28, 10)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(PRIORITY_CHART_COLORS[priority]))
-            painter.drawRoundedRect(QRectF(legend_x, y + 4, 22, 8), 4, 4)
-            painter.setPen(QColor("#D8E8F5"))
-            count = self.priority_counts[priority]
-            percent = round(count / total * 100) if total else 0
+            painter.drawRoundedRect(chip_rect, 4, 4)
+            painter.setPen(QColor("#D7E5F4"))
             painter.drawText(
-                QRectF(legend_x + 30, y - 2, rect.right() - legend_x - 30, 22),
-                Qt.AlignLeft,
-                f"{priority_display_label(priority)}：{count} · {percent}%",
+                QRectF(chip_rect.right() + 10, chip_rect.top() - 8, rect.right() - chip_rect.right() - 10, 26),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                f"{priority_display_label(priority)}：{self.priority_counts[priority]} · {_ratio_text(self.priority_counts[priority], total)}",
             )
 
 
@@ -141,7 +172,7 @@ class CompletionTrendChart(QWidget):
         self.trend_points: list[tuple[date, int]] = []
         self.setObjectName("historyCompletionTrendChart")
         self.setAccessibleName("每日完成曲线图")
-        self.setMinimumHeight(126)
+        self.setMinimumHeight(140)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_points(self, points: list[tuple[date, int]]) -> None:
@@ -151,68 +182,52 @@ class CompletionTrendChart(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        outer = QRectF(self.rect()).adjusted(8, 8, -8, -8)
-        plot = outer.adjusted(28, 12, -10, -28)
-        if plot.width() <= 0 or plot.height() <= 0:
+        rect = QRectF(self.rect()).adjusted(10, 10, -10, -12)
+        if rect.isEmpty():
             return
 
-        painter.setPen(QPen(QColor("#1F3146"), 1))
-        for index in range(4):
-            y = plot.top() + plot.height() * index / 3
-            painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y))
+        painter.setPen(QPen(QColor("#16314B"), 1))
+        for offset in range(4):
+            y = rect.top() + rect.height() * offset / 3
+            painter.drawLine(rect.left(), y, rect.right(), y)
 
         if not self.trend_points:
-            painter.setPen(QColor("#6F8093"))
-            painter.drawText(outer, Qt.AlignCenter, "暂无趋势")
+            painter.setPen(QColor("#86A3BD"))
+            painter.drawText(rect, Qt.AlignCenter, "暂无趋势")
             return
 
-        max_value = max(1, max(value for _, value in self.trend_points))
-        coordinates: list[QPointF] = []
-        span = max(1, len(self.trend_points) - 1)
+        values = [value for _, value in self.trend_points]
+        max_value = max(1, max(values))
+        step_x = rect.width() / max(1, len(self.trend_points) - 1)
+        path = QPainterPath()
+        fill_path = QPainterPath()
+        baseline = rect.bottom()
         for index, (_, value) in enumerate(self.trend_points):
-            x = plot.left() + plot.width() * index / span if len(self.trend_points) > 1 else plot.center().x()
-            y = plot.bottom() - plot.height() * value / max_value
-            coordinates.append(QPointF(x, y))
+            x = rect.left() + step_x * index
+            y = baseline - (value / max_value) * max(28.0, rect.height() - 22)
+            point = QPointF(x, y)
+            if index == 0:
+                path.moveTo(point)
+                fill_path.moveTo(x, baseline)
+                fill_path.lineTo(point)
+            else:
+                path.lineTo(point)
+                fill_path.lineTo(point)
+        fill_path.lineTo(rect.right(), baseline)
+        fill_path.closeSubpath()
 
-        if coordinates:
-            area = QPainterPath(coordinates[0])
-            for point in coordinates[1:]:
-                area.lineTo(point)
-            area.lineTo(QPointF(coordinates[-1].x(), plot.bottom()))
-            area.lineTo(QPointF(coordinates[0].x(), plot.bottom()))
-            area.closeSubpath()
-            gradient = QLinearGradient(plot.topLeft(), plot.bottomLeft())
-            top_fill = QColor("#7DD3FC")
-            top_fill.setAlpha(72)
-            bottom_fill = QColor("#A7F3D0")
-            bottom_fill.setAlpha(8)
-            gradient.setColorAt(0, top_fill)
-            gradient.setColorAt(1, bottom_fill)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(gradient)
-            painter.drawPath(area)
-
-            line = QPainterPath(coordinates[0])
-            for point in coordinates[1:]:
-                line.lineTo(point)
-            painter.setPen(QPen(QColor("#7DD3FC"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(line)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor("#ECFEFF"))
-            for point in coordinates:
-                painter.drawEllipse(point, 3.2, 3.2)
-
-        font = painter.font()
-        font.setBold(True)
-        font.setPointSize(8)
-        painter.setFont(font)
-        painter.setPen(QColor("#9EB5C8"))
-        start_label = self.trend_points[0][0].strftime("%m-%d")
-        end_label = self.trend_points[-1][0].strftime("%m-%d")
-        painter.drawText(QRectF(plot.left(), plot.bottom() + 7, 72, 18), Qt.AlignLeft, start_label)
-        painter.drawText(QRectF(plot.right() - 72, plot.bottom() + 7, 72, 18), Qt.AlignRight, end_label)
-        painter.drawText(QRectF(outer.left(), outer.top(), 46, 18), Qt.AlignLeft, str(max_value))
+        gradient = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+        gradient.setColorAt(0.0, QColor(34, 211, 238, 110))
+        gradient.setColorAt(1.0, QColor(34, 211, 238, 10))
+        painter.fillPath(fill_path, gradient)
+        painter.setPen(QPen(QColor("#38BDF8"), 2.5))
+        painter.drawPath(path)
+        painter.setBrush(QColor("#BFF7FF"))
+        painter.setPen(Qt.NoPen)
+        for index, (_, value) in enumerate(self.trend_points):
+            x = rect.left() + step_x * index
+            y = baseline - (value / max_value) * max(28.0, rect.height() - 22)
+            painter.drawEllipse(QPointF(x, y), 3.6, 3.6)
 
 
 class DeadlineOutcomeChart(QWidget):
@@ -221,7 +236,7 @@ class DeadlineOutcomeChart(QWidget):
         self.outcome_counts = {"on_time": 0, "overdue": 0, "no_deadline": 0}
         self.setObjectName("historyDeadlineOutcomeChart")
         self.setAccessibleName("准时与超时分布图")
-        self.setMinimumHeight(126)
+        self.setMinimumHeight(140)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_counts(self, *, on_time: int, overdue: int, no_deadline: int) -> None:
@@ -235,100 +250,116 @@ class DeadlineOutcomeChart(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(10, 8, -10, -8)
+        rect = QRectF(self.rect()).adjusted(12, 12, -12, -14)
         if rect.isEmpty():
             return
-        total = sum(self.outcome_counts.values())
-        deadline_total = self.outcome_counts["on_time"] + self.outcome_counts["overdue"]
-        rate = round(self.outcome_counts["on_time"] / deadline_total * 100) if deadline_total else 0
+        total = max(1, sum(self.outcome_counts.values()))
+        bar_rect = QRectF(rect.left(), rect.top() + 46, rect.width(), 18)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#14332F"))
+        painter.drawRoundedRect(bar_rect, 9, 9)
 
+        cursor = bar_rect.left()
+        segments = [
+            ("on_time", QColor("#A7F3D0"), "准时"),
+            ("overdue", QColor("#FCA5A5"), "超时"),
+            ("no_deadline", QColor("#CBD5E1"), "无截止"),
+        ]
+        for key, color, _ in segments:
+            width = bar_rect.width() * self.outcome_counts[key] / total
+            if width <= 0:
+                continue
+            painter.setBrush(color)
+            painter.drawRoundedRect(QRectF(cursor, bar_rect.top(), width, bar_rect.height()), 9, 9)
+            cursor += width
+
+        painter.setPen(QColor("#F8FBFF"))
         font = painter.font()
         font.setBold(True)
-        font.setPointSize(18)
+        font.setPointSize(24)
         painter.setFont(font)
-        painter.setPen(QColor("#ECFEFF"))
-        painter.drawText(QRectF(rect.left(), rect.top(), 78, 30), Qt.AlignLeft | Qt.AlignVCenter, f"{rate}%")
-        font.setPointSize(8)
+        on_time_rate = round(self.outcome_counts["on_time"] / total * 100)
+        painter.drawText(QRectF(rect.left(), rect.top(), rect.width() * 0.4, 34), Qt.AlignLeft | Qt.AlignVCenter, f"{on_time_rate}%")
+        font.setPointSize(11)
         painter.setFont(font)
-        painter.setPen(QColor("#9EB5C8"))
-        painter.drawText(QRectF(rect.left() + 80, rect.top() + 7, rect.width() - 80, 20), Qt.AlignLeft, "准时率")
+        painter.setPen(QColor("#A6BCD0"))
+        painter.drawText(QRectF(rect.left() + 96, rect.top() + 4, rect.width() - 96, 24), Qt.AlignLeft | Qt.AlignVCenter, "准时率")
 
-        bar_rect = QRectF(rect.left(), rect.top() + 44, rect.width(), 14)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#111D2C"))
-        painter.drawRoundedRect(bar_rect, 7, 7)
-        if total:
-            cursor = bar_rect.left()
-            segments = (
-                ("on_time", "#A7F3D0"),
-                ("overdue", "#FCA5A5"),
-                ("no_deadline", "#617086"),
-            )
-            for key, color in segments:
-                value = self.outcome_counts[key]
-                if not value:
-                    continue
-                width = bar_rect.width() * value / total
-                painter.setBrush(QColor(color))
-                painter.drawRoundedRect(QRectF(cursor, bar_rect.top(), width, bar_rect.height()), 7, 7)
-                cursor += width
-
-        legend = (
-            ("准时", self.outcome_counts["on_time"], "#A7F3D0"),
-            ("超时", self.outcome_counts["overdue"], "#FCA5A5"),
-            ("无截止", self.outcome_counts["no_deadline"], "#9AA4B8"),
-        )
-        legend_top = bar_rect.bottom() + 11
-        for index, (label, value, color) in enumerate(legend):
-            x = rect.left() + index * rect.width() / 3
-            painter.setBrush(QColor(color))
+        legend_y = rect.bottom() - 18
+        for index, (key, color, label) in enumerate(segments):
+            x = rect.left() + index * max(92, int(rect.width() / 3.2))
             painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(QRectF(x, legend_top + 4, 18, 7), 3.5, 3.5)
-            painter.setPen(QColor("#D8E8F5"))
-            painter.drawText(QRectF(x + 24, legend_top - 2, rect.width() / 3 - 28, 22), Qt.AlignLeft, f"{label} {value}")
+            painter.setBrush(color)
+            painter.drawRoundedRect(QRectF(x, legend_y - 8, 22, 10), 5, 5)
+            painter.setPen(QColor("#D7E5F4"))
+            painter.drawText(QRectF(x + 30, legend_y - 13, 90, 20), Qt.AlignLeft | Qt.AlignVCenter, f"{label} {self.outcome_counts[key]}")
 
 
 class HistoryNoteDialog(QDialog):
     def __init__(self, task: Task, parent=None) -> None:
         super().__init__(parent)
         self.task = task
-        self.setWindowTitle("查看与编辑备注")
-        self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(500, 430)
+        self.setWindowTitle("编辑历史备注")
+        self.setMinimumSize(540, 420)
+        self.setStyleSheet(
+            """
+QDialog {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #04111E,
+    stop:1 #0A2335);
+}
+QFrame#historyNotePanel {
+  background: rgba(8, 26, 43, 0.92);
+  border: 1px solid rgba(98, 144, 176, 42);
+  border-radius: 16px;
+}
+QLabel {
+  color: #F8FBFF;
+  font-weight: 800;
+}
+QTextEdit {
+  background: #091422;
+  color: #ECFEFF;
+  border: 1px solid rgba(110, 156, 184, 40);
+  border-radius: 12px;
+  padding: 10px;
+}
+QDialogButtonBox QPushButton {
+  min-width: 108px;
+  min-height: 38px;
+  border-radius: 12px;
+  font-weight: 900;
+}
+"""
+        )
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(12)
-        root.addWidget(DialogTitleBar(self, self.windowTitle()))
 
         panel = QFrame()
-        panel.setStyleSheet(
-            f"QFrame {{ background: {THEME_COLORS['surface']}; border: none; border-radius: 8px; }}"
-        )
-        apply_soft_shadow(panel, blur=30, y_offset=10, alpha=110)
+        panel.setObjectName("historyNotePanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 12, 14, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
-        title = QLabel(f"{priority_display_label(task.priority)} · {task.title}")
+        title = QLabel(task.title)
+        title.setStyleSheet("font-size: 18px; font-weight: 900;")
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 16px; font-weight: 700;")
         layout.addWidget(title)
 
         notes_label = QLabel("任务备注")
-        notes_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
         layout.addWidget(notes_label)
         self.notes_edit = QTextEdit(task.notes)
         self.notes_edit.setPlaceholderText("记录任务背景、上下文或补充说明")
-        self.notes_edit.setMinimumHeight(90)
+        self.notes_edit.setMinimumHeight(100)
         layout.addWidget(self.notes_edit)
 
         reflection_label = QLabel("完成体会")
-        reflection_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
         layout.addWidget(reflection_label)
         self.reflection_edit = QTextEdit(task.reflection)
-        self.reflection_edit.setPlaceholderText("记录这次完成后的体会、复盘或下次改进")
-        self.reflection_edit.setMinimumHeight(120)
+        self.reflection_edit.setPlaceholderText("记录完成后的复盘、体会或下次改进")
+        self.reflection_edit.setMinimumHeight(140)
         layout.addWidget(self.reflection_edit)
 
         root.addWidget(panel, 1)
@@ -354,361 +385,78 @@ class HistoryWindow(QDialog):
         super().__init__(parent)
         self.tasks = list(tasks)
         self.store = store
-        self._selected_date_key: str | None = None
         self._selected_page_index = 0
-        self._syncing_date_selector = False
-        self._history_column_count = 1
-        self._normal_geometry_before_fullscreen: QRect | None = None
+        self._current_history_section = "history"
+
         self.setWindowTitle("历史任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
-        self.setMinimumSize(960, 900)
-        self.resize(1120, 920)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setMinimumSize(1180, 900)
+        self.resize(1320, 960)
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
-        root = QVBoxLayout(self)
+        root = QHBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(8)
-        self.title_bar = DialogTitleBar(self, self.windowTitle())
+        root.setSpacing(12)
+
+        self.sidebar = self._build_sidebar()
+        root.addWidget(self.sidebar)
+
+        content_shell = QFrame()
+        content_shell.setObjectName("historyContentShell")
+        content_root = QVBoxLayout(content_shell)
+        content_root.setContentsMargins(0, 0, 0, 0)
+        content_root.setSpacing(10)
+        root.addWidget(content_shell, 1)
+
+        self.title_bar = DialogTitleBar(self, "历史任务")
         self.title_bar.setObjectName("historyDragTitleBar")
-        self.title_bar.setMinimumHeight(46)
-        self.title_bar.setToolTip("按住此区域拖动历史窗口")
-        self.title_bar.layout.setContentsMargins(10, 4, 6, 4)
-        self.title_bar.layout.setSpacing(8)
         self.title_bar.setStyleSheet(_history_title_bar_style())
-        self.fullscreen_button = self.title_bar.add_action_button("□", "全屏历史窗口", self.toggle_fullscreen)
+        self.top_settings_button = self.title_bar.add_action_button("", "打开设置", self._open_settings_workspace)
+        self.top_settings_button.setAccessibleName("打开设置")
+        self._set_button_icon(self.top_settings_button, "nav-settings.svg", size=15, icon_only=True)
+        self.minimize_button = self.title_bar.add_action_button("", "最小化", self.showMinimized)
+        self.minimize_button.setAccessibleName("最小化")
+        self._set_button_icon(self.minimize_button, "window-minimize.svg", size=15, icon_only=True)
+        self.fullscreen_button = self.title_bar.add_action_button("", "最大化历史窗口", self._toggle_maximize)
         self.fullscreen_button.setObjectName("historyFullscreenButton")
-        root.addWidget(self.title_bar)
+        self.fullscreen_button.setAccessibleName("最大化或还原")
+        self._set_button_icon(self.fullscreen_button, "window-maximize.svg", size=14, icon_only=True)
+        content_root.addWidget(self.title_bar)
 
-        header_panel = QFrame()
-        header_panel.setObjectName("historyHeaderPanel")
-        header_layout = QHBoxLayout(header_panel)
-        header_layout.setContentsMargins(12, 8, 12, 8)
-        header_layout.setSpacing(12)
-        title_stack = QVBoxLayout()
-        title_stack.setContentsMargins(0, 0, 0, 0)
-        title_stack.setSpacing(3)
-        title = QLabel("历史任务")
-        title.setObjectName("historyTitle")
-        subtitle = QLabel("完成记录 · 复盘备注 · 进度归档")
-        subtitle.setObjectName("historySubtitle")
-        title_stack.addWidget(title)
-        title_stack.addWidget(subtitle)
-        header_layout.addLayout(title_stack, 1)
-        self.count_label = QLabel("0 条")
-        self.count_label.setObjectName("historyCountChip")
-        self.count_label.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(self.count_label)
-        root.addWidget(header_panel)
+        self.history_section_stack = QStackedWidget()
+        self.history_section_stack.setObjectName("historySectionStack")
+        content_root.addWidget(self.history_section_stack, 1)
 
-        content_scroll = QScrollArea()
-        content_scroll.setObjectName("historyContentScroll")
-        content_scroll.setWidgetResizable(True)
-        content_scroll.setFrameShape(QFrame.NoFrame)
-        content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        content_scroll.setStyleSheet("QScrollArea#historyContentScroll { background: transparent; border: none; }")
-        content_scroll.viewport().setAutoFillBackground(False)
-        content_scroll.viewport().setStyleSheet("background: transparent;")
-        self.history_content_scroll = content_scroll
-        self.history_content = QWidget()
-        self.history_content.setStyleSheet("background: transparent;")
-        content_layout = QVBoxLayout(self.history_content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(8)
-        self.history_content_layout = content_layout
-        content_scroll.setWidget(self.history_content)
-        root.addWidget(content_scroll, 1)
+        self.history_tasks_scroll, self.history_tasks_page, tasks_layout = self._create_section_page("historyTasksPage")
+        self.history_analysis_scroll, self.history_analysis_page, analysis_layout = self._create_section_page("historyAnalysisPage")
+        self.history_section_stack.addWidget(self.history_tasks_scroll)
+        self.history_section_stack.addWidget(self.history_analysis_scroll)
+        self.history_content_scroll = self.history_tasks_scroll
 
-        stats_panel = QFrame()
-        stats_panel.setObjectName("historyStatsPanel")
-        stats_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        stats_panel.setFixedHeight(320)
-        self.stats_panel = stats_panel
-        stats_layout = QVBoxLayout(stats_panel)
-        stats_layout.setContentsMargins(9, 6, 9, 7)
-        stats_layout.setSpacing(6)
-        metrics_panel = QFrame()
-        metrics_panel.setObjectName("historyMetricsPanel")
-        metrics_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.history_metrics_panel = metrics_panel
-        metric_strip = QHBoxLayout(metrics_panel)
-        metric_strip.setContentsMargins(8, 4, 8, 4)
-        metric_strip.setSpacing(6)
-        self.priority_p1_label = self._metric_label(f"{priority_display_label('P1')}：0", "historyPriorityMetricP1")
-        self.priority_p2_label = self._metric_label(f"{priority_display_label('P2')}：0", "historyPriorityMetricP2")
-        self.priority_p3_label = self._metric_label(f"{priority_display_label('P3')}：0", "historyPriorityMetricP3")
-        self.priority_mix_label = self.priority_p1_label
-        self.review_metric_label = self._metric_label("复盘 0/0")
-        self.on_time_metric_label = self._metric_label("准时率 --")
-        self.overdue_metric_label = self._metric_label("超时 0/0", "historyOverdueMetric")
-        self.average_metric_label = self._metric_label("平均进度 --")
-        self.latest_metric_label = self._metric_label("最近 --")
-        for metric in (
-            self.priority_p1_label,
-            self.priority_p2_label,
-            self.priority_p3_label,
-            self.review_metric_label,
-            self.on_time_metric_label,
-            self.overdue_metric_label,
-            self.average_metric_label,
-            self.latest_metric_label,
-        ):
-            metric.setMinimumWidth(0)
-            metric.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            metric_strip.addWidget(metric, 1)
-        stats_layout.addWidget(metrics_panel)
+        self.header_panel = self._build_header_panel()
+        tasks_layout.addWidget(self.header_panel)
+        self.metrics_panel = self._build_metrics_panel()
+        tasks_layout.addWidget(self.metrics_panel)
+        self.analytics_panel = self._build_analytics_panel()
+        tasks_layout.addWidget(self.analytics_panel)
+        self.charts_panel = self._build_history_charts_panel()
+        tasks_layout.addWidget(self.charts_panel)
+        self.records_tools_panel = self._build_records_tools_panel()
+        tasks_layout.addWidget(self.records_tools_panel)
+        self.history_records_panel, self.history_list_container, self.list_layout = self._build_records_panel()
+        tasks_layout.addWidget(self.history_records_panel, 1)
+        self.pagination_panel = self._build_pagination_panel()
+        tasks_layout.addWidget(self.pagination_panel)
 
-        analytics_panel = QFrame()
-        analytics_panel.setObjectName("historyAnalyticsPanel")
-        analytics_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.history_analytics_panel = analytics_panel
-        analytics_range = QHBoxLayout(analytics_panel)
-        analytics_range.setContentsMargins(10, 5, 10, 5)
-        analytics_range.setSpacing(8)
-        analytics_title = QLabel("统计区间")
-        analytics_title.setObjectName("historyAnalyticsTitle")
-        analytics_title.setAlignment(Qt.AlignCenter)
-        analytics_title.setFixedHeight(36)
-        analytics_title.setMinimumWidth(70)
-        analytics_range.addWidget(analytics_title)
-        self.analytics_count_label = QLabel("0 条")
-        self.analytics_count_label.setObjectName("historyAnalyticsCount")
-        self.analytics_count_label.setAlignment(Qt.AlignCenter)
-        self.analytics_count_label.setFixedHeight(30)
-        self.analytics_count_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        analytics_range.addWidget(self.analytics_count_label)
-        self.analytics_all_button = self._range_preset_button(
-            "全部",
-            "统计全部完成记录",
-            "historyAnalyticsPresetButton",
-        )
-        self.analytics_week_button = self._range_preset_button(
-            "近7日",
-            "只统计最近 7 天完成记录",
-            "historyAnalyticsPresetButton",
-        )
-        self.analytics_month_button = self._range_preset_button(
-            "本月",
-            "只统计当前月份完成记录",
-            "historyAnalyticsPresetButton",
-        )
-        self.analytics_all_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("all"))
-        self.analytics_week_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("week"))
-        self.analytics_month_button.clicked.connect(lambda checked=False: self._apply_analytics_preset("month"))
-        for preset_button in (self.analytics_all_button, self.analytics_week_button, self.analytics_month_button):
-            analytics_range.addWidget(preset_button)
-        analytics_range.addSpacing(4)
-        self.analytics_start_date = self._date_edit(
-            "historyAnalyticsStartDate",
-            "historyAnalyticsStartCalendar",
-            "选择统计图表的起始完成日期",
-            "统计起始日期",
-        )
-        self.analytics_start_date_chip = _date_chip("起始", self.analytics_start_date)
-        analytics_range.addWidget(self.analytics_start_date_chip, 1)
-        analytics_to_label = QLabel("→")
-        analytics_to_label.setObjectName("historyAnalyticsArrow")
-        analytics_to_label.setAlignment(Qt.AlignCenter)
-        analytics_to_label.setFixedHeight(36)
-        analytics_range.addWidget(analytics_to_label)
-        self.analytics_end_date = self._date_edit(
-            "historyAnalyticsEndDate",
-            "historyAnalyticsEndCalendar",
-            "选择统计图表的结束完成日期",
-            "统计结束日期",
-        )
-        self.analytics_end_date_chip = _date_chip("结束", self.analytics_end_date)
-        analytics_range.addWidget(self.analytics_end_date_chip, 1)
-        stats_layout.addWidget(analytics_panel)
-
-        charts_panel = QFrame()
-        charts_panel.setObjectName("historyChartsPanel")
-        charts_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.history_charts_panel = charts_panel
-        chart_grid = QGridLayout(charts_panel)
-        chart_grid.setContentsMargins(0, 0, 0, 0)
-        chart_grid.setHorizontalSpacing(8)
-        chart_grid.setVerticalSpacing(8)
-        self.priority_donut_chart = PriorityDonutChart()
-        self.completion_trend_chart = CompletionTrendChart()
-        self.deadline_outcome_chart = DeadlineOutcomeChart()
-        chart_grid.addWidget(
-            self._chart_card("优先级结构", "高 / 中 / 低 完成占比", self.priority_donut_chart, "priority"),
-            0,
-            0,
-        )
-        chart_grid.addWidget(
-            self._chart_card("完成曲线", "最近完成节奏", self.completion_trend_chart, "trend"),
-            0,
-            1,
-        )
-        chart_grid.addWidget(
-            self._chart_card("超时分布", "准时、超时与无截止", self.deadline_outcome_chart, "deadline"),
-            0,
-            2,
-        )
-        chart_grid.setColumnStretch(0, 1)
-        chart_grid.setColumnStretch(1, 1)
-        chart_grid.setColumnStretch(2, 1)
-        stats_layout.addWidget(charts_panel)
-        content_layout.addWidget(stats_panel)
-
-        toolbar_panel = QFrame()
-        toolbar_panel.setObjectName("historyToolbar")
-        toolbar_layout = QVBoxLayout(toolbar_panel)
-        toolbar_layout.setContentsMargins(6, 6, 6, 6)
-        toolbar_layout.setSpacing(6)
-
-        search_panel = QFrame()
-        search_panel.setObjectName("historySearchPanel")
-        search_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.history_search_panel = search_panel
-        search_row = QHBoxLayout(search_panel)
-        search_row.setContentsMargins(8, 5, 8, 5)
-        search_row.setSpacing(8)
-        self.search_input = QLineEdit()
-        self.search_input.setObjectName("historySearch")
-        self.search_input.setPlaceholderText("按任务名称搜索")
-        self.search_input.textChanged.connect(self._render)
-        search_row.addWidget(self.search_input, 1)
-        self.group_mode = QComboBox()
-        self.group_mode.setObjectName("historyMode")
-        self.group_mode.addItems(["按日期", "按等级"])
-        self.group_mode.currentTextChanged.connect(self._reset_page)
-        search_row.addWidget(self.group_mode)
-        page_size_label = QLabel("每页")
-        page_size_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-weight: 700;")
-        search_row.addWidget(page_size_label)
-        self.page_size_input = QSpinBox()
-        self.page_size_input.setRange(1, 100)
-        self.page_size_input.setValue(8)
-        self.page_size_input.setSuffix(" 条")
-        self.page_size_input.setToolTip("右侧 ↑ 增加每页条数，↓ 减少每页条数")
-        self.page_size_input.valueChanged.connect(self._reset_page)
-        search_row.addWidget(self.page_size_input)
-
-        export_panel = QFrame()
-        export_panel.setObjectName("historyExportPanel")
-        export_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        export_panel_layout = QVBoxLayout(export_panel)
-        export_panel_layout.setContentsMargins(10, 6, 10, 6)
-        export_panel_layout.setSpacing(6)
-        export_header = QHBoxLayout()
-        export_header.setContentsMargins(0, 0, 0, 0)
-        export_header.setSpacing(8)
-        export_range_label = QLabel("导出区间")
-        export_range_label.setObjectName("historyExportTitle")
-        export_range_label.setAlignment(Qt.AlignCenter)
-        export_range_label.setFixedHeight(30)
-        export_range_label.setMinimumWidth(70)
-        export_header.addWidget(export_range_label)
-        self.export_count_label = QLabel("0 条")
-        self.export_count_label.setObjectName("historyExportCount")
-        self.export_count_label.setAlignment(Qt.AlignCenter)
-        self.export_count_label.setFixedHeight(30)
-        export_header.addWidget(self.export_count_label)
-        export_header.addStretch(1)
-        self.export_all_button = self._export_preset_button("全部", "导出全部完成记录")
-        self.export_week_button = self._export_preset_button("近7日", "快速选择最近 7 天")
-        self.export_month_button = self._export_preset_button("本月", "快速选择当前月份")
-        self.export_all_button.clicked.connect(lambda checked=False: self._apply_export_preset("all"))
-        self.export_week_button.clicked.connect(lambda checked=False: self._apply_export_preset("week"))
-        self.export_month_button.clicked.connect(lambda checked=False: self._apply_export_preset("month"))
-        for preset_button in (self.export_all_button, self.export_week_button, self.export_month_button):
-            export_header.addWidget(preset_button)
-        export_panel_layout.addLayout(export_header)
-
-        export_row = QHBoxLayout()
-        export_row.setContentsMargins(0, 0, 0, 0)
-        export_row.setSpacing(9)
-        self.export_start_date = QDateEdit()
-        self.export_start_date.setObjectName("historyExportStartDate")
-        self.export_start_date.setCalendarPopup(True)
-        apply_dark_calendar_popup(self.export_start_date, "historyExportStartCalendar")
-        self.export_start_date.setDisplayFormat("yyyy-MM-dd")
-        self.export_start_date.setToolTip("选择 CSV 导出的起始完成日期")
-        self.export_start_date.setAccessibleName("导出起始日期")
-        self.export_start_date_chip = _export_date_chip("起始", self.export_start_date)
-        export_row.addWidget(self.export_start_date_chip, 1)
-        export_to_label = QLabel("→")
-        export_to_label.setObjectName("historyExportArrow")
-        export_to_label.setAlignment(Qt.AlignCenter)
-        export_to_label.setFixedHeight(36)
-        export_row.addWidget(export_to_label)
-        self.export_end_date = QDateEdit()
-        self.export_end_date.setObjectName("historyExportEndDate")
-        self.export_end_date.setCalendarPopup(True)
-        apply_dark_calendar_popup(self.export_end_date, "historyExportEndCalendar")
-        self.export_end_date.setDisplayFormat("yyyy-MM-dd")
-        self.export_end_date.setToolTip("选择 CSV 导出的结束完成日期")
-        self.export_end_date.setAccessibleName("导出结束日期")
-        self.export_end_date_chip = _export_date_chip("结束", self.export_end_date)
-        export_row.addWidget(self.export_end_date_chip, 1)
-        self.export_button = QPushButton("导出 CSV")
-        self.export_button.setObjectName("historyExportButton")
-        self.export_button.setToolTip("导出当前搜索结果中日期范围内的历史记录表格")
-        self.export_button.setFixedHeight(36)
-        self.export_button.clicked.connect(self.export_history)
-        export_row.addWidget(self.export_button)
-        export_panel_layout.addLayout(export_row)
-        toolbar_layout.addWidget(search_panel)
-        toolbar_layout.addWidget(export_panel)
-        content_layout.addWidget(toolbar_panel)
-        self._configure_analytics_date_range()
-        self._configure_export_date_range()
-        self.analytics_start_date.dateChanged.connect(self._render)
-        self.analytics_end_date.dateChanged.connect(self._render)
-        self.export_start_date.dateChanged.connect(self._update_export_count)
-        self.export_end_date.dateChanged.connect(self._update_export_count)
-
-        self.date_pager_widget = QFrame()
-        self.date_pager_widget.setObjectName("historyPagerPanel")
-        date_pager_layout = QHBoxLayout(self.date_pager_widget)
-        date_pager_layout.setContentsMargins(8, 5, 8, 5)
-        date_pager_layout.setSpacing(8)
-        date_selector_label = QLabel("日期")
-        date_selector_label.setObjectName("historyToolbarLabel")
-        date_pager_layout.addWidget(date_selector_label)
-        self.date_selector = QComboBox()
-        self.date_selector.setObjectName("historyDateSelector")
-        self.date_selector.setToolTip("选择要查看的完成日期")
-        self.date_selector.currentIndexChanged.connect(self._select_date_from_combo)
-        date_pager_layout.addWidget(self.date_selector, 1)
-        self.date_page_label = QLabel("")
-        self.date_page_label.setObjectName("historyPageLabel")
-        date_pager_layout.addWidget(self.date_page_label, 1)
-        self.prev_date_button = QPushButton("上一页")
-        self.prev_date_button.setObjectName("historyPageButton")
-        self.prev_date_button.clicked.connect(lambda checked=False: self._move_date_page(-1))
-        date_pager_layout.addWidget(self.prev_date_button)
-        self.next_date_button = QPushButton("下一页")
-        self.next_date_button.setObjectName("historyPageButton")
-        self.next_date_button.clicked.connect(lambda checked=False: self._move_date_page(1))
-        date_pager_layout.addWidget(self.next_date_button)
-        content_layout.addWidget(self.date_pager_widget)
-
-        self.container = QWidget()
-        self.container.setStyleSheet("background: transparent;")
-        self.list_layout = QGridLayout(self.container)
-        self.list_layout.setContentsMargins(0, 0, 0, 0)
-        self.list_layout.setHorizontalSpacing(10)
-        self.list_layout.setVerticalSpacing(10)
-
-        scroll = QScrollArea()
-        scroll.setObjectName("historyRecordsPanel")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setViewportMargins(8, 8, 8, 8)
-        scroll.viewport().setAutoFillBackground(False)
-        scroll.viewport().setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-            " stop:0 #111C3F, stop:0.34 #182252, stop:0.68 #073B4C, stop:1 #073B2D);"
-        )
-        scroll.setWidget(self.container)
-        scroll.setMinimumHeight(160)
-        self.history_scroll_area = scroll
-        self.history_records_panel = scroll
-        content_layout.addWidget(scroll, 1)
+        self.analysis_summary_panel = self._build_analysis_summary_panel()
+        analysis_layout.addWidget(self.analysis_summary_panel)
+        self.analysis_charts_panel = self._build_analysis_charts_panel()
+        analysis_layout.addWidget(self.analysis_charts_panel)
+        self.analysis_actions_panel = self._build_analysis_actions_panel()
+        analysis_layout.addWidget(self.analysis_actions_panel)
+        analysis_layout.addStretch(1)
 
         resize_row = QHBoxLayout()
         resize_row.setContentsMargins(0, 0, 0, 0)
@@ -716,550 +464,1080 @@ class HistoryWindow(QDialog):
         self.history_resize_grip = QSizeGrip(self)
         self.history_resize_grip.setToolTip("拖动调整历史窗口大小")
         resize_row.addWidget(self.history_resize_grip)
-        root.addLayout(resize_row)
+        content_root.addLayout(resize_row)
+
+        self._configure_date_range()
+        self._set_history_section("history")
         self._render()
 
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        if not hasattr(self, "history_scroll_area") or not hasattr(self, "list_layout"):
-            return
-        next_columns = self._history_grid_columns()
-        if next_columns != self._history_column_count:
-            self._render()
+    def _build_sidebar(self) -> QFrame:
+        sidebar = QFrame()
+        sidebar.setObjectName("historySidebar")
+        sidebar.setFixedWidth(160)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(12, 16, 12, 16)
+        layout.setSpacing(12)
 
-    def toggle_fullscreen(self) -> None:
-        if self.isFullScreen():
-            self.showNormal()
-            if self._normal_geometry_before_fullscreen is not None:
-                self.setGeometry(self._normal_geometry_before_fullscreen)
-            self.fullscreen_button.setText("□")
-            self.fullscreen_button.setToolTip("全屏历史窗口")
-            return
-        self._normal_geometry_before_fullscreen = QRect(self.geometry())
-        self.fullscreen_button.setText("▣")
-        self.fullscreen_button.setToolTip("还原历史窗口")
-        self.showFullScreen()
+        brand = QFrame()
+        brand.setObjectName("historySidebarBrand")
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(12, 14, 12, 14)
+        brand_layout.setSpacing(10)
+        logo = QLabel("")
+        logo.setObjectName("historySidebarLogo")
+        logo.setAlignment(Qt.AlignCenter)
+        logo.setFixedSize(50, 50)
+        logo.setPixmap(QIcon(str(UI_ICON_DIR / "history-logo.svg")).pixmap(QSize(28, 28)))
+        brand_layout.addWidget(logo, 0, Qt.AlignCenter)
+        title = QLabel("Todo List")
+        title.setObjectName("historySidebarTitle")
+        title.setAlignment(Qt.AlignCenter)
+        brand_layout.addWidget(title)
+        layout.addWidget(brand)
 
-    def _metric_label(self, text: str, object_name: str = "historyMetricChip") -> QLabel:
+        self.history_sidebar_buttons: dict[str, QPushButton] = {}
+        definitions = [
+            ("tasks", "任务", "nav-task.svg", "返回主任务窗口", self._open_main_workspace),
+            ("history", "历史任务", "nav-history.svg", "查看历史任务工作台", lambda: self._set_history_section("history")),
+            ("analysis", "统计分析", "nav-analysis.svg", "查看统计分析工作台", lambda: self._set_history_section("analysis")),
+            ("settings", "设置", "nav-settings.svg", "打开设置窗口", self._open_settings_workspace),
+        ]
+        for key, text, icon_name, tooltip, callback in definitions:
+            button = QPushButton(text)
+            button.setObjectName("historySidebarButton")
+            button.setProperty("effectVariant", "nav")
+            button.setCheckable(key in {"history", "analysis"})
+            button.setCursor(Qt.PointingHandCursor)
+            button.setToolTip(tooltip)
+            button.setAccessibleName(text)
+            button.clicked.connect(callback)
+            self._set_button_icon(button, icon_name, size=18)
+            layout.addWidget(button)
+            self.history_sidebar_buttons[key] = button
+
+        layout.addStretch(1)
+
+        self.history_top_button = QPushButton("回到顶部")
+        self.history_top_button.setObjectName("historySidebarUtility")
+        self.history_top_button.setProperty("effectVariant", "utility")
+        self.history_top_button.setCursor(Qt.PointingHandCursor)
+        self.history_top_button.setToolTip("将当前页面滚动到顶部")
+        self.history_top_button.clicked.connect(self._scroll_current_section_to_top)
+        self._set_button_icon(self.history_top_button, "step-up.svg", size=16)
+        layout.addWidget(self.history_top_button)
+        return sidebar
+
+    def _build_header_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyHeaderPanel")
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
+
+        title_stack = QVBoxLayout()
+        title_stack.setContentsMargins(0, 0, 0, 0)
+        title_stack.setSpacing(4)
+        title = QLabel("历史任务概览")
+        title.setObjectName("historyTitle")
+        subtitle = QLabel("复盘记录 · 数据洞察 · 持续优化")
+        subtitle.setObjectName("historySubtitle")
+        title_stack.addWidget(title)
+        title_stack.addWidget(subtitle)
+        layout.addLayout(title_stack, 1)
+
+        self.count_label = QLabel("0 条")
+        self.count_label.setObjectName("historyCountChip")
+        self.count_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.count_label)
+        return panel
+
+    def _build_metrics_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyStatsPanel")
+        layout = QGridLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(10)
+
+        chips = [
+            self._metric_chip("高：0", "historyPriorityMetricP1", "priority-high.svg", "historyMetricShellP1"),
+            self._metric_chip("中：0", "historyPriorityMetricP2", "priority-medium.svg", "historyMetricShellP2"),
+            self._metric_chip("低：0", "historyPriorityMetricP3", "priority-low.svg", "historyMetricShellP3"),
+            self._metric_chip("复盘 0/0", "historyMetricChip", "record-note.svg", "historyMetricShell"),
+            self._metric_chip("准时率 --", "historyMetricChip", "record-status.svg", "historyMetricShell"),
+            self._metric_chip("超时 0/0", "historyOverdueMetric", "window-close.svg", "historyMetricShellOverdue"),
+            self._metric_chip("无截止 0", "historyMetricChip", "record-calendar.svg", "historyMetricShell"),
+            self._metric_chip("最近 --", "historyMetricChip", "record-clock.svg", "historyMetricShell"),
+        ]
+        (
+            (_, self.priority_p1_label),
+            (_, self.priority_p2_label),
+            (_, self.priority_p3_label),
+            (_, self.review_metric_label),
+            (_, self.on_time_metric_label),
+            (_, self.overdue_metric_label),
+            (_, self.average_metric_label),
+            (_, self.latest_metric_label),
+        ) = chips
+        for index, (chip, _) in enumerate(chips):
+            layout.addWidget(chip, index // 4, index % 4)
+            layout.setColumnStretch(index % 4, 1)
+        return panel
+
+    def _build_analytics_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyAnalyticsPanel")
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        title = QLabel("统计范围")
+        title.setObjectName("historyAnalyticsTitle")
+        layout.addWidget(title)
+
+        self.analytics_count_label = QLabel("0 条")
+        self.analytics_count_label.setObjectName("historyAnalyticsCount")
+        self.analytics_count_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.analytics_count_label)
+
+        self.analytics_all_button = self._range_preset_button("全部", lambda: self._apply_range_preset("all"))
+        self.analytics_week_button = self._range_preset_button("近7日", lambda: self._apply_range_preset("week"))
+        self.analytics_month_button = self._range_preset_button("本月", lambda: self._apply_range_preset("month"))
+        for button in (self.analytics_all_button, self.analytics_week_button, self.analytics_month_button):
+            layout.addWidget(button)
+
+        self.analytics_start_date = self._date_edit(
+            "historyAnalyticsStartDate",
+            "historyAnalyticsStartCalendar",
+            "统计起始日期",
+            "选择统计区间的开始日期",
+        )
+        self.analytics_end_date = self._date_edit(
+            "historyAnalyticsEndDate",
+            "historyAnalyticsEndCalendar",
+            "统计结束日期",
+            "选择统计区间的结束日期",
+        )
+        self.analytics_start_date_chip = _date_chip("开始", self.analytics_start_date)
+        self.analytics_end_date_chip = _date_chip("结束", self.analytics_end_date)
+        layout.addWidget(self.analytics_start_date_chip, 1)
+        arrow = QLabel("→")
+        arrow.setObjectName("historyAnalyticsArrow")
+        arrow.setAlignment(Qt.AlignCenter)
+        layout.addWidget(arrow)
+        layout.addWidget(self.analytics_end_date_chip, 1)
+        layout.addStretch(1)
+
+        self.sort_mode = NoWheelComboBox()
+        self.sort_mode.setObjectName("historySortMode")
+        for label, key in SORT_FILTERS:
+            self.sort_mode.addItem(label, key)
+        self.sort_mode.currentIndexChanged.connect(self._reset_page)
+        layout.addWidget(self.sort_mode)
+
+        self.apply_filter_button = QPushButton("重置筛选")
+        self.apply_filter_button.setObjectName("historyActionButton")
+        self.apply_filter_button.setCursor(Qt.PointingHandCursor)
+        self.apply_filter_button.clicked.connect(self._reset_filters)
+        layout.addWidget(self.apply_filter_button)
+        return panel
+
+    def _build_history_charts_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyChartsPanel")
+        layout = QGridLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(12)
+
+        self.priority_donut_chart = PriorityDonutChart()
+        self.completion_trend_chart = CompletionTrendChart()
+        self.deadline_outcome_chart = DeadlineOutcomeChart()
+
+        layout.addWidget(self._chart_card("优先级结构", "高 / 中 / 低完成占比", self.priority_donut_chart, "priority"), 0, 0)
+        layout.addWidget(self._chart_card("完成节奏", "最近每天完成任务数量趋势", self.completion_trend_chart, "trend"), 0, 1)
+        layout.addWidget(self._chart_card("准时率与超时分布", "准时、超时与无截止", self.deadline_outcome_chart, "deadline"), 0, 2)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 1)
+        return panel
+
+    def _build_records_tools_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyToolbar")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        title = QLabel("历史记录列表")
+        title.setObjectName("historySectionTitle")
+        header_row.addWidget(title)
+        self.records_count_label = QLabel("0 条")
+        self.records_count_label.setObjectName("historySectionCount")
+        self.records_count_label.setAlignment(Qt.AlignCenter)
+        header_row.addWidget(self.records_count_label)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(10)
+        self.search_input = QLineEdit()
+        self.search_input.setObjectName("historySearch")
+        self.search_input.setPlaceholderText("搜索任务名称、备注或复盘")
+        self.search_input.textChanged.connect(self._reset_page)
+        filters_row.addWidget(self.search_input, 2)
+
+        self.status_filter = NoWheelComboBox()
+        self.status_filter.setObjectName("historyStatusFilter")
+        for label, key in STATUS_FILTERS:
+            self.status_filter.addItem(label, key)
+        self.status_filter.currentIndexChanged.connect(self._reset_page)
+        filters_row.addWidget(self.status_filter)
+
+        self.priority_filter = NoWheelComboBox()
+        self.priority_filter.setObjectName("historyPriorityFilter")
+        for label, key in PRIORITY_FILTERS:
+            self.priority_filter.addItem(label, key)
+        self.priority_filter.currentIndexChanged.connect(self._reset_page)
+        filters_row.addWidget(self.priority_filter)
+
+        self.page_size_combo = NoWheelComboBox()
+        self.page_size_combo.setObjectName("historyPageSize")
+        for size in PAGE_SIZES:
+            self.page_size_combo.addItem(f"每页 {size} 条", size)
+        self.page_size_combo.setCurrentIndex(0)
+        self.page_size_combo.currentIndexChanged.connect(self._reset_page)
+        filters_row.addWidget(self.page_size_combo)
+        layout.addLayout(filters_row)
+
+        export_row = QHBoxLayout()
+        export_row.setSpacing(10)
+        export_label = QLabel("导出范围")
+        export_label.setObjectName("historyToolbarLabel")
+        export_row.addWidget(export_label)
+
+        self.export_count_label = QLabel("0 条")
+        self.export_count_label.setObjectName("historyExportCount")
+        self.export_count_label.setAlignment(Qt.AlignCenter)
+        export_row.addWidget(self.export_count_label)
+
+        self.export_start_date = self._date_edit(
+            "historyExportStartDate",
+            "historyExportStartCalendar",
+            "导出起始日期",
+            "选择导出记录的开始日期",
+        )
+        self.export_end_date = self._date_edit(
+            "historyExportEndDate",
+            "historyExportEndCalendar",
+            "导出结束日期",
+            "选择导出记录的结束日期",
+        )
+        self.export_start_date_chip = _date_chip("开始", self.export_start_date)
+        self.export_end_date_chip = _date_chip("结束", self.export_end_date)
+        export_row.addWidget(self.export_start_date_chip, 1)
+        export_arrow = QLabel("→")
+        export_arrow.setObjectName("historyExportArrow")
+        export_arrow.setAlignment(Qt.AlignCenter)
+        export_row.addWidget(export_arrow)
+        export_row.addWidget(self.export_end_date_chip, 1)
+
+        self.export_button = QPushButton("导出 CSV")
+        self.export_button.setObjectName("historyExportButton")
+        self.export_button.setCursor(Qt.PointingHandCursor)
+        self.export_button.setToolTip("按当前筛选结果和导出日期导出记录")
+        self._set_button_icon(self.export_button, "record-status.svg", size=16)
+        self.export_button.clicked.connect(self.export_history)
+        export_row.addWidget(self.export_button)
+        layout.addLayout(export_row)
+        return panel
+
+    def _build_records_panel(self) -> tuple[QScrollArea, QWidget, QGridLayout]:
+        scroll = QScrollArea()
+        scroll.setObjectName("historyRecordsPanel")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        container = QWidget()
+        container.setObjectName("historyRecordsViewport")
+        layout = QGridLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(12)
+        scroll.setWidget(container)
+        return scroll, container, layout
+
+    def _build_pagination_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyPagerPanel")
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(10)
+
+        self.page_summary_label = QLabel("第 1 / 1 页")
+        self.page_summary_label.setObjectName("historyPageLabel")
+        layout.addWidget(self.page_summary_label)
+        layout.addStretch(1)
+
+        self.prev_page_button = QPushButton("上一页")
+        self.prev_page_button.setObjectName("historyPageButton")
+        self.prev_page_button.setCursor(Qt.PointingHandCursor)
+        self._set_button_icon(self.prev_page_button, "step-down.svg", size=14)
+        self.prev_page_button.clicked.connect(lambda checked=False: self._move_page(-1))
+        layout.addWidget(self.prev_page_button)
+
+        self.page_jump_input = NoWheelSpinBox()
+        self.page_jump_input.setObjectName("historyPageJump")
+        self.page_jump_input.setRange(1, 1)
+        self.page_jump_input.setButtonSymbols(QSpinBox.NoButtons)
+        self.page_jump_input.editingFinished.connect(self._jump_to_page)
+        layout.addWidget(self.page_jump_input)
+
+        self.next_page_button = QPushButton("下一页")
+        self.next_page_button.setObjectName("historyPageButton")
+        self.next_page_button.setCursor(Qt.PointingHandCursor)
+        self._set_button_icon(self.next_page_button, "step-up.svg", size=14)
+        self.next_page_button.clicked.connect(lambda checked=False: self._move_page(1))
+        layout.addWidget(self.next_page_button)
+        return panel
+
+    def _build_analysis_summary_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyAnalysisSummaryPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        stack = QVBoxLayout()
+        stack.setContentsMargins(0, 0, 0, 0)
+        stack.setSpacing(4)
+        title = QLabel("统计分析")
+        title.setObjectName("historyAnalysisSummaryTitle")
+        subtitle = QLabel("共享同一统计区间，聚焦趋势与完成质量")
+        subtitle.setObjectName("historySubtitle")
+        stack.addWidget(title)
+        stack.addWidget(subtitle)
+        header.addLayout(stack, 1)
+        self.analysis_count_label = QLabel("0 条")
+        self.analysis_count_label.setObjectName("historyAnalysisCountChip")
+        self.analysis_count_label.setAlignment(Qt.AlignCenter)
+        header.addWidget(self.analysis_count_label)
+        layout.addLayout(header)
+
+        info_row = QHBoxLayout()
+        info_row.setSpacing(10)
+        self.analysis_range_label = QLabel("")
+        self.analysis_range_label.setObjectName("historyAnalysisInfoChip")
+        info_row.addWidget(self.analysis_range_label, 1)
+        self.analysis_state_label = QLabel("已隐藏所有进度展示")
+        self.analysis_state_label.setObjectName("historyAnalysisInfoChip")
+        info_row.addWidget(self.analysis_state_label)
+        layout.addLayout(info_row)
+
+        rhythm_row = QHBoxLayout()
+        rhythm_row.setSpacing(10)
+        self.analysis_rhythm_hint_label = QLabel("完成节奏 = 最近一段时间每天完成任务数量的趋势")
+        self.analysis_rhythm_hint_label.setObjectName("historyAnalysisInfoChip")
+        rhythm_row.addWidget(self.analysis_rhythm_hint_label, 1)
+        layout.addLayout(rhythm_row)
+
+        insights = QGridLayout()
+        insights.setContentsMargins(0, 0, 0, 0)
+        insights.setHorizontalSpacing(12)
+        insights.setVerticalSpacing(12)
+        (
+            insight_total,
+            self.analysis_total_value_label,
+            self.analysis_total_detail_label,
+        ) = self._analysis_insight_card("完成总数", "当前统计区间内的完成记录")
+        (
+            insight_priority,
+            self.analysis_priority_value_label,
+            self.analysis_priority_detail_label,
+        ) = self._analysis_insight_card("优先级结论", "当前完成结构中的主导优先级")
+        (
+            insight_on_time,
+            self.analysis_on_time_value_label,
+            self.analysis_on_time_detail_label,
+        ) = self._analysis_insight_card("准时率结论", "只统计已设置截止时间的完成记录")
+        (
+            insight_peak,
+            self.analysis_peak_value_label,
+            self.analysis_peak_detail_label,
+        ) = self._analysis_insight_card("最近高峰", "完成更活跃的日期与数量")
+        for index, card in enumerate((insight_total, insight_priority, insight_on_time, insight_peak)):
+            insights.addWidget(card, index // 2, index % 2)
+            insights.setColumnStretch(index % 2, 1)
+        layout.addLayout(insights)
+        return panel
+
+    def _build_analysis_charts_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyAnalysisChartsPanel")
+        layout = QGridLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(12)
+
+        self.analysis_priority_donut_chart = PriorityDonutChart()
+        self.analysis_completion_trend_chart = CompletionTrendChart()
+        self.analysis_deadline_outcome_chart = DeadlineOutcomeChart()
+        layout.addWidget(self._chart_card("优先级结构", "高 / 中 / 低完成占比", self.analysis_priority_donut_chart, "priority"), 0, 0)
+        layout.addWidget(self._chart_card("完成节奏", "最近每天完成任务数量趋势", self.analysis_completion_trend_chart, "trend"), 0, 1)
+        layout.addWidget(self._chart_card("准时率与超时分布", "准时、超时与无截止", self.analysis_deadline_outcome_chart, "deadline"), 1, 0, 1, 2)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+        return panel
+
+    def _build_analysis_actions_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyAnalysisActionPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("整理建议")
+        title.setObjectName("historyAnalysisSummaryTitle")
+        layout.addWidget(title)
+
+        self.analysis_action_summary_label = QLabel("统计分析页会根据当前时间范围给出待补记、复盘和超时整理建议。")
+        self.analysis_action_summary_label.setObjectName("historySubtitle")
+        self.analysis_action_summary_label.setWordWrap(True)
+        layout.addWidget(self.analysis_action_summary_label)
+
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(10)
+        self.analysis_pending_notes_chip = QLabel("待补记 0 条")
+        self.analysis_pending_notes_chip.setObjectName("historyAnalysisInfoChip")
+        metrics_row.addWidget(self.analysis_pending_notes_chip)
+        self.analysis_reviewed_chip = QLabel("已复盘 0/0")
+        self.analysis_reviewed_chip.setObjectName("historyAnalysisInfoChip")
+        metrics_row.addWidget(self.analysis_reviewed_chip)
+        self.analysis_overdue_chip = QLabel("超时完成 0/0")
+        self.analysis_overdue_chip.setObjectName("historyAnalysisInfoChip")
+        metrics_row.addWidget(self.analysis_overdue_chip)
+        metrics_row.addStretch(1)
+        layout.addLayout(metrics_row)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
+        self.analysis_needs_notes_button = self._analysis_action_button("查看待补记", lambda: self._jump_to_history_records(status="needs_notes"))
+        self.analysis_reviewed_button = self._analysis_action_button("查看已复盘", lambda: self._jump_to_history_records(status="reviewed"))
+        self.analysis_overdue_button = self._analysis_action_button("查看超时记录", lambda: self._jump_to_history_records(status="overdue"))
+        for button in (self.analysis_needs_notes_button, self.analysis_reviewed_button, self.analysis_overdue_button):
+            action_row.addWidget(button)
+        action_row.addStretch(1)
+        layout.addLayout(action_row)
+        return panel
+
+    def _create_section_page(self, object_name: str) -> tuple[QScrollArea, QFrame, QVBoxLayout]:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setObjectName(f"{object_name}Scroll")
+
+        page = QFrame()
+        page.setObjectName(object_name)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(12)
+        scroll.setWidget(page)
+        return scroll, page, layout
+
+    def _metric_chip(self, text: str, object_name: str, icon_name: str, shell_name: str) -> tuple[QFrame, QLabel]:
+        shell = QFrame()
+        shell.setObjectName(shell_name)
+        layout = QHBoxLayout(shell)
+        layout.setContentsMargins(10, 9, 10, 9)
+        layout.setSpacing(8)
+        layout.addWidget(self._icon_chip(icon_name, size=14, object_name="historyMetricIcon"))
         label = QLabel(text)
         label.setObjectName(object_name)
-        label.setAlignment(Qt.AlignCenter)
-        label.setFixedHeight(28)
-        label.setWordWrap(False)
-        label.setToolTip(text)
-        return label
+        label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        label.setWordWrap(True)
+        layout.addWidget(label, 1)
+        return shell, label
 
-    def _chart_card(self, title: str, subtitle: str, chart: QWidget, tone: str = "neutral") -> QFrame:
+    def _priority_badge(self, priority: str) -> QFrame:
+        shell = QFrame()
+        shell.setObjectName(f"historyPriorityBadge{priority}")
+        layout = QHBoxLayout(shell)
+        layout.setContentsMargins(8, 0, 10, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self._icon_chip(PRIORITY_ICON_NAMES[priority], size=12, object_name="historyPriorityIcon"))
+        label = QLabel(priority_text(priority))
+        label.setObjectName(f"historyPriority{priority}")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        return shell
+
+    def _set_button_icon(self, button: QPushButton | QToolButton, icon_name: str, *, size: int = 18, icon_only: bool = False) -> None:
+        button.setIcon(QIcon(str(UI_ICON_DIR / icon_name)))
+        button.setIconSize(QSize(size, size))
+        if icon_only and hasattr(button, "setText"):
+            button.setText("")
+
+    def _icon_chip(self, icon_name: str, *, size: int = 16, object_name: str = "historyInlineIcon") -> QLabel:
+        chip = QLabel("")
+        chip.setObjectName(object_name)
+        chip.setFixedSize(size + 14, size + 14)
+        chip.setAlignment(Qt.AlignCenter)
+        chip.setPixmap(QIcon(str(UI_ICON_DIR / icon_name)).pixmap(QSize(size, size)))
+        return chip
+
+    def _range_preset_button(self, text: str, callback) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("historyAnalyticsPresetButton")
+        button.setCursor(Qt.PointingHandCursor)
+        button.clicked.connect(callback)
+        return button
+
+    def _analysis_action_button(self, text: str, callback) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("historyActionButton")
+        button.setCursor(Qt.PointingHandCursor)
+        button.clicked.connect(callback)
+        return button
+
+    def _analysis_insight_card(self, title: str, detail: str) -> tuple[QFrame, QLabel, QLabel]:
+        card = QFrame()
+        card.setObjectName("historyAnalysisInsightCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(6)
+        title_label = QLabel(title)
+        title_label.setObjectName("historyChartTitle")
+        value_label = QLabel("--")
+        value_label.setObjectName("historyAnalysisInsightValue")
+        value_label.setTextFormat(Qt.RichText)
+        detail_label = QLabel(detail)
+        detail_label.setObjectName("historyChartSubtitle")
+        detail_label.setWordWrap(True)
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        layout.addWidget(detail_label)
+        return card, value_label, detail_label
+
+    def _priority_markup(self, priority: str, *, size: int = 13, suffix: str = "") -> str:
+        icon_path = (UI_ICON_DIR / PRIORITY_ICON_NAMES.get(priority, "priority-medium.svg")).as_posix()
+        label = priority_text(priority)
+        trailing = f" {suffix}" if suffix else ""
+        return (
+            f"<span style=\"white-space: nowrap;\">"
+            f"<img src=\"{icon_path}\" width=\"{size}\" height=\"{size}\" "
+            f"style=\"vertical-align: middle; margin-right: 6px;\"/>"
+            f"{label}{trailing}</span>"
+        )
+
+    def _date_edit(self, object_name: str, calendar_name: str, accessible_name: str, tooltip: str) -> QDateEdit:
+        edit = NoWheelDateEdit()
+        edit.setObjectName(object_name)
+        edit.setCalendarPopup(True)
+        edit.setDisplayFormat("yyyy-MM-dd")
+        edit.setAccessibleName(accessible_name)
+        edit.setToolTip(tooltip)
+        edit.setAlignment(Qt.AlignCenter)
+        apply_dark_calendar_popup(edit, calendar_name)
+        edit.dateChanged.connect(self._render)
+        return edit
+
+    def _chart_card(self, title: str, subtitle: str, widget: QWidget, tone: str) -> QFrame:
         card = QFrame()
         card.setObjectName("historyChartCard")
         card.setProperty("historyTone", tone)
-        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setFixedHeight(178)
-        apply_soft_shadow(card, blur=22, y_offset=8, alpha=80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(9, 6, 9, 6)
-        layout.setSpacing(2)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(8)
         title_label = QLabel(title)
         title_label.setObjectName("historyChartTitle")
         subtitle_label = QLabel(subtitle)
         subtitle_label.setObjectName("historyChartSubtitle")
-        subtitle_label.setWordWrap(False)
         layout.addWidget(title_label)
         layout.addWidget(subtitle_label)
-        layout.addWidget(chart, 1)
+        layout.addWidget(widget)
+        apply_soft_shadow(card, blur=28, y_offset=10, alpha=92)
         return card
 
-    def _date_edit(self, object_name: str, calendar_name: str, tooltip: str, accessible_name: str) -> QDateEdit:
-        edit = QDateEdit()
-        edit.setObjectName(object_name)
-        edit.setCalendarPopup(True)
-        apply_dark_calendar_popup(edit, calendar_name)
-        edit.setDisplayFormat("yyyy-MM-dd")
-        edit.setToolTip(tooltip)
-        edit.setAccessibleName(accessible_name)
-        edit.setAlignment(Qt.AlignCenter)
-        edit.setFixedHeight(28)
-        edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        return edit
+    def _set_history_section(self, section: str) -> None:
+        self._current_history_section = section
+        if section == "analysis":
+            self.history_section_stack.setCurrentWidget(self.history_analysis_scroll)
+            self.history_content_scroll = self.history_analysis_scroll
+            animate_content_swap(self.history_analysis_page)
+        else:
+            self.history_section_stack.setCurrentWidget(self.history_tasks_scroll)
+            self.history_content_scroll = self.history_tasks_scroll
+            animate_content_swap(self.history_tasks_page)
 
-    def _range_preset_button(self, text: str, tooltip: str, object_name: str) -> QPushButton:
-        button = QPushButton(text)
-        button.setObjectName(object_name)
-        button.setToolTip(tooltip)
-        button.setCursor(Qt.PointingHandCursor)
-        button.setFixedHeight(30)
-        button.setMinimumWidth(58)
-        return button
+        self.history_sidebar_buttons["history"].setChecked(section == "history")
+        self.history_sidebar_buttons["analysis"].setChecked(section == "analysis")
+        self._scroll_current_section_to_top()
 
-    def _export_preset_button(self, text: str, tooltip: str) -> QPushButton:
-        return self._range_preset_button(text, tooltip, "historyExportPresetButton")
+    def _scroll_current_section_to_top(self) -> None:
+        self.history_content_scroll.verticalScrollBar().setValue(0)
 
-    def _completed_date_bounds(self) -> tuple[date, date]:
-        dates = [_task_completed_date(task) for task in self.tasks if task.status == "done"]
-        dates = [item for item in dates if item is not None]
-        if dates:
-            return min(dates), max(dates)
-        today = QDate.currentDate().toPython()
-        return today, today
+    def _open_main_workspace(self) -> None:
+        parent = self.parentWidget()
+        if parent is None:
+            QMessageBox.information(self, "返回任务窗口", "当前历史工作台没有绑定主任务窗口。")
+            return
+        if hasattr(parent, "showNormal"):
+            parent.showNormal()
+        if hasattr(parent, "raise_"):
+            parent.raise_()
+        if hasattr(parent, "activateWindow"):
+            parent.activateWindow()
+        self.accept()
 
-    def _configure_date_range(self, start_edit: QDateEdit, end_edit: QDateEdit) -> tuple[date, date]:
-        start, end = self._completed_date_bounds()
+    def _open_settings_workspace(self) -> None:
+        parent = self.parentWidget()
+        if parent is None or not hasattr(parent, "open_settings"):
+            QMessageBox.information(self, "打开设置", "当前历史工作台没有可复用的设置窗口入口。")
+            return
+        parent.open_settings()
+
+    def _toggle_maximize(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+            self._set_button_icon(self.fullscreen_button, "window-maximize.svg", size=14, icon_only=True)
+            self.fullscreen_button.setToolTip("最大化历史窗口")
+            return
+        self.showMaximized()
+        self._set_button_icon(self.fullscreen_button, "window-restore.svg", size=14, icon_only=True)
+        self.fullscreen_button.setToolTip("还原历史窗口")
+
+    def _configure_date_range(self) -> None:
+        completed = self._completed_tasks()
+        if completed:
+            dates = [item for item in (_task_completed_date(task) for task in completed) if item is not None]
+            start = min(dates) if dates else date.today()
+            end = max(dates) if dates else date.today()
+        else:
+            start = end = date.today()
+
         start_qdate = QDate(start.year, start.month, start.day)
         end_qdate = QDate(end.year, end.month, end.day)
-        for edit, value in ((start_edit, start_qdate), (end_edit, end_qdate)):
-            edit.setDateRange(start_qdate, end_qdate)
-            edit.setDate(value)
-        return start, end
+        for edit in (self.analytics_start_date, self.export_start_date):
+            edit.blockSignals(True)
+            edit.setDate(start_qdate)
+            edit.blockSignals(False)
+        for edit in (self.analytics_end_date, self.export_end_date):
+            edit.blockSignals(True)
+            edit.setDate(end_qdate)
+            edit.blockSignals(False)
 
-    def _configure_export_date_range(self) -> None:
-        start, end = self._configure_date_range(self.export_start_date, self.export_end_date)
-        self._export_min_date = start
-        self._export_max_date = end
-        self._update_export_count()
-
-    def _configure_analytics_date_range(self) -> None:
-        start, end = self._configure_date_range(self.analytics_start_date, self.analytics_end_date)
-        self._analytics_min_date = start
-        self._analytics_max_date = end
-        self._update_analytics_count()
-
-    def _apply_date_preset(
-        self,
-        preset: str,
-        *,
-        start_edit: QDateEdit,
-        end_edit: QDateEdit,
-        min_date: date,
-        max_date: date,
-    ) -> None:
-        end = max_date
+    def _apply_range_preset(self, preset: str) -> None:
+        completed = self._completed_tasks()
+        today = max((_task_completed_date(task) or date.today()) for task in completed) if completed else date.today()
         if preset == "week":
-            start = max(min_date, end - timedelta(days=6))
+            start = today - timedelta(days=6)
+            end = today
         elif preset == "month":
-            start = max(min_date, date(end.year, end.month, 1))
+            start = today.replace(day=1)
+            end = today
         else:
-            start = min_date
-        start_edit.setDate(QDate(start.year, start.month, start.day))
-        end_edit.setDate(QDate(end.year, end.month, end.day))
+            dates = [item for item in (_task_completed_date(task) for task in completed) if item is not None]
+            start = min(dates) if dates else today
+            end = max(dates) if dates else today
+        self.analytics_start_date.setDate(QDate(start.year, start.month, start.day))
+        self.analytics_end_date.setDate(QDate(end.year, end.month, end.day))
 
-    def _apply_analytics_preset(self, preset: str) -> None:
-        min_date = getattr(self, "_analytics_min_date", QDate.currentDate().toPython())
-        max_date = getattr(self, "_analytics_max_date", QDate.currentDate().toPython())
-        self._apply_date_preset(
-            preset,
-            start_edit=self.analytics_start_date,
-            end_edit=self.analytics_end_date,
-            min_date=min_date,
-            max_date=max_date,
-        )
+    def _reset_filters(self) -> None:
+        self.search_input.clear()
+        self.status_filter.setCurrentIndex(0)
+        self.priority_filter.setCurrentIndex(0)
+        self.sort_mode.setCurrentIndex(0)
+        self.page_size_combo.setCurrentIndex(0)
+        self._selected_page_index = 0
         self._render()
 
-    def _apply_export_preset(self, preset: str) -> None:
-        min_date = getattr(self, "_export_min_date", QDate.currentDate().toPython())
-        max_date = getattr(self, "_export_max_date", QDate.currentDate().toPython())
-        self._apply_date_preset(
-            preset,
-            start_edit=self.export_start_date,
-            end_edit=self.export_end_date,
-            min_date=min_date,
-            max_date=max_date,
-        )
-        self._update_export_count()
+    def _completed_tasks(self) -> list[Task]:
+        return [task for task in self.tasks if task.status == "done"]
 
-    def _update_export_count(self, *args) -> None:
-        if not hasattr(self, "export_count_label"):
+    def _analytics_tasks(self) -> list[Task]:
+        start = self.analytics_start_date.date().toPython()
+        end = self.analytics_end_date.date().toPython()
+        return [task for task in self._completed_tasks() if _date_in_range(_task_completed_date(task), start, end)]
+
+    def _status_matches(self, task: Task) -> bool:
+        selected = str(self.status_filter.currentData() or "all")
+        reviewed = bool(task.notes.strip() or task.reflection.strip())
+        if selected == "all":
+            return True
+        if selected == "on_time":
+            return task.deadline is not None and not _task_completed_late(task)
+        if selected == "overdue":
+            return _task_completed_late(task)
+        if selected == "no_deadline":
+            return task.deadline is None
+        if selected == "reviewed":
+            return reviewed
+        if selected == "needs_notes":
+            return not reviewed
+        return True
+
+    def _filtered_completed_tasks(self) -> list[Task]:
+        search = self.search_input.text().strip().lower()
+        selected_priority = str(self.priority_filter.currentData() or "all")
+        tasks: list[Task] = []
+        for task in self._analytics_tasks():
+            if selected_priority != "all" and task.priority != selected_priority:
+                continue
+            if not self._status_matches(task):
+                continue
+            searchable = " ".join([task.title, task.notes, task.reflection]).lower()
+            if search and search not in searchable:
+                continue
+            tasks.append(task)
+        return self._sorted_completed_tasks(tasks)
+
+    def _sorted_completed_tasks(self, tasks: list[Task]) -> list[Task]:
+        mode = str(self.sort_mode.currentData() or "completed")
+        if mode == "priority":
+            priority_rank = {priority: index for index, priority in enumerate(PRIORITY_ORDER)}
+            return sorted(tasks, key=lambda task: (priority_rank.get(task.priority, 99), -(task.completed_at or task.updated_at).timestamp()))
+        if mode == "effort":
+            return sorted(tasks, key=lambda task: (-work_elapsed_seconds(task, task.completed_at or task.updated_at), task.title.lower()))
+        if mode == "title":
+            return sorted(tasks, key=lambda task: (task.title.lower(), -(task.completed_at or task.updated_at).timestamp()))
+        return sorted(tasks, key=lambda task: (task.completed_at or task.updated_at), reverse=True)
+
+    def _exportable_tasks(self) -> list[Task]:
+        start = self.export_start_date.date().toPython()
+        end = self.export_end_date.date().toPython()
+        return [task for task in self._filtered_completed_tasks() if _date_in_range(_task_completed_date(task), start, end)]
+
+    def _page_size(self) -> int:
+        return int(self.page_size_combo.currentData() or PAGE_SIZES[0])
+
+    def _page_count(self, tasks: list[Task]) -> int:
+        size = self._page_size()
+        return max(1, (len(tasks) + size - 1) // size)
+
+    def _paged_tasks(self, tasks: list[Task]) -> list[Task]:
+        size = self._page_size()
+        start = self._selected_page_index * size
+        end = start + size
+        return tasks[start:end]
+
+    def _move_page(self, offset: int) -> None:
+        tasks = self._filtered_completed_tasks()
+        if not tasks:
             return
-        self.export_count_label.setText(f"{len(self._exportable_tasks())} 条")
+        self._selected_page_index = max(0, min(self._selected_page_index + offset, self._page_count(tasks) - 1))
+        self._render()
 
-    def _update_analytics_count(self, tasks: list[Task] | None = None) -> None:
-        if not hasattr(self, "analytics_count_label"):
+    def _jump_to_page(self) -> None:
+        tasks = self._filtered_completed_tasks()
+        if not tasks:
             return
-        analytics_tasks = tasks if tasks is not None else self._analytics_tasks()
-        self.analytics_count_label.setText(f"{len(analytics_tasks)} 条")
-
-    def _render(self) -> None:
-        while self.list_layout.count():
-            item = self.list_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-        for row in range(self.list_layout.rowCount()):
-            self.list_layout.setRowStretch(row, 0)
-        completed = self._filtered_completed_tasks()
-        self.count_label.setText(f"{len(completed)} 条")
-        analytics_completed = self._analytics_tasks(completed)
-        self._update_metrics(analytics_completed)
-        self._update_analytics_count(analytics_completed)
-        self._update_export_count()
-        if not completed:
-            self._set_date_pager([], None)
-            query = self.search_input.text().strip()
-            empty = QLabel("没有匹配的完成记录" if query else "还没有完成记录")
-            empty.setStyleSheet(f"color: {THEME_COLORS['border']};")
-            self.list_layout.addWidget(empty, 0, 0)
-            animate_content_swap(self.container)
-            return
-        columns = self._history_grid_columns()
-        self._history_column_count = columns
-        for column in range(3):
-            self.list_layout.setColumnStretch(column, 1 if column < columns else 0)
-        row = 0
-        groups = self._group_completed_tasks(completed)
-        if self.group_mode.currentText() == "按日期":
-            group_title, tasks = self._selected_date_group(groups)
-            self._clamp_selected_page(tasks)
-            self._set_date_pager(groups, group_title)
-            row = self._add_history_group(row, group_title, self._page_tasks(tasks), len(tasks), columns)
-        else:
-            self._clamp_selected_page(completed)
-            self._set_level_pager(completed)
-            for group_title, tasks, total_count in self._paged_group_slices(groups):
-                row = self._add_history_group(row, group_title, tasks, total_count, columns)
-        self.list_layout.setRowStretch(row, 1)
-        animate_content_swap(self.container)
-
-    def _history_grid_columns(self) -> int:
-        viewport_width = self.history_scroll_area.viewport().width() if hasattr(self, "history_scroll_area") else 0
-        width = max(viewport_width, self.width() - 72)
-        if width >= 1360:
-            return 3
-        if width >= 760:
-            return 2
-        return 1
-
-    def _add_history_group(
-        self, row: int, group_title: str, tasks: list[Task], total_count: int, columns: int
-    ) -> int:
-        self.list_layout.addWidget(self._group_header(group_title, total_count), row, 0, 1, columns)
-        row += 1
-        for index, task in enumerate(tasks):
-            self.list_layout.addWidget(self._history_card(task), row + index // columns, index % columns)
-        return row + max(1, (len(tasks) + columns - 1) // columns)
-
-    def _update_metrics(self, completed: list[Task]) -> None:
-        total = len(completed)
-        counts = {
-            priority: sum(1 for task in completed if task.priority == priority)
-            for priority in PRIORITY_ORDER
-        }
-        overdue = sum(1 for task in completed if _task_completed_late(task))
-        no_deadline = sum(1 for task in completed if task.deadline is None)
-        deadline_total = total - no_deadline
-        on_time = max(0, deadline_total - overdue)
-        on_time_rate = round(on_time / deadline_total * 100) if deadline_total else None
-        reviewed = sum(1 for task in completed if task.notes.strip() or task.reflection.strip())
-        average = round(sum(task.progress for task in completed) / total) if total else None
-        latest_task = max(completed, key=lambda task: task.completed_at or task.updated_at, default=None)
-        latest = (
-            (latest_task.completed_at or latest_task.updated_at).astimezone().strftime("%m-%d %H:%M")
-            if latest_task
-            else "--"
-        )
-        self.priority_p1_label.setText(f"{priority_display_label('P1')}：{counts['P1']}")
-        self.priority_p2_label.setText(f"{priority_display_label('P2')}：{counts['P2']}")
-        self.priority_p3_label.setText(f"{priority_display_label('P3')}：{counts['P3']}")
-        self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
-        self.on_time_metric_label.setText(f"准时率 {on_time_rate}%" if on_time_rate is not None else "准时率 --")
-        self.overdue_metric_label.setText(f"超时 {overdue}/{deadline_total}")
-        self.average_metric_label.setText(f"平均进度 {average}%" if average is not None else "平均进度 --")
-        self.latest_metric_label.setText(f"最近 {latest}")
-        self.priority_donut_chart.set_counts(counts)
-        self.completion_trend_chart.set_points(_completion_trend(completed))
-        self.deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
+        self._selected_page_index = max(0, min(self.page_jump_input.value() - 1, self._page_count(tasks) - 1))
+        self._render()
 
     def _reset_page(self, *args) -> None:
         self._selected_page_index = 0
         self._render()
 
-    def _filtered_completed_tasks(self) -> list[Task]:
-        completed = [task for task in self.tasks if task.status == "done"]
-        query = self.search_input.text().strip().lower()
-        if not query:
-            return completed
-        return [task for task in completed if query in task.title.lower()]
+    def _record_status(self, task: Task) -> tuple[str, str, str]:
+        if task.deadline is None:
+            return "无截止", "完成时未设置截止时间", "historyStatusNeutral"
+        if _task_completed_late(task):
+            return "超时完成", "完成时间晚于截止时间", "historyStatusOverdue"
+        return "准时完成", "在截止时间前完成", "historyStatusOnTime"
 
-    def _exportable_tasks(self) -> list[Task]:
-        return self._tasks_in_export_date_range(self._filtered_completed_tasks())
+    def _record_summary(self, task: Task) -> str:
+        completed_text = _export_datetime(task.completed_at or task.updated_at)
+        status_text, detail_text, _ = self._record_status(task)
+        parts = [
+            f"标题：{task.title}",
+            f"优先级：{priority_text(task.priority)}",
+            f"完成时间：{completed_text}",
+            f"状态：{status_text}",
+            f"说明：{detail_text}",
+        ]
+        if task.notes.strip():
+            parts.append(f"任务备注：{task.notes.strip()}")
+        if task.reflection.strip():
+            parts.append(f"完成体会：{task.reflection.strip()}")
+        return "\n".join(parts)
 
-    def _analytics_tasks(self, tasks: list[Task] | None = None) -> list[Task]:
-        source_tasks = self._filtered_completed_tasks() if tasks is None else tasks
-        return self._tasks_in_date_range(source_tasks, self.analytics_start_date, self.analytics_end_date)
+    def _copy_record_summary(self, task: Task) -> None:
+        QApplication.clipboard().setText(self._record_summary(task))
 
-    def _tasks_in_export_date_range(self, tasks: list[Task]) -> list[Task]:
-        return self._tasks_in_date_range(tasks, self.export_start_date, self.export_end_date)
-
-    def _tasks_in_date_range(self, tasks: list[Task], start_edit: QDateEdit, end_edit: QDateEdit) -> list[Task]:
-        start = start_edit.date().toPython()
-        end = end_edit.date().toPython()
-        if start > end:
-            start, end = end, start
-        return [task for task in tasks if _date_in_range(_task_completed_date(task), start, end)]
-
-    def _group_completed_tasks(self, tasks: list[Task]) -> list[tuple[str, list[Task]]]:
-        sorted_tasks = sorted(tasks, key=lambda item: item.completed_at or item.updated_at, reverse=True)
-        groups: dict[str, list[Task]] = {}
-        if self.group_mode.currentText() == "按等级":
-            for task in sorted_tasks:
-                groups.setdefault(task.priority, []).append(task)
-            return [(priority, groups[priority]) for priority in PRIORITY_ORDER if priority in groups]
-
-        for task in sorted_tasks:
-            completed_at = task.completed_at or task.updated_at
-            title = completed_at.astimezone().strftime("%Y-%m-%d") if completed_at else "未记录日期"
-            groups.setdefault(title, []).append(task)
-        return list(groups.items())
-
-    def _selected_date_group(self, groups: list[tuple[str, list[Task]]]) -> tuple[str, list[Task]]:
-        if not groups:
-            return "", []
-        titles = [title for title, _ in groups]
-        if self._selected_date_key not in titles:
-            self._selected_date_key = titles[0]
-            self._selected_page_index = 0
-        for title, tasks in groups:
-            if title == self._selected_date_key:
-                return title, tasks
-        return groups[0]
-
-    def _page_size(self) -> int:
-        return max(1, self.page_size_input.value())
-
-    def _page_count(self, tasks: list[Task]) -> int:
-        return max(1, (len(tasks) + self._page_size() - 1) // self._page_size())
-
-    def _clamp_selected_page(self, tasks: list[Task]) -> None:
-        self._selected_page_index = max(0, min(self._selected_page_index, self._page_count(tasks) - 1))
-
-    def _page_tasks(self, tasks: list[Task]) -> list[Task]:
-        page_size = self._page_size()
-        start = self._selected_page_index * page_size
-        return tasks[start : start + page_size]
-
-    def _paged_group_slices(self, groups: list[tuple[str, list[Task]]]) -> list[tuple[str, list[Task], int]]:
-        page_size = self._page_size()
-        start = self._selected_page_index * page_size
-        end = start + page_size
-        cursor = 0
-        paged: list[tuple[str, list[Task], int]] = []
-        for group_title, tasks in groups:
-            group_start = cursor
-            group_end = cursor + len(tasks)
-            cursor = group_end
-            if group_end <= start or group_start >= end:
-                continue
-            slice_start = max(0, start - group_start)
-            slice_end = min(len(tasks), end - group_start)
-            paged.append((group_title, tasks[slice_start:slice_end], len(tasks)))
-        return paged
-
-    def _set_date_pager(self, groups: list[tuple[str, list[Task]]], selected_title: str | None) -> None:
-        visible = self.group_mode.currentText() == "按日期" and bool(groups)
-        self.date_pager_widget.setVisible(visible)
-        if not visible or selected_title is None:
-            self.date_page_label.setText("")
-            self._sync_date_selector([], None)
-            self.prev_date_button.setEnabled(False)
-            self.next_date_button.setEnabled(False)
+    def _export_single_record(self, task: Task) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "导出单条历史记录", f"{task.title}-历史记录.csv", "CSV 表格 (*.csv);;All Files (*)")
+        if not path:
             return
-        titles = [title for title, _ in groups]
-        index = titles.index(selected_title)
-        selected_tasks = groups[index][1]
-        self._clamp_selected_page(selected_tasks)
-        self._sync_date_selector(groups, selected_title)
-        page_size = self._page_size()
-        page_count = self._page_count(selected_tasks)
-        start = self._selected_page_index * page_size + 1
-        end = min(len(selected_tasks), start + page_size - 1)
-        self.date_page_label.setText(
-            f"{start}-{end}/{len(selected_tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
-        )
-        self.prev_date_button.setEnabled(self._selected_page_index > 0)
-        self.next_date_button.setEnabled(self._selected_page_index < page_count - 1)
+        export_path = Path(path)
+        if export_path.suffix.lower() != ".csv":
+            export_path = export_path.with_suffix(".csv")
+        self.export_history_to_path(export_path, [task])
 
-    def _set_level_pager(self, tasks: list[Task]) -> None:
-        self.date_pager_widget.setVisible(bool(tasks))
-        if not tasks:
-            self.date_page_label.setText("")
-            self._sync_date_selector([], None)
-            self.prev_date_button.setEnabled(False)
-            self.next_date_button.setEnabled(False)
-            return
-        self._sync_date_selector([], None)
-        self._clamp_selected_page(tasks)
-        page_size = self._page_size()
-        page_count = self._page_count(tasks)
-        start = self._selected_page_index * page_size + 1
-        end = min(len(tasks), start + page_size - 1)
-        self.date_page_label.setText(
-            f"按等级 · {start}-{end}/{len(tasks)} 条 · {self._selected_page_index + 1}/{page_count} 页"
-        )
-        self.prev_date_button.setEnabled(self._selected_page_index > 0)
-        self.next_date_button.setEnabled(self._selected_page_index < page_count - 1)
+    def _meta_line(self, icon_name: str, text: str, *, strong: bool = False) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self._icon_chip(icon_name, size=14))
+        label = QLabel(text)
+        label.setObjectName("historyRecordMetaStrong" if strong else "historyRecordMeta")
+        layout.addWidget(label)
+        layout.addStretch(1)
+        return layout
 
-    def _sync_date_selector(self, groups: list[tuple[str, list[Task]]], selected_title: str | None) -> None:
-        self._syncing_date_selector = True
-        try:
-            self.date_selector.clear()
-            for title, tasks in groups:
-                self.date_selector.addItem(f"{title}  ·  {len(tasks)} 条", title)
-            if selected_title is None:
-                self.date_selector.addItem("全部等级", "")
-                self.date_selector.setEnabled(False)
-                return
-            self.date_selector.setEnabled(True)
-            index = self.date_selector.findData(selected_title)
-            self.date_selector.setCurrentIndex(index if index >= 0 else 0)
-        finally:
-            self._syncing_date_selector = False
+    def _preview_line(self, icon_name: str, text: str) -> QFrame:
+        shell = QFrame()
+        shell.setObjectName("historyPreview")
+        layout = QHBoxLayout(shell)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
+        layout.addWidget(self._icon_chip(icon_name, size=14))
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setObjectName("historyPreviewText")
+        layout.addWidget(label, 1)
+        return shell
 
-    def _select_date_from_combo(self, index: int) -> None:
-        if self._syncing_date_selector or index < 0:
-            return
-        selected = self.date_selector.itemData(index)
-        if not selected or selected == self._selected_date_key:
-            return
-        self._selected_date_key = str(selected)
-        self._selected_page_index = 0
-        self._render()
-
-    def _move_date_page(self, offset: int) -> None:
-        if self.group_mode.currentText() != "按日期":
-            completed = self._filtered_completed_tasks()
-            if not completed:
-                return
-            self._clamp_selected_page(completed)
-            next_page = self._selected_page_index + offset
-            if 0 <= next_page < self._page_count(completed):
-                self._selected_page_index = next_page
-                self._render()
-            return
-        groups = self._group_completed_tasks(self._filtered_completed_tasks())
-        if not groups:
-            return
-        titles = [title for title, _ in groups]
-        current_index = titles.index(self._selected_date_key) if self._selected_date_key in titles else 0
-        current_tasks = groups[current_index][1]
-        self._clamp_selected_page(current_tasks)
-        next_page = self._selected_page_index + offset
-        if 0 <= next_page < self._page_count(current_tasks):
-            self._selected_page_index = next_page
-            self._render()
-
-    def _group_header(self, title: str, count: int) -> QLabel:
-        is_priority = title in PRIORITY_ORDER
-        display_title = priority_display_label(title) if is_priority else title
-        separator = "：" if is_priority else " · "
-        label = QLabel(f"{display_title}{separator}{count} 条")
-        label.setObjectName("historyGroupHeader")
-        return label
-
-    def _history_card(self, task: Task) -> QFrame:
+    def _build_record_card(self, task: Task) -> QFrame:
         card = QFrame()
         card.setObjectName("historyCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setMinimumHeight(188)
-        apply_soft_shadow(card, blur=28, y_offset=10, alpha=105)
+        card.setMinimumHeight(190)
+        apply_soft_shadow(card, blur=24, y_offset=8, alpha=96)
+
         shell = QHBoxLayout(card)
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
+
         accent = QFrame()
         accent.setObjectName(f"historyAccent{task.priority}")
-        accent.setFixedWidth(4)
+        accent.setFixedWidth(5)
         shell.addWidget(accent)
+
         content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(12, 10, 12, 11)
-        layout.setSpacing(6)
         shell.addWidget(content, 1)
+        layout = QHBoxLayout(content)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(16)
 
+        left = QVBoxLayout()
+        left.setSpacing(8)
         title = QLabel(task.title)
-        title.setObjectName("historyTaskTitle")
+        title.setObjectName("historyRecordTitle")
         title.setWordWrap(True)
-        title.setMinimumHeight(42)
-        title.setMaximumHeight(58)
         title.setToolTip(task.title)
-        layout.addWidget(title)
+        left.addWidget(title)
 
-        header = QHBoxLayout()
-        header.setSpacing(8)
-        priority = QLabel(f"{priority_display_label(task.priority)}：")
-        priority.setObjectName(f"historyPriority{task.priority}")
-        priority.setAlignment(Qt.AlignCenter)
-        priority.setFixedHeight(24)
-        priority.setFixedWidth(62)
-        header.addWidget(priority)
-        progress = QLabel(f"{task.progress}%")
-        progress.setObjectName("historyProgressChip")
-        progress.setAlignment(Qt.AlignCenter)
-        header.addWidget(progress)
-        work_elapsed = work_elapsed_seconds(task, task.completed_at or task.updated_at)
-        work_target = effort_short_label(max(0, work_target_seconds(task) // 60))
-        work_timer = QLabel(f"计时 {duration_clock_label(work_elapsed)} / {work_target}")
-        work_timer.setObjectName("historyWorkTimerChip")
-        work_timer.setAlignment(Qt.AlignCenter)
-        header.addWidget(work_timer)
-        review_status = QLabel("已复盘" if task.notes.strip() or task.reflection.strip() else "待补记")
-        review_status.setObjectName(
-            "historyReviewChipDone" if task.notes.strip() or task.reflection.strip() else "historyReviewChipEmpty"
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(8)
+        meta_row.addWidget(self._priority_badge(task.priority))
+        review_label = QLabel("已复盘" if task.notes.strip() or task.reflection.strip() else "待补记")
+        review_label.setObjectName("historyReviewChipDone" if task.notes.strip() or task.reflection.strip() else "historyReviewChipEmpty")
+        review_label.setAlignment(Qt.AlignCenter)
+        meta_row.addWidget(review_label)
+        meta_row.addStretch(1)
+        left.addLayout(meta_row)
+
+        completed_text = _export_datetime(task.completed_at or task.updated_at)[:-3]
+        left.addLayout(self._meta_line("record-calendar.svg", f"完成时间  {completed_text}"))
+        deadline_text = _export_datetime(task.deadline)[:-3] if task.deadline is not None else "无"
+        left.addLayout(self._meta_line("record-calendar.svg", f"截止时间  {deadline_text}"))
+        layout.addLayout(left, 2)
+
+        middle = QVBoxLayout()
+        middle.setSpacing(8)
+        elapsed = work_elapsed_seconds(task, task.completed_at or task.updated_at)
+        target = work_target_seconds(task)
+        middle.addLayout(
+            self._meta_line(
+                "record-clock.svg",
+                f"实际耗时  {duration_clock_label(elapsed)}  /  预计  {effort_short_label(max(0, target // 60))}",
+                strong=True,
+            )
         )
-        review_status.setAlignment(Qt.AlignCenter)
-        header.addWidget(review_status)
-        header.addStretch(1)
-        layout.addLayout(header)
+        notes_text = self._compact_text(task.notes) if task.notes.strip() else "任务备注：暂无"
+        reflection_text = self._compact_text(task.reflection) if task.reflection.strip() else "完成体会：暂无"
+        middle.addWidget(self._preview_line("record-note.svg", notes_text))
+        middle.addWidget(self._preview_line("record-note.svg", reflection_text))
+        layout.addLayout(middle, 2)
 
-        progress_bar = QProgressBar()
-        progress_bar.setObjectName("historyInlineProgress")
-        progress_bar.setRange(0, 100)
-        progress_bar.setValue(task.progress)
-        progress_bar.setTextVisible(False)
-        progress_bar.setFixedHeight(6)
-        layout.addWidget(progress_bar)
+        right = QVBoxLayout()
+        right.setSpacing(8)
+        right.setAlignment(Qt.AlignTop)
+        status_text, detail_text, status_name = self._record_status(task)
+        status_header = QHBoxLayout()
+        status_header.setSpacing(8)
+        status_header.addWidget(self._icon_chip("record-status.svg", size=14))
+        status_label = QLabel(status_text)
+        status_label.setObjectName(status_name)
+        status_label.setAlignment(Qt.AlignCenter)
+        status_label.setMinimumHeight(30)
+        status_header.addWidget(status_label)
+        status_header.addStretch(1)
+        right.addLayout(status_header)
 
-        completed_at = task.completed_at.astimezone().strftime("%Y-%m-%d %H:%M") if task.completed_at else "--"
-        completed = QLabel(f"完成时间 {completed_at}")
-        completed.setObjectName("historyCompletedAt")
-        layout.addWidget(completed)
-        for preview_text in self._note_previews(task):
-            preview = QLabel(preview_text)
-            preview.setWordWrap(True)
-            preview.setObjectName("historyPreview")
-            preview.setMinimumHeight(44)
-            layout.addWidget(preview)
-        note_button = QPushButton("查看/编辑备注")
-        note_button.setObjectName("historyNoteButton")
-        note_button.setFixedWidth(126)
-        note_button.clicked.connect(lambda checked=False, task=task: self.open_note_editor(task))
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        actions.addWidget(note_button)
-        layout.addLayout(actions)
+        detail_label = QLabel(detail_text)
+        detail_label.setObjectName("historyRecordDetail")
+        detail_label.setWordWrap(True)
+        right.addWidget(detail_label)
+
+        menu_button = QToolButton()
+        menu_button.setObjectName("historyMoreButton")
+        menu_button.setCursor(Qt.PointingHandCursor)
+        menu_button.setPopupMode(QToolButton.InstantPopup)
+        menu_button.setToolTip("更多操作")
+        self._set_button_icon(menu_button, "more-vertical.svg", size=16, icon_only=True)
+        menu = QMenu(menu_button)
+        menu.addAction("查看/编辑备注", lambda: self.open_note_editor(task))
+        menu.addAction("复制记录摘要", lambda: self._copy_record_summary(task))
+        menu.addAction("导出当前记录", lambda: self._export_single_record(task))
+        menu_button.setMenu(menu)
+        right.addStretch(1)
+        right.addWidget(menu_button, 0, Qt.AlignRight)
+        layout.addLayout(right, 1)
         return card
 
-    def _note_previews(self, task: Task) -> list[str]:
-        previews: list[str] = []
-        notes = self._compact_text(task.notes)
-        reflection = self._compact_text(task.reflection)
-        if notes:
-            previews.append(f"任务备注：{notes}")
-        if reflection:
-            previews.append(f"完成体会：{reflection}")
-        return previews or ["还没有记录备注或完成体会"]
+    def _clear_list_layout(self) -> None:
+        while self.list_layout.count():
+            item = self.list_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
 
-    def _compact_text(self, text: str, limit: int = 120) -> str:
-        compact = " ".join(str(text or "").split())
-        return compact if len(compact) <= limit else f"{compact[:limit]}..."
+    def _render_records(self, tasks: list[Task]) -> None:
+        self._clear_list_layout()
+        if not tasks:
+            empty = QFrame()
+            empty.setObjectName("historyEmptyState")
+            empty_layout = QVBoxLayout(empty)
+            empty_layout.setContentsMargins(18, 40, 18, 40)
+            empty_layout.setSpacing(6)
+            title = QLabel("还没有符合条件的历史记录")
+            title.setObjectName("historyEmptyTitle")
+            hint = QLabel("调整日期范围或筛选条件后再试。")
+            hint.setObjectName("historyEmptyHint")
+            empty_layout.addWidget(title, 0, Qt.AlignCenter)
+            empty_layout.addWidget(hint, 0, Qt.AlignCenter)
+            self.list_layout.addWidget(empty, 0, 0)
+            return
+        for index, task in enumerate(tasks):
+            self.list_layout.addWidget(self._build_record_card(task), index, 0)
+        self.list_layout.setRowStretch(len(tasks), 1)
+        self.list_layout.setColumnStretch(0, 1)
+
+    def _update_metrics(self, completed: list[Task]) -> None:
+        total = len(completed)
+        counts = {priority: sum(1 for task in completed if task.priority == priority) for priority in PRIORITY_ORDER}
+        overdue = sum(1 for task in completed if _task_completed_late(task))
+        no_deadline = sum(1 for task in completed if task.deadline is None)
+        deadline_total = max(0, total - no_deadline)
+        on_time = max(0, deadline_total - overdue)
+        on_time_rate = f"{round(on_time / deadline_total * 100)}%" if deadline_total else "--"
+        reviewed = sum(1 for task in completed if task.notes.strip() or task.reflection.strip())
+        latest_task = max(completed, key=lambda task: task.completed_at or task.updated_at, default=None)
+        latest = (latest_task.completed_at or latest_task.updated_at).astimezone().strftime("%m-%d %H:%M") if latest_task else "--"
+
+        self.priority_p1_label.setText(f"高：{counts['P1']}")
+        self.priority_p2_label.setText(f"中：{counts['P2']}")
+        self.priority_p3_label.setText(f"低：{counts['P3']}")
+        self.review_metric_label.setText(f"复盘 {reviewed}/{total}")
+        self.on_time_metric_label.setText(f"准时率 {on_time_rate}")
+        self.overdue_metric_label.setText(f"超时 {overdue}/{deadline_total}")
+        self.average_metric_label.setText(f"无截止 {no_deadline}")
+        self.latest_metric_label.setText(f"最近 {latest}")
+
+        self.priority_donut_chart.set_counts(counts)
+        self.completion_trend_chart.set_points(_completion_trend(completed))
+        self.deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
+        self.analysis_priority_donut_chart.set_counts(counts)
+        self.analysis_completion_trend_chart.set_points(_completion_trend(completed))
+        self.analysis_deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
+
+        dominant_priority = max(PRIORITY_ORDER, key=lambda priority: (counts[priority], -PRIORITY_ORDER.index(priority))) if total else "P2"
+        trend_points = _completion_trend(completed)
+        peak_point = max(trend_points, key=lambda item: (item[1], item[0]), default=None)
+        pending_notes = sum(1 for task in completed if not (task.notes.strip() or task.reflection.strip()))
+        dominant_text = self._priority_markup(dominant_priority, suffix=f"{counts[dominant_priority]} 条") if total else "--"
+        dominant_ratio = f"占比 {_ratio_text(counts[dominant_priority], total)}" if total else "暂无完成记录"
+        peak_text = f"{peak_point[0].strftime('%m-%d')} · {peak_point[1]} 条" if peak_point else "--"
+        peak_detail = "最近没有形成可分析的完成峰值" if peak_point is None else "当天完成数量达到当前区间峰值"
+
+        self.analysis_total_value_label.setText(f"{total} 条")
+        self.analysis_total_detail_label.setText("当前统计区间内的完成记录" if total else "当前统计区间内还没有完成记录")
+        self.analysis_priority_value_label.setText(dominant_text)
+        self.analysis_priority_detail_label.setText(dominant_ratio)
+        self.analysis_on_time_value_label.setText(on_time_rate)
+        self.analysis_on_time_detail_label.setText("只统计已设置截止时间的完成记录" if deadline_total else "当前区间内没有设置截止时间的完成记录")
+        self.analysis_peak_value_label.setText(peak_text)
+        self.analysis_peak_detail_label.setText(peak_detail)
+        self.analysis_pending_notes_chip.setText(f"待补记 {pending_notes} 条")
+        self.analysis_reviewed_chip.setText(f"已复盘 {reviewed}/{total}")
+        self.analysis_overdue_chip.setText(f"超时完成 {overdue}/{deadline_total}")
+        self.analysis_action_summary_label.setText(
+            "建议先补齐待补记记录，再回看超时完成任务的共性原因。"
+            if total
+            else "当前时间范围没有完成记录，可以调整统计区间后再查看洞察。"
+        )
+
+    def _sync_pagination(self, total_tasks: list[Task]) -> None:
+        page_count = self._page_count(total_tasks)
+        if self._selected_page_index >= page_count:
+            self._selected_page_index = max(0, page_count - 1)
+        current_page = self._selected_page_index + 1
+        total = len(total_tasks)
+        if total:
+            start = self._selected_page_index * self._page_size() + 1
+            end = min(total, start + self._page_size() - 1)
+            self.page_summary_label.setText(f"{start}-{end} / {total} 条 · 第 {current_page}/{page_count} 页")
+        else:
+            self.page_summary_label.setText("0 / 0 条 · 第 1/1 页")
+        self.page_jump_input.blockSignals(True)
+        self.page_jump_input.setRange(1, page_count)
+        self.page_jump_input.setValue(current_page if total else 1)
+        self.page_jump_input.blockSignals(False)
+        self.prev_page_button.setEnabled(self._selected_page_index > 0)
+        self.next_page_button.setEnabled(self._selected_page_index < page_count - 1)
+
+    def _render(self, *args) -> None:
+        analytics_tasks = self._analytics_tasks()
+        self._update_metrics(analytics_tasks)
+        self.analytics_count_label.setText(f"{len(analytics_tasks)} 条")
+        self.analysis_count_label.setText(f"{len(analytics_tasks)} 条")
+        self.analysis_range_label.setText(
+            f"统计区间  {self.analytics_start_date.date().toString('yyyy-MM-dd')}  →  {self.analytics_end_date.date().toString('yyyy-MM-dd')}"
+        )
+        self.analysis_state_label.setText("洞察基于当前统计区间，不展示任务进度百分比")
+
+        filtered = self._filtered_completed_tasks()
+        self.count_label.setText(f"{len(filtered)} 条")
+        self.records_count_label.setText(f"{len(filtered)} 条")
+        exportable = self._exportable_tasks()
+        self.export_count_label.setText(f"{len(exportable)} 条")
+
+        self._sync_pagination(filtered)
+        self._render_records(self._paged_tasks(filtered))
+
+    def _jump_to_history_records(self, *, status: str = "all", priority: str = "all", search: str = "") -> None:
+        self._set_history_section("history")
+        self.search_input.setText(search)
+        self.status_filter.setCurrentIndex(max(0, self.status_filter.findData(status)))
+        self.priority_filter.setCurrentIndex(max(0, self.priority_filter.findData(priority)))
+        self._selected_page_index = 0
+        self._render()
+        self._scroll_current_section_to_top()
 
     def export_history(self) -> None:
         tasks = self._exportable_tasks()
         if not tasks:
             QMessageBox.information(self, "导出历史记录", "没有可导出的历史记录。")
             return
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "导出历史记录",
-            "Todo list-历史记录.csv",
-            "CSV 表格 (*.csv);;All Files (*)",
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "导出历史记录", "Todo-list-历史记录.csv", "CSV 表格 (*.csv);;All Files (*)")
         if not path:
             return
         export_path = Path(path)
@@ -1295,6 +1573,12 @@ class HistoryWindow(QDialog):
         task = next((item for item in self.tasks if item.id == task_id), None)
         self.save_history_notes(task_id, task.notes if task else "", reflection)
 
+    def _compact_text(self, text: str, limit: int = 96) -> str:
+        compact = " ".join(str(text or "").split())
+        if not compact:
+            return ""
+        return compact if len(compact) <= limit else f"{compact[:limit]}..."
+
 
 def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
     with Path(path).open("w", encoding="utf-8-sig", newline="") as file:
@@ -1306,7 +1590,7 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
                     "任务ID": task.id,
                     "标题": task.title,
                     "优先级": priority_text(task.priority),
-                    "预估工作量分钟": task.effort_minutes,
+                    "预计工作量分钟": task.effort_minutes,
                     "实际工作时长": duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at)),
                     "实际工作秒数": work_elapsed_seconds(task, task.completed_at or task.updated_at),
                     "截止时间": _export_datetime(task.deadline),
@@ -1324,27 +1608,22 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
 def _date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
     chip = QFrame()
     chip.setObjectName("historyExportDateChip")
-    chip.setFixedHeight(36)
-    chip.setMinimumWidth(214)
-    chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    chip.setMinimumHeight(44)
     layout = QHBoxLayout(chip)
-    layout.setContentsMargins(6, 4, 6, 4)
+    layout.setContentsMargins(6, 5, 6, 5)
     layout.setSpacing(6)
     label = QLabel(label_text)
     label.setObjectName("historyExportDateLabel")
     label.setAlignment(Qt.AlignCenter)
-    label.setFixedSize(46, 28)
-    date_edit.setAlignment(Qt.AlignCenter)
-    date_edit.setFixedHeight(28)
-    date_edit.setMinimumWidth(132)
-    date_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-    layout.addWidget(label, 0, Qt.AlignVCenter)
-    layout.addWidget(date_edit, 1, Qt.AlignVCenter)
+    label.setFixedSize(48, 32)
+    date_edit.setMinimumHeight(32)
+    layout.addWidget(label)
+    layout.addWidget(date_edit, 1)
     return chip
 
 
-def _export_date_chip(label_text: str, date_edit: QDateEdit) -> QFrame:
-    return _date_chip(label_text, date_edit)
+def _ratio_text(value: int, total: int) -> str:
+    return "0%" if total <= 0 else f"{round(value / total * 100)}%"
 
 
 def _export_datetime(value) -> str:
@@ -1362,8 +1641,7 @@ def _task_completed_late(task: Task) -> bool:
 
 
 def _completion_trend(tasks: list[Task], *, max_days: int = 14) -> list[tuple[date, int]]:
-    dates = [_task_completed_date(task) for task in tasks]
-    dates = [item for item in dates if item is not None]
+    dates = [item for item in (_task_completed_date(task) for task in tasks) if item is not None]
     if not dates:
         return []
     end = max(dates)
@@ -1388,7 +1666,7 @@ QFrame#historyDragTitleBar {
     stop:0.52 #0D1730,
     stop:1 #132033);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 QFrame#historyDragTitleBar QLabel {
   color: #F8FBFF;
@@ -1403,430 +1681,425 @@ QFrame#historyDragTitleBar QPushButton {
   min-height: 34px;
   font-weight: 900;
 }
-QFrame#historyDragTitleBar QPushButton:hover {
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #1B2A44,
-    stop:1 #16364C);
-}
-QFrame#historyDragTitleBar QPushButton:pressed {
-  background: #0E1728;
-}
 """
 
 
 def _history_window_style() -> str:
-    return f"""
-QFrame#historyHeaderPanel {{
+    return """
+QDialog {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #020A13,
+    stop:0.52 #041323,
+    stop:1 #06202B);
+}
+QWidget {
+  background: transparent;
+  color: #E7F3FF;
+}
+QFrame#historySidebar {
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 #071422,
+    stop:1 #0A2034);
+  border: 1px solid rgba(98, 144, 176, 42);
+  border-radius: 22px;
+}
+QFrame#historySidebarBrand {
+  background: rgba(9, 25, 40, 0.92);
+  border: 1px solid rgba(98, 144, 176, 36);
+  border-radius: 18px;
+}
+QLabel#historySidebarLogo {
+  background: qradialgradient(cx:0.5, cy:0.5, radius:0.75,
+    stop:0 rgba(12, 107, 138, 0.24),
+    stop:1 rgba(10, 33, 55, 0.12));
+  border: 1px solid rgba(103, 232, 249, 42);
+  border-radius: 25px;
+}
+QLabel#historySidebarTitle {
+  color: #F8FBFF;
+  font-size: 14px;
+  font-weight: 900;
+}
+QPushButton#historySidebarButton,
+QPushButton#historySidebarUtility {
+  color: #D6E6F4;
+  background: rgba(10, 29, 45, 0.92);
+  border: 1px solid rgba(98, 144, 176, 26);
+  border-radius: 16px;
+  min-height: 48px;
+  text-align: left;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 900;
+}
+QPushButton#historySidebarButton:hover,
+QPushButton#historySidebarUtility:hover {
+  background: rgba(19, 55, 84, 0.95);
+}
+QPushButton#historySidebarButton:checked {
+  color: #F4FCFF;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0B1A2C,
-    stop:0.46 #102C3D,
-    stop:1 #0D3A31);
+    stop:0 #1B4D78,
+    stop:1 #1E90B8);
+  border: 1px solid rgba(103, 232, 249, 56);
+}
+QFrame#historyContentShell {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 rgba(4, 16, 29, 0.72),
+    stop:1 rgba(6, 28, 43, 0.42));
+  border: 1px solid rgba(89, 136, 170, 0.16);
+  border-radius: 22px;
+}
+QStackedWidget#historySectionStack {
+  background: transparent;
   border: none;
-  border-radius: 8px;
-}}
-QLabel#historyTitle {{
+}
+QScrollArea#historyTasksPageScroll,
+QScrollArea#historyAnalysisPageScroll {
+  border: none;
+  background: transparent;
+}
+QFrame#historyTasksPage,
+QFrame#historyAnalysisPage {
+  background: transparent;
+  border: none;
+}
+QFrame#historyHeaderPanel,
+QFrame#historyStatsPanel,
+QFrame#historyAnalyticsPanel,
+QFrame#historyToolbar,
+QFrame#historyAnalysisSummaryPanel,
+QFrame#historyAnalysisChartsPanel,
+QFrame#historyAnalysisActionPanel,
+QScrollArea#historyRecordsPanel {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #071421,
+    stop:0.42 #0B2238,
+    stop:1 #0A3741);
+  border: 1px solid rgba(98, 144, 176, 36);
+  border-radius: 18px;
+}
+QWidget#historyRecordsViewport {
+  background: transparent;
+}
+QLabel#historyTitle {
   color: #F8FBFF;
   font-size: 20px;
   font-weight: 900;
-}}
-QLabel#historySubtitle {{
-  color: #9EB5C8;
+}
+QLabel#historySubtitle,
+QLabel#historyChartSubtitle,
+QLabel#historyRecordDetail,
+QLabel#historyEmptyHint {
+  color: #9CB3C6;
+  font-size: 12px;
   font-weight: 700;
-}}
-QLabel#historyCountChip {{
-  color: #DFFBFF;
+}
+QLabel#historyCountChip,
+QLabel#historySectionCount,
+QLabel#historyExportCount,
+QLabel#historyAnalyticsCount,
+QLabel#historyAnalysisCountChip {
+  color: #EBFEFF;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #155E75,
     stop:1 #047857);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   min-width: 72px;
-  min-height: 30px;
-  font-size: 15px;
+  min-height: 34px;
+  font-size: 14px;
   font-weight: 900;
-}}
-QFrame#historyStatsPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #061226,
-    stop:0.34 #101A3B,
-    stop:0.68 #063442,
-    stop:1 #0A3E32);
+  padding: 0 12px;
+}
+QFrame#historyMetricShell,
+QFrame#historyMetricShellP1,
+QFrame#historyMetricShellP2,
+QFrame#historyMetricShellP3,
+QFrame#historyMetricShellOverdue {
   border: none;
-  border-radius: 8px;
-}}
-QFrame#historyMetricsPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #15102E,
-    stop:0.36 #0D2D4E,
-    stop:0.72 #0F3B3D,
-    stop:1 #2A2B12);
-  border: none;
-  border-radius: 8px;
-}}
-QFrame#historyAnalyticsPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #052C55,
-    stop:0.34 #073E63,
-    stop:0.7 #075E59,
-    stop:1 #134E2B);
-  border: none;
-  border-radius: 8px;
-}}
-QFrame#historyChartsPanel {{
-  background: transparent;
-  border: none;
-}}
-QLabel#historyMetricChip,
+  border-radius: 16px;
+  min-height: 62px;
+}
+QFrame#historyMetricShellP1 {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6B2E12, stop:1 #9A4C14);
+}
+QFrame#historyMetricShellP2 {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #20367E, stop:1 #3657B7);
+}
+QFrame#historyMetricShellP3 {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0D4A3D, stop:1 #15805C);
+}
+QFrame#historyMetricShell {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #17203B, stop:1 #0D4655);
+}
+QFrame#historyMetricShellOverdue {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #51172A, stop:1 #8B1D35);
+}
 QLabel#historyPriorityMetricP1,
 QLabel#historyPriorityMetricP2,
 QLabel#historyPriorityMetricP3,
-QLabel#historyOverdueMetric {{
-  color: #D4E3F2;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #17203B,
-    stop:0.55 #12334E,
-    stop:1 #0F3C43);
-  border: none;
-  border-radius: 8px;
-  font-weight: 900;
-  font-size: 12px;
-  padding: 0 6px;
-}}
-QLabel#historyPriorityMetricP1 {{
-  color: #FFE1A6;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6B2E12, stop:1 #9A4C14);
-}}
-QLabel#historyPriorityMetricP2 {{
-  color: #DCE7FF;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #20367E, stop:1 #3657B7);
-}}
-QLabel#historyPriorityMetricP3 {{
-  color: #D9FBE8;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0D4A3D, stop:1 #15805C);
-}}
-QLabel#historyOverdueMetric {{
-  color: #FFD5DF;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #51172A, stop:1 #8B1D35);
-}}
-QLabel#historyAnalyticsTitle {{
-  color: #F8FBFF;
-  font-size: 14px;
-  font-weight: 900;
-  padding: 0 2px;
-}}
-QLabel#historyAnalyticsCount {{
-  color: #ECFEFF;
-  background: #123047;
-  border: none;
-  border-radius: 8px;
-  min-width: 54px;
-  min-height: 24px;
+QLabel#historyMetricChip,
+QLabel#historyOverdueMetric {
+  background: transparent;
   font-weight: 900;
   font-size: 13px;
-}}
-QPushButton#historyAnalyticsPresetButton {{
-  color: #BDEAFE;
-  background: #101827;
+}
+QLabel#historyPriorityMetricP1 { color: #FFE1A6; }
+QLabel#historyPriorityMetricP2 { color: #DCE7FF; }
+QLabel#historyPriorityMetricP3 { color: #D9FBE8; }
+QLabel#historyMetricChip { color: #DBEAFE; }
+QLabel#historyOverdueMetric { color: #FFD5DF; }
+QLabel#historyAnalyticsTitle,
+QLabel#historySectionTitle,
+QLabel#historyChartTitle,
+QLabel#historyAnalysisSummaryTitle,
+QLabel#historyToolbarLabel,
+QLabel#historyEmptyTitle {
+  color: #F8FBFF;
+  font-size: 15px;
+  font-weight: 900;
+}
+QPushButton#historyAnalyticsPresetButton,
+QPushButton#historyActionButton,
+QPushButton#historyPageButton,
+QPushButton#historyExportButton {
+  color: #F6FBFF;
+  background: #162033;
+  border: none;
+  border-radius: 12px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 900;
+}
+QPushButton#historyExportButton {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0E7490,
+    stop:1 #0F766E);
+}
+QPushButton#historyAnalyticsPresetButton:hover,
+QPushButton#historyActionButton:hover,
+QPushButton#historyPageButton:hover,
+QPushButton#historyExportButton:hover {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #1B3450,
+    stop:1 #0E6070);
+}
+QFrame#historyExportDateChip {
+  background: rgba(9, 27, 41, 0.92);
+  border: 1px solid rgba(98, 144, 176, 26);
+  border-radius: 12px;
+}
+QLabel#historyExportDateLabel {
+  color: #B9F7E8;
+  background: rgba(17, 63, 80, 0.95);
   border: none;
   border-radius: 8px;
-  min-height: 26px;
-  padding: 3px 9px;
   font-weight: 900;
-}}
-QPushButton#historyAnalyticsPresetButton:hover {{
-  color: #ECFEFF;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #14304A,
-    stop:1 #135E58);
-}}
-QLabel#historyAnalyticsArrow {{
+}
+QLabel#historyAnalyticsArrow,
+QLabel#historyExportArrow {
   color: #A7F3D0;
   min-width: 22px;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 900;
-}}
-QFrame#historyChartCard {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #0D1624,
-    stop:0.58 #0F1D2E,
-    stop:1 #102A2D);
+}
+QLineEdit#historySearch,
+QComboBox#historyStatusFilter,
+QComboBox#historyPriorityFilter,
+QComboBox#historySortMode,
+QComboBox#historyPageSize,
+QDateEdit#historyAnalyticsStartDate,
+QDateEdit#historyAnalyticsEndDate,
+QDateEdit#historyExportStartDate,
+QDateEdit#historyExportEndDate,
+QSpinBox#historyPageJump {
+  background: #121A2B;
+  color: #ECFEFF;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(110, 156, 184, 32);
+  border-radius: 10px;
+}
+QDateEdit#historyAnalyticsStartDate::up-button,
+QDateEdit#historyAnalyticsStartDate::down-button,
+QDateEdit#historyAnalyticsStartDate::up-arrow,
+QDateEdit#historyAnalyticsStartDate::down-arrow,
+QDateEdit#historyAnalyticsEndDate::up-button,
+QDateEdit#historyAnalyticsEndDate::down-button,
+QDateEdit#historyAnalyticsEndDate::up-arrow,
+QDateEdit#historyAnalyticsEndDate::down-arrow,
+QDateEdit#historyExportStartDate::up-button,
+QDateEdit#historyExportStartDate::down-button,
+QDateEdit#historyExportStartDate::up-arrow,
+QDateEdit#historyExportStartDate::down-arrow,
+QDateEdit#historyExportEndDate::up-button,
+QDateEdit#historyExportEndDate::down-button,
+QDateEdit#historyExportEndDate::up-arrow,
+QDateEdit#historyExportEndDate::down-arrow {
+  width: 0;
+  height: 0;
   border: none;
-  border-radius: 8px;
-}}
-QFrame#historyChartCard[historyTone="priority"] {{
+  image: none;
+}
+QLabel#historyPageLabel,
+QLabel#historyAnalysisInfoChip {
+  color: #D8E7F5;
+  background: rgba(12, 23, 38, 0.95);
+  border: 1px solid rgba(110, 156, 184, 26);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 900;
+}
+QFrame#historyChartsPanel {
+  border: none;
+  background: transparent;
+}
+QFrame#historyChartCard {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #081725,
+    stop:0.58 #0D2134,
+    stop:1 #0A3540);
+  border: 1px solid rgba(93, 145, 175, 0.16);
+  border-radius: 16px;
+}
+QFrame#historyChartCard[historyTone="priority"] {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
     stop:0 #3A1608,
     stop:0.45 #71310F,
     stop:1 #5B1A2A);
-}}
-QFrame#historyChartCard[historyTone="trend"] {{
+}
+QFrame#historyChartCard[historyTone="trend"] {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
     stop:0 #04235C,
     stop:0.52 #075985,
     stop:1 #0E7490);
-}}
-QFrame#historyChartCard[historyTone="deadline"] {{
+}
+QFrame#historyChartCard[historyTone="deadline"] {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #3B0A38,
-    stop:0.5 #831843,
-    stop:1 #92400E);
-}}
-QLabel#historyChartTitle {{
-  color: #F8FBFF;
-  font-size: 14px;
-  font-weight: 900;
-}}
-QLabel#historyChartSubtitle {{
-  color: #8EA2B7;
-  font-size: 12px;
-  font-weight: 700;
-}}
-QFrame#historyToolbar {{
+    stop:0 #073B34,
+    stop:0.5 #0F766E,
+    stop:1 #166534);
+}
+QFrame#historyPagerPanel {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0B1534,
-    stop:0.34 #17204A,
-    stop:0.66 #073B46,
-    stop:1 #112F20);
-  border: none;
-  border-radius: 8px;
-  padding: 7px;
-}}
-QFrame#historySearchPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #25135C,
-    stop:0.42 #16408A,
-    stop:1 #0E6C82);
-  border: none;
-  border-radius: 8px;
-}}
-QLabel#historyToolbarLabel {{
-  color: #BFD0E2;
-  font-weight: 900;
-  padding: 0 4px;
-}}
-QFrame#historyExportPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #0A4A55,
-    stop:0.38 #0F766E,
-    stop:0.72 #365314,
-    stop:1 #713F12);
-  border: none;
-  border-radius: 8px;
-}}
-QLabel#historyExportTitle {{
-  color: #F8FBFF;
-  font-size: 15px;
-  font-weight: 900;
-}}
-QLabel#historyExportCount {{
-  color: #DFFBFF;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #155E75,
-    stop:1 #047857);
-  border: none;
-  border-radius: 8px;
-  min-width: 54px;
-  min-height: 28px;
-  font-weight: 900;
-}}
-QPushButton#historyExportPresetButton {{
-  color: #BAE6FD;
-  background: #101827;
-  border: none;
-  border-radius: 8px;
-  min-height: 26px;
-  padding: 3px 10px;
-  font-weight: 900;
-}}
-QPushButton#historyExportPresetButton:hover {{
-  color: #ECFEFF;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #123047,
+    stop:0 #101A33,
+    stop:0.4 #14365C,
     stop:1 #115E59);
-}}
-QFrame#historyExportDateChip {{
-  background: #092433;
+  border: 1px solid rgba(98, 144, 176, 26);
+  border-radius: 16px;
+}
+QFrame#historyAnalysisInsightCard {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 rgba(10, 28, 46, 0.92),
+    stop:1 rgba(11, 53, 63, 0.88));
+  border: 1px solid rgba(98, 144, 176, 28);
+  border-radius: 16px;
+}
+QLabel#historyAnalysisInsightValue {
+  color: #F8FBFF;
+  font-size: 22px;
+  font-weight: 900;
+}
+QFrame#historyCard {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #081725,
+    stop:0.58 #0D2134,
+    stop:1 #0A3540);
+  border: 1px solid rgba(98, 144, 176, 26);
+  border-radius: 16px;
+}
+QFrame#historyAccentP1 { background: #F6A44D; border-radius: 2px; }
+QFrame#historyAccentP2 { background: #8EA7FF; border-radius: 2px; }
+QFrame#historyAccentP3 { background: #A7F3D0; border-radius: 2px; }
+QFrame#historyPriorityBadgeP1,
+QFrame#historyPriorityBadgeP2,
+QFrame#historyPriorityBadgeP3 {
   border: none;
-  border-radius: 8px;
-}}
-QLabel#historyExportDateLabel {{
-  color: #B9F7E8;
-  background: #104050;
-  border: none;
-  border-radius: 7px;
-  min-width: 42px;
+  border-radius: 10px;
   min-height: 28px;
-  font-weight: 900;
-  padding: 0;
-}}
-QLabel#historyExportArrow {{
-  color: #A7F3D0;
-  min-width: 24px;
-  font-size: 18px;
-  font-weight: 900;
-}}
-QLineEdit#historySearch, QComboBox#historyMode, QComboBox#historyDateSelector,
-QDateEdit#historyExportStartDate, QDateEdit#historyExportEndDate,
-QDateEdit#historyAnalyticsStartDate, QDateEdit#historyAnalyticsEndDate {{
-  background: #121A2B;
-  color: #ECFEFF;
-  font-weight: 700;
-  font-size: 13px;
-  min-width: 112px;
-  padding: 0 22px 0 8px;
-  border: none;
-  border-radius: 7px;
-}}
-QDateEdit#historyExportStartDate::drop-down, QDateEdit#historyExportEndDate::drop-down,
-QDateEdit#historyAnalyticsStartDate::drop-down, QDateEdit#historyAnalyticsEndDate::drop-down {{
-  width: 22px;
-  border: none;
-  subcontrol-origin: padding;
-  subcontrol-position: center right;
-}}
-QDateEdit#historyExportStartDate::down-arrow, QDateEdit#historyExportEndDate::down-arrow,
-QDateEdit#historyAnalyticsStartDate::down-arrow, QDateEdit#historyAnalyticsEndDate::down-arrow {{
-  width: 9px;
-  height: 9px;
-}}
-QLabel#historyPageLabel {{
-  color: #7DD3FC;
-  background: #0C1724;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 12px;
-  font-weight: 900;
-}}
-QFrame#historyPagerPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #38135F,
-    stop:0.34 #1E3A8A,
-    stop:0.68 #0E7490,
-    stop:1 #047857);
-  border: none;
-  border-radius: 8px;
-}}
-QScrollArea#historyRecordsPanel {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #111C3F,
-    stop:0.34 #182252,
-    stop:0.68 #073B4C,
-    stop:1 #073B2D);
-  border: none;
-  border-radius: 8px;
-}}
-QPushButton#historyPageButton, QPushButton#historyNoteButton, QPushButton#historyExportButton {{
-  background: #162033;
-  color: #F6F8FC;
-  font-weight: 800;
-}}
-QPushButton#historyExportButton {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #155E75,
-    stop:1 #0F766E);
-  color: #ECFEFF;
-}}
-QPushButton#historyPageButton:hover, QPushButton#historyNoteButton:hover, QPushButton#historyExportButton:hover {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #1E3A5F,
-    stop:1 #155E75);
-}}
-QLabel#historyGroupHeader {{
-  color: #7DD3FC;
-  font-size: 15px;
-  font-weight: 900;
-  padding: 9px 4px 4px 4px;
-}}
-QFrame#historyCard {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 #111827,
-    stop:0.58 #121E2F,
-    stop:1 #102B35);
-  border: none;
-  border-radius: 8px;
-}}
-QFrame#historyAccentP1 {{ background: #F6A44D; border-radius: 2px; }}
-QFrame#historyAccentP2 {{ background: #8EA7FF; border-radius: 2px; }}
-QFrame#historyAccentP3 {{ background: #A7F3D0; border-radius: 2px; }}
-QLabel#historyPriorityP1, QLabel#historyPriorityP2, QLabel#historyPriorityP3 {{
-  border: none;
-  border-radius: 7px;
-  font-weight: 900;
-}}
-QLabel#historyPriorityP1 {{ color: #FFE1A6; background: #5A2D12; }}
-QLabel#historyPriorityP2 {{ color: #DCE7FF; background: #1B2F69; }}
-QLabel#historyPriorityP3 {{ color: #D9FBE8; background: #123B34; }}
-QLabel#historyTaskTitle {{
+}
+QFrame#historyPriorityBadgeP1 { background: #5A2D12; }
+QFrame#historyPriorityBadgeP2 { background: #1B2F69; }
+QFrame#historyPriorityBadgeP3 { background: #123B34; }
+QLabel#historyRecordTitle {
   color: #F8FBFF;
   font-size: 17px;
   font-weight: 900;
-  background: #0A121E;
+}
+QLabel#historyPriorityP1,
+QLabel#historyPriorityP2,
+QLabel#historyPriorityP3,
+QLabel#historyReviewChipDone,
+QLabel#historyReviewChipEmpty,
+QLabel#historyStatusOnTime,
+QLabel#historyStatusOverdue,
+QLabel#historyStatusNeutral {
   border: none;
-  border-radius: 8px;
-  padding: 6px 8px;
-}}
-QLabel#historyProgressChip {{
-  color: #ECFEFF;
-  background: #0E7490;
-  border: none;
-  border-radius: 8px;
-  min-width: 58px;
-  min-height: 24px;
+  border-radius: 10px;
+  padding: 0 10px;
   font-weight: 900;
-}}
-QLabel#historyWorkTimerChip {{
-  color: #E0F2FE;
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #1D4ED8,
-    stop:0.55 #0E7490,
-    stop:1 #047857);
-  border: none;
-  border-radius: 8px;
-  min-width: 118px;
-  min-height: 24px;
-  font-weight: 900;
-}}
-QLabel#historyReviewChipDone, QLabel#historyReviewChipEmpty {{
-  border: none;
-  border-radius: 8px;
-  min-width: 62px;
-  min-height: 24px;
-  font-weight: 900;
-}}
-QLabel#historyReviewChipDone {{
-  color: #DDFBE9;
-  background: #145246;
-}}
-QLabel#historyReviewChipEmpty {{
-  color: #F7DCA8;
-  background: #4A3218;
-}}
-QProgressBar#historyInlineProgress {{
-  background: #09111B;
-  border: none;
-  border-radius: 3px;
-  height: 6px;
-}}
-QProgressBar#historyInlineProgress::chunk {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-    stop:0 #A7F3D0,
-    stop:0.52 #7DD3FC,
-    stop:1 #F6C177);
-  border-radius: 3px;
-}}
-QLabel#historyCompletedAt {{
-  color: #AEC2D3;
+}
+QLabel#historyPriorityP1 { color: #FFE1A6; background: #5A2D12; }
+QLabel#historyPriorityP2 { color: #DCE7FF; background: #1B2F69; }
+QLabel#historyPriorityP3 { color: #D9FBE8; background: #123B34; }
+QLabel#historyReviewChipDone { color: #D7FEE6; background: #0D5947; min-height: 28px; }
+QLabel#historyReviewChipEmpty { color: #FDE68A; background: #6B4E16; min-height: 28px; }
+QLabel#historyStatusOnTime { color: #D7FEE6; background: #0D5947; }
+QLabel#historyStatusOverdue { color: #FFD5DF; background: #7C1D34; }
+QLabel#historyStatusNeutral { color: #D6E4F4; background: #334155; }
+QLabel#historyRecordMeta {
+  color: #AFC4D7;
+  font-size: 12px;
   font-weight: 700;
+}
+QLabel#historyRecordMetaStrong {
+  color: #EFFBFF;
   font-size: 13px;
-}}
-QLabel#historyPreview {{
-  color: #C4D2E2;
-  background: #0C1421;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 10px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-}}
+  font-weight: 900;
+}
+QLabel#historyInlineIcon {
+  background: rgba(12, 39, 63, 0.88);
+  border: 1px solid rgba(103, 232, 249, 24);
+  border-radius: 12px;
+}
+QFrame#historyPreview {
+  background: rgba(9, 20, 33, 0.7);
+  border: 1px solid rgba(110, 156, 184, 18);
+  border-radius: 10px;
+}
+QLabel#historyPreviewText {
+  color: #D8E7F5;
+  font-size: 12px;
+  font-weight: 700;
+}
+QToolButton#historyMoreButton {
+  color: #F6FBFF;
+  background: rgba(20, 37, 57, 0.95);
+  border: 1px solid rgba(110, 156, 184, 26);
+  border-radius: 12px;
+  min-width: 38px;
+  min-height: 38px;
+}
+QToolButton#historyMoreButton:hover {
+  background: rgba(18, 96, 112, 0.95);
+}
+QLabel#historyPriorityP1,
+QLabel#historyPriorityP2,
+QLabel#historyPriorityP3 {
+  background: transparent;
+  padding: 0;
+}
+QLabel#historyMetricIcon,
+QLabel#historyPriorityIcon {
+  background: rgba(9, 27, 41, 0.46);
+  border: 1px solid rgba(210, 236, 252, 0.12);
+  border-radius: 12px;
+}
+QFrame#historyEmptyState {
+  background: rgba(9, 20, 33, 0.7);
+  border: 1px dashed rgba(110, 156, 184, 42);
+  border-radius: 18px;
+}
 """

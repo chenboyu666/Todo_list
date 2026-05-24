@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Any
 
 
-DEFAULT_GEOMETRY = {"x": 1100, "y": 120, "width": 540, "height": 780}
+DEFAULT_GEOMETRY = {"x": 980, "y": 60, "width": 820, "height": 1040}
 DEFAULT_LOW_DISTRACTION_MODE = False
 DEFAULT_NOTIFICATION_REPEAT_MINUTES = 10
 DEFAULT_BACKGROUND_OVERLAY = 0.68

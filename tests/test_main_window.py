@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMessageBox, QProgressBar, QPushButton
 
 from floating_todo.domain import Task
 from floating_todo.settings import AppSettings, settings_to_dict
@@ -87,6 +87,13 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.minimumHeight() >= 760
     assert window.focus_card.minimumHeight() >= 350
     assert window.focus_deadline_panel.minimumHeight() >= 92
+    assert window.focus_priority_label.minimumWidth() >= 90
+    assert window.focus_urgency_label.minimumWidth() >= 90
+    assert window.focus_meta_label.minimumWidth() >= 90
+    assert window.focus_deadline_label.minimumWidth() >= 230
+    assert window.focus_deadline_card.minimumHeight() >= 48
+    assert window.focus_countdown_card.minimumHeight() >= 48
+    assert window.focus_work_timer_card.minimumHeight() >= 48
     assert window.task_section_widget.minimumHeight() >= 54
     assert not window.empty_state_widget.isHidden()
     assert window.empty_state_label.text() == "没有进行中的任务"
@@ -96,7 +103,12 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.focus_countdown_label.text() == "倒计时 --:--:--"
     assert window.focus_work_timer_label.text() == "计时 --:--:--"
     assert window.focus_deadline_label.text() == "截止 --:--:--"
-    assert window.settings_button.text() == "设置"
+    focus_icons = window.focus_deadline_panel.findChildren(QLabel, "focusInfoIcon")
+    assert len(focus_icons) == 3
+    assert all(icon.pixmap() is not None and not icon.pixmap().isNull() for icon in focus_icons)
+    assert window.focus_star_label.pixmap() is not None and not window.focus_star_label.pixmap().isNull()
+    assert window.settings_button.text() == ""
+    assert window.settings_button.accessibleName() == "打开设置"
     assert window.settings_button.toolTip() == "打开设置"
     assert not hasattr(window, "focus_progress")
     assert not hasattr(window, "focus_progress_label")
@@ -107,6 +119,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert window.focus_delete_button.isEnabled() is False
     assert window.active_count_label.text() == "0"
     assert window.today_completion_label.text() == "0%"
+    assert not hasattr(window, "task_grid_button")
 
     window.close()
 
@@ -210,7 +223,7 @@ def test_tasks_can_be_paused_and_resumed_from_rows(qapp: QApplication, tmp_path)
     assert window.settings.focus_task_id == "task-pause"
     assert window.active_count_label.text() == "0"
     assert window.empty_state_widget.isHidden()
-    assert window.focus_title_label.text() == "可暂停任务"
+    assert window.focus_title_label.text() == "任务名称：可暂停任务"
     assert window.focus_urgency_label.text().startswith("已暂停 · ")
     assert window.focus_pause_button.isEnabled() is True
     assert window.focus_pause_button.text() == "▶"
@@ -226,7 +239,7 @@ def test_tasks_can_be_paused_and_resumed_from_rows(qapp: QApplication, tmp_path)
     assert store.saved_tasks[0].status == "active"
     assert store.saved_tasks[0].work_started_at is not None
     assert window.settings.focus_task_id == "task-pause"
-    assert window.focus_title_label.text() == "可暂停任务"
+    assert window.focus_title_label.text() == "任务名称：可暂停任务"
     assert window.focus_pause_button.isEnabled() is True
     assert window.focus_pause_button.text() == "Ⅱ"
     assert window.focus_resume_button.isEnabled() is False
@@ -276,13 +289,13 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert window.empty_state_widget.isHidden()
     assert window.active_count_label.text() == "2"
     assert window.today_completion_label.text() == "33%"
-    assert window.focus_title_label.text() == "关键交付"
+    assert window.focus_title_label.text() == "任务名称：关键交付"
     assert window.focus_meta_label.text() == "计时中"
     assert window.focus_work_timer_label.text() == "计时 00:00:00"
     assert window.focus_notes_label.text() == "备注：重点关注验收口径"
     assert not hasattr(window, "focus_progress")
     assert not hasattr(window, "focus_progress_label")
-    assert window.task_list_layout.count() == 2
+    assert window.task_list_layout.count() == 3
 
     row_labels = window.task_rows_container.findChildren(QLabel)
     row_text = "\n".join(label.text() for label in row_labels)
@@ -291,6 +304,7 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert "截止" in row_text
     assert "计时" in row_text
     assert "60%" not in row_text
+    assert window.focus_card.findChild(QProgressBar, "focusProgressDisplay").isHidden()
     assert "重点关注验收口径" not in row_text
 
     buttons = window.task_rows_container.findChildren(QPushButton)
@@ -308,6 +322,61 @@ def test_refresh_renders_focus_summary_task_rows_and_actions(qapp: QApplication)
     assert {"编辑", "完成", "删除"} <= set(button_texts)
     assert {"编辑任务", "标记任务完成", "删除任务"} <= set(button_tooltips)
     assert "重点关注验收口径" in "\n".join(label.text() for label in window.task_rows_container.findChildren(QLabel))
+
+    window.close()
+
+
+def test_task_scope_and_sort_controls_filter_and_reorder_rows(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    base = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    tasks = [
+        replace(
+            make_task("暂停任务", task_id="paused", priority="P3", status="paused"),
+            created_at=base,
+            updated_at=base,
+            deadline=base + timedelta(hours=1),
+        ),
+        replace(
+            make_task("临近任务", task_id="soon", priority="P2"),
+            created_at=base + timedelta(minutes=1),
+            updated_at=base + timedelta(minutes=1),
+            deadline=base + timedelta(minutes=20),
+        ),
+        replace(
+            make_task("超时任务", task_id="overdue", priority="P1"),
+            created_at=base + timedelta(minutes=2),
+            updated_at=base + timedelta(minutes=2),
+            deadline=base - timedelta(minutes=5),
+        ),
+    ]
+    window = MainWindow(MemoryStore(tasks))
+
+    def visible_titles() -> list[str]:
+        titles: list[str] = []
+        for index in range(window.task_list_layout.count()):
+            widget = window.task_list_layout.itemAt(index).widget()
+            if widget is None or widget.objectName() == "addTaskTile":
+                continue
+            title_label = widget.findChild(QLabel, "activeTaskTitle") or widget.findChild(QLabel, "taskTitle")
+            if title_label is not None:
+                titles.append(title_label.text())
+        return titles
+
+    window._set_task_scope_mode("paused")
+    qapp.processEvents()
+    assert visible_titles() == ["任务名称：暂停任务"]
+
+    window._set_task_scope_mode("overdue")
+    qapp.processEvents()
+    assert visible_titles() == ["任务名称：超时任务"]
+
+    window._set_task_scope_mode("all")
+    window._set_task_sort_mode("created")
+    qapp.processEvents()
+    assert visible_titles()[:3] == ["任务名称：超时任务", "任务名称：临近任务", "任务名称：暂停任务"]
+    assert window.task_scope_button.text() == "全部 v"
+    assert window.task_sort_button.text() == "按创建时间 v"
 
     window.close()
 
@@ -364,19 +433,23 @@ def test_accepting_settings_keeps_deprecated_low_distraction_disabled(
     window.close()
 
 
-def test_timer_timeout_refreshes_window_from_store(qapp: QApplication) -> None:
+def test_timer_timeout_updates_live_labels_without_reloading_or_rebuilding_rows(qapp: QApplication) -> None:
     from floating_todo.ui.main_window import MainWindow
 
-    store = MemoryStore([])
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    live_task = replace(make_task("定时刷新任务"), deadline=now + timedelta(minutes=10), updated_at=now, created_at=now)
+    store = MemoryStore([live_task])
     window = MainWindow(store)
     initial_loads = store.load_count
-
-    store._tasks = [make_task("定时刷新任务")]
+    first_card = window.task_rows_container.findChild(QFrame, "taskRow-定时刷新任务")
     window._clock_timer.timeout.emit()
+    qapp.processEvents()
 
-    assert store.load_count == initial_loads + 1
+    assert store.load_count == initial_loads
     assert window.active_count_label.text() == "1"
-    assert window.focus_title_label.text() == "定时刷新任务"
+    assert window.focus_title_label.text() == "任务名称：定时刷新任务"
+    assert window.task_rows_container.findChild(QFrame, "taskRow-定时刷新任务") is first_card
+    assert window.focus_countdown_label.text().startswith("倒计时 ")
 
     window.close()
 
@@ -407,8 +480,8 @@ def test_add_button_opens_dialog_and_persists_non_empty_task(
 
     assert store.saved_tasks == [task]
     assert window.tasks == [task]
-    assert window.focus_title_label.text() == "新增任务"
-    assert window.task_list_layout.count() == 1
+    assert window.focus_title_label.text() == "任务名称：新增任务"
+    assert window.task_list_layout.count() == 2
 
     window.close()
 
@@ -472,7 +545,7 @@ def test_edit_task_replaces_existing_task_when_dialog_accepts(
     assert constructed["task"] == original
     assert store.saved_tasks == [updated]
     assert window.tasks == [updated]
-    assert window.focus_title_label.text() == "编辑后任务"
+    assert window.focus_title_label.text() == "任务名称：编辑后任务"
 
     window.close()
 
@@ -595,8 +668,8 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     assert window.windowOpacity() == pytest.approx(0.58, abs=0.01)
     assert window.geometry().x() == 33
     assert window.geometry().y() == 44
-    assert window.geometry().width() == 520
-    assert window.geometry().height() == 760
+    assert window.geometry().width() == 720
+    assert window.geometry().height() == 900
 
     window.close()
 
@@ -660,7 +733,7 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert saved["window_geometry"] == {"x": 31, "y": 42, "width": 520, "height": 760}
+    assert saved["window_geometry"] == {"x": 31, "y": 42, "width": 720, "height": 900}
     assert dict(window.settings.window_geometry) == saved["window_geometry"]
 
     window.close()
@@ -683,8 +756,8 @@ def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     assert dict(window.settings.window_geometry) == locked_geometry
     assert window.geometry().x() == locked_geometry["x"]
     assert window.geometry().y() == locked_geometry["y"]
-    assert window.geometry().width() == 520
-    assert window.geometry().height() == 760
+    assert window.geometry().width() == 720
+    assert window.geometry().height() == 900
 
     window.close()
 

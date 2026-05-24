@@ -40,7 +40,7 @@ class CompletionDialog(QDialog):
         task_title.setStyleSheet(f"color: {THEME_COLORS['accent']}; font-weight: 700;")
         layout.addWidget(task_title)
 
-        body = QLabel("确认后任务会进入历史记录，进度更新为 100%。做完这一项，今天的秩序感会更清楚一点。")
+        body = QLabel("确认后任务会进入历史记录。做完这一项，今天的秩序感会更清楚一点。")
         body.setWordWrap(True)
         body.setStyleSheet(f"color: {THEME_COLORS['muted']};")
         layout.addWidget(body)

@@ -34,7 +34,7 @@ def apply_soft_shadow(widget: QWidget, *, blur: int = 28, y_offset: int = 10, al
 
 
 class ClickBurst(QWidget):
-    def __init__(self, parent: QWidget, origin: QPoint, color: QColor) -> None:
+    def __init__(self, parent: QWidget, origin: QPoint, color: QColor, *, duration: int = 360) -> None:
         super().__init__(parent)
         self._progress = 0.0
         self._origin = QPointF(origin)
@@ -47,7 +47,7 @@ class ClickBurst(QWidget):
         self.raise_()
 
         self._animation = QPropertyAnimation(self, b"progress", self)
-        self._animation.setDuration(360)
+        self._animation.setDuration(duration)
         self._animation.setStartValue(0.0)
         self._animation.setEndValue(1.0)
         self._animation.setEasingCurve(QEasingCurve.OutCubic)
@@ -114,7 +114,8 @@ class InteractionEffectFilter(QObject):
         elif event_type == QEvent.Leave:
             self._clear_button_glow(watched)
         elif event_type == QEvent.MouseButtonPress and _event_button(event) == Qt.LeftButton:
-            ClickBurst(watched, _event_pos(event, watched), _button_effect_color(watched))
+            profile = _button_effect_profile(watched)
+            ClickBurst(watched, _event_pos(event, watched), _button_effect_color(watched), duration=int(profile["burst_duration"]))
             self._apply_button_glow(watched, stronger=True)
         elif event_type == QEvent.MouseButtonRelease:
             self._apply_button_glow(watched)
@@ -126,14 +127,20 @@ class InteractionEffectFilter(QObject):
             return
         effect = existing if getattr(button, "_floating_todo_button_glow", False) else QGraphicsDropShadowEffect(button)
         start_radius = effect.blurRadius() if getattr(button, "_floating_todo_button_glow", False) else 0
+        profile = _button_effect_profile(button)
         color = _button_effect_color(button)
-        color.setAlpha(145 if stronger else 92)
+        color.setAlpha(int(profile["press_alpha"] if stronger else profile["hover_alpha"]))
         effect.setColor(color)
         effect.setOffset(0, 0)
         effect.setBlurRadius(start_radius)
         button.setGraphicsEffect(effect)
         button._floating_todo_button_glow = True
-        self._animate_button_glow(button, effect, 22 if stronger else 16, 90 if stronger else 150)
+        self._animate_button_glow(
+            button,
+            effect,
+            int(profile["press_blur"] if stronger else profile["hover_blur"]),
+            int(profile["press_duration"] if stronger else profile["hover_duration"]),
+        )
 
     def _clear_button_glow(self, button: QAbstractButton) -> None:
         if getattr(button, "_floating_todo_button_glow", False):
@@ -321,12 +328,56 @@ def _event_global_pos(event, widget: QWidget) -> QPoint:
     return widget.mapToGlobal(_event_pos(event, widget))
 
 
+def _button_effect_profile(button: QAbstractButton) -> dict[str, int | str]:
+    variant = str(button.property("effectVariant") or "").strip().lower()
+    text = button.text().lower()
+    object_name = button.objectName().lower()
+    has_icon = hasattr(button, "icon") and not button.icon().isNull()
+
+    if not variant:
+        if object_name == "dangerbutton" or "delete" in text or "删除" in text:
+            variant = "danger"
+        elif object_name in {"historysidebarbutton", "settingssidebaritem"} or button.isCheckable():
+            variant = "nav"
+        elif object_name in {
+            "taskdialogsavebutton",
+            "historyexportbutton",
+            "settingssavebutton",
+            "currenttaskbutton",
+        } or "save" in text or "保存" in text or "export" in text or "导出" in text:
+            variant = "primary"
+        elif has_icon and not text:
+            variant = "icon"
+        elif object_name in {"taskdialogcancelbutton", "settingscancelbutton"} or "cancel" in text or "取消" in text:
+            variant = "secondary"
+        else:
+            variant = "utility"
+
+    profiles: dict[str, dict[str, int | str]] = {
+        "danger": {"hover_blur": 16, "press_blur": 24, "hover_duration": 150, "press_duration": 95, "burst_duration": 320, "hover_alpha": 86, "press_alpha": 150},
+        "primary": {"hover_blur": 18, "press_blur": 26, "hover_duration": 145, "press_duration": 90, "burst_duration": 380, "hover_alpha": 96, "press_alpha": 156},
+        "nav": {"hover_blur": 20, "press_blur": 28, "hover_duration": 165, "press_duration": 105, "burst_duration": 420, "hover_alpha": 98, "press_alpha": 162},
+        "icon": {"hover_blur": 14, "press_blur": 21, "hover_duration": 125, "press_duration": 82, "burst_duration": 290, "hover_alpha": 82, "press_alpha": 142},
+        "secondary": {"hover_blur": 15, "press_blur": 22, "hover_duration": 140, "press_duration": 90, "burst_duration": 330, "hover_alpha": 86, "press_alpha": 142},
+        "utility": {"hover_blur": 16, "press_blur": 22, "hover_duration": 150, "press_duration": 90, "burst_duration": 340, "hover_alpha": 90, "press_alpha": 145},
+    }
+    return profiles.get(variant, profiles["utility"])
+
+
 def _button_effect_color(button: QAbstractButton) -> QColor:
     text = button.text().lower()
-    if button.objectName() == "dangerButton" or "delete" in text or "删除" in text:
+    variant = str(button.property("effectVariant") or "").strip().lower()
+    object_name = button.objectName().lower()
+    if variant == "danger" or object_name == "dangerbutton" or "delete" in text or "删除" in text:
         return QColor("#FCA5A5")
-    if "save" in text or "保存" in text or "+" in text:
+    if variant == "primary" or "save" in text or "保存" in text or "export" in text or "导出" in text or "+" in text:
         return QColor("#A7F3D0")
+    if variant == "nav" or object_name in {"historysidebarbutton", "settingssidebaritem"}:
+        return QColor("#67E8F9")
+    if variant == "icon":
+        return QColor("#BAE6FD")
+    if variant == "secondary":
+        return QColor("#93C5FD")
     return QColor("#7DD3FC")
 
 

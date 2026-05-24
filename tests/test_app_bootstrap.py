@@ -24,8 +24,8 @@ def test_ensure_data_files_creates_data_folder(tmp_path):
 
 
 def test_theme_exposes_reusable_tokens_used_by_qss():
-    assert THEME_COLORS["background"] == "#080A0F"
-    assert THEME_COLORS["accent"] == "#7DD3FC"
+    assert THEME_COLORS["background"] == "#020A13"
+    assert THEME_COLORS["accent"] == "#22D3EE"
     assert THEME_RADIUS["control"] == "8px"
     assert THEME_SPACING["control_padding"] == "5px 12px"
     assert APP_FONT_FAMILY == "Alibaba PuHuiTi 3.0"

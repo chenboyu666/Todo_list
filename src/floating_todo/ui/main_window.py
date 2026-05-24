@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
-from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QTimer, Qt
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QTimer, Qt
 from PySide6.QtGui import QColor, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QDialog,
@@ -15,8 +15,10 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
@@ -58,7 +60,7 @@ from floating_todo.view_models import (
     countdown_label,
     deadline_at_label,
     deadline_urgency,
-    priority_display_label,
+    priority_text,
     task_rows,
     today_completion_percent,
     work_timer_label,
@@ -66,13 +68,26 @@ from floating_todo.view_models import (
 
 
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
-MAIN_WINDOW_MINIMUM_WIDTH = 520
-MAIN_WINDOW_MINIMUM_HEIGHT = 760
-FOCUS_CARD_MINIMUM_HEIGHT = 350
-FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 108
+UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
+MAIN_WINDOW_MINIMUM_WIDTH = 720
+MAIN_WINDOW_MINIMUM_HEIGHT = 900
+FOCUS_CARD_MINIMUM_HEIGHT = 390
+FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 124
 TASK_SECTION_MINIMUM_HEIGHT = 54
 BACKGROUND_RANDOM_INTERVAL_MS = 3 * 60 * 1000
 _CURRENT_UI_SCALE = DEFAULT_UI_SCALE
+TASK_SCOPE_LABELS = {
+    "all": "全部",
+    "active": "进行中",
+    "paused": "已暂停",
+    "soon": "临近",
+    "overdue": "超时",
+}
+TASK_SORT_LABELS = {
+    "priority": "按优先级",
+    "deadline": "按截止时间",
+    "created": "按创建时间",
+}
 
 
 def _clamp_ui_scale(scale: float) -> float:
@@ -86,6 +101,53 @@ def _set_current_ui_scale(scale: float) -> None:
 
 def _scale_px(value: int | float, *, minimum: int = 1) -> int:
     return max(minimum, int(round(float(value) * _CURRENT_UI_SCALE)))
+
+
+def _apply_svg_icon(label: QLabel, icon_name: str, size: int) -> None:
+    label.setPixmap(QIcon(str(UI_ICON_DIR / icon_name)).pixmap(QSize(size, size)))
+
+
+def _priority_icon_name(priority: str) -> str:
+    return {
+        "P1": "priority-high.svg",
+        "P2": "priority-medium.svg",
+        "P3": "priority-low.svg",
+    }.get(priority, "priority-medium.svg")
+
+
+def _priority_inline_markup(priority: str, *, size: int = 14, text: str | None = None) -> str:
+    icon_path = (UI_ICON_DIR / _priority_icon_name(priority)).as_posix()
+    label_text = text if text is not None else priority_text(priority)
+    return (
+        f"<span style=\"white-space: nowrap;\">"
+        f"<img src=\"{icon_path}\" width=\"{size}\" height=\"{size}\" "
+        f"style=\"vertical-align: middle; margin-right: 6px;\"/>"
+        f"{label_text}</span>"
+    )
+
+
+def _focus_info_card(object_name: str, icon_name: str, text_label: QLabel) -> QFrame:
+    card = QFrame()
+    card.setObjectName(object_name)
+    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    card.setMinimumHeight(_scale_px(52))
+
+    layout = QHBoxLayout(card)
+    layout.setContentsMargins(_scale_px(14), _scale_px(11), _scale_px(16), _scale_px(11))
+    layout.setSpacing(_scale_px(10))
+
+    icon = QLabel("")
+    icon.setObjectName("focusInfoIcon")
+    icon.setProperty("iconName", icon_name)
+    icon.setAlignment(Qt.AlignCenter)
+    icon.setFixedSize(_scale_px(28), _scale_px(28))
+    _apply_svg_icon(icon, icon_name, _scale_px(15))
+    layout.addWidget(icon, 0, Qt.AlignVCenter)
+
+    text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    text_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    layout.addWidget(text_label, 1)
+    return card
 
 
 class TaskStore(Protocol):
@@ -111,40 +173,30 @@ class ClockDisplay(QLabel):
         self.apply_scale()
 
     def apply_scale(self) -> None:
-        self.setMinimumSize(_scale_px(92), _scale_px(38))
+        self.setMinimumSize(_scale_px(150), _scale_px(42))
         self.setStyleSheet(
             "QLabel#clockLabel {"
-            "color: #F8FBFF;"
+            "color: #7DF9FF;"
             "background: transparent;"
-            f"font-size: {_scale_px(15)}px;"
+            f"font-size: {_scale_px(26)}px;"
             "font-weight: 900;"
             'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
-            f"padding: 0 {_scale_px(12)}px;"
+            f"padding: 0 {_scale_px(4)}px;"
             "}"
         )
 
     def setText(self, text: str) -> None:
-        self._phase = (self._phase + 1) % 360
         super().setText(text)
         self.update()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 10, 10)
-
-        fill = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        fill.setColorAt(0, QColor(9, 20, 33, 228))
-        fill.setColorAt(0.52, QColor(13, 48, 66, 232))
-        fill.setColorAt(1, QColor(22, 78, 73, 226))
-        painter.fillPath(path, fill)
-        painter.setClipPath(path)
-        self._draw_clock_sweep(painter, rect)
-        painter.setClipping(False)
-        painter.setPen(QPen(QColor(125, 211, 252, 90), 1.1))
-        painter.drawPath(path)
+        painter.setFont(self.font())
+        rect = self.rect()
+        for offset, alpha in ((2, 34), (1, 62)):
+            painter.setPen(QColor(34, 211, 238, alpha))
+            painter.drawText(rect.adjusted(-offset, 0, offset, 0), Qt.AlignCenter, self.text())
         painter.end()
         super().paintEvent(event)
 
@@ -163,6 +215,41 @@ class ClockDisplay(QLabel):
         painter.fillRect(sweep_rect, sweep)
 
 
+class TitleLogoBadge(QFrame):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("titleLogoBadge")
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.apply_scale()
+
+    def apply_scale(self) -> None:
+        self.setFixedSize(_scale_px(34), _scale_px(34))
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        glow = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        glow.setColorAt(0, QColor(34, 211, 238, 76))
+        glow.setColorAt(1, QColor(15, 118, 110, 42))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(glow)
+        painter.drawEllipse(rect)
+        painter.setPen(QPen(QColor("#22D3EE"), max(1.6, _scale_px(2)), Qt.SolidLine, Qt.RoundCap))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawArc(rect.adjusted(4, 4, -4, -4), 42 * 16, 288 * 16)
+        check = QPainterPath()
+        check.moveTo(rect.left() + rect.width() * 0.34, rect.top() + rect.height() * 0.52)
+        check.lineTo(rect.left() + rect.width() * 0.46, rect.top() + rect.height() * 0.64)
+        check.lineTo(rect.left() + rect.width() * 0.68, rect.top() + rect.height() * 0.38)
+        painter.setPen(QPen(QColor("#B9F8FF"), max(1.8, _scale_px(2.2)), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPath(check)
+        dot = QRectF(rect.left() + rect.width() * 0.68, rect.top() + rect.height() * 0.13, _scale_px(4), _scale_px(4))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#5EEAD4"))
+        painter.drawEllipse(dot)
+
+
 class TitleBar(QFrame):
     def __init__(self, window: "MainWindow") -> None:
         super().__init__(window)
@@ -174,27 +261,29 @@ class TitleBar(QFrame):
         self.setStyleSheet(
             "QFrame#titleBar {"
             "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            " stop:0 #10263A,"
-            " stop:0.48 #132F3C,"
-            " stop:1 #142A33);"
+            " stop:0 #061321,"
+            " stop:0.45 #0B2035,"
+            " stop:1 #082B34);"
             "border: none;"
-            "border-radius: 10px;"
+            "border-radius: 14px;"
             "}"
             "QFrame#titleActionDock {"
-            "background: rgba(7, 13, 23, 118);"
+            "background: transparent;"
             "border: none;"
-            "border-radius: 10px;"
             "}"
         )
 
         layout = QHBoxLayout(self)
         self.title_layout = layout
         layout.setAlignment(Qt.AlignVCenter)
+        self.logo_badge = TitleLogoBadge(self)
+        layout.addWidget(self.logo_badge)
         title = QLabel(APP_DISPLAY_NAME)
         title.setObjectName("windowTitleLabel")
         self.title_label = title
         layout.addWidget(title)
         drag_hint = QLabel("拖动")
+        drag_hint.setFixedWidth(4)
         self.drag_hint_label = drag_hint
         layout.addWidget(drag_hint)
         window.passthrough_hint_label = QLabel("穿透中 · 右键托盘恢复")
@@ -202,6 +291,7 @@ class TitleBar(QFrame):
         window.passthrough_hint_label.setStyleSheet(
             "color: #ECFEFF; background: #155E75; border-radius: 8px; padding: 3px 8px; font-weight: 800;"
         )
+        window.passthrough_hint_label.setVisible(False)
         layout.addWidget(window.passthrough_hint_label)
         layout.addStretch(1)
         action_dock = QFrame()
@@ -211,17 +301,26 @@ class TitleBar(QFrame):
         self.action_layout = action_layout
         action_layout.setAlignment(Qt.AlignVCenter)
         action_layout.addWidget(window.clock_label, 0, Qt.AlignVCenter)
-        window.settings_button.setText("设置")
+        window.settings_button.setText("")
+        window.settings_button.setObjectName("titleIconButton")
         window.settings_button.setToolTip("打开设置")
+        window.settings_button.setAccessibleName("打开设置")
+        window.settings_button.setIcon(QIcon(str(UI_ICON_DIR / "nav-settings.svg")))
         window.settings_button.setCursor(Qt.PointingHandCursor)
         action_layout.addWidget(window.settings_button, 0, Qt.AlignVCenter)
-        window.minimize_button = QPushButton("–")
+        window.minimize_button = QPushButton("")
+        window.minimize_button.setObjectName("titleIconButton")
         window.minimize_button.setToolTip("最小化")
+        window.minimize_button.setAccessibleName("最小化")
+        window.minimize_button.setIcon(QIcon(str(UI_ICON_DIR / "window-minimize.svg")))
         window.minimize_button.setCursor(Qt.PointingHandCursor)
         window.minimize_button.clicked.connect(window.showMinimized)
         action_layout.addWidget(window.minimize_button, 0, Qt.AlignVCenter)
-        window.close_button = QPushButton("×")
+        window.close_button = QPushButton("")
+        window.close_button.setObjectName("titleIconButton")
         window.close_button.setToolTip("关闭")
+        window.close_button.setAccessibleName("关闭")
+        window.close_button.setIcon(QIcon(str(UI_ICON_DIR / "window-close.svg")))
         window.close_button.setCursor(Qt.PointingHandCursor)
         window.close_button.clicked.connect(window.close)
         action_layout.addWidget(window.close_button, 0, Qt.AlignVCenter)
@@ -233,18 +332,23 @@ class TitleBar(QFrame):
         self.setMinimumHeight(_scale_px(58))
         self.title_layout.setContentsMargins(_scale_px(12), _scale_px(7), _scale_px(8), _scale_px(7))
         self.title_layout.setSpacing(_scale_px(8))
-        self.title_label.setStyleSheet(f"font-size: {_scale_px(21)}px; font-weight: 900;")
+        self.logo_badge.apply_scale()
+        self.title_label.setStyleSheet(f"font-size: {_scale_px(22)}px; font-weight: 900; color: #F8FBFF;")
         self.drag_hint_label.setStyleSheet(
-            f"color: {THEME_COLORS['accent_secondary']}; font-weight: 700; font-size: {_scale_px(13)}px;"
+            "color: transparent; "
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #22D3EE, stop:1 #0F766E); "
+            f"border-radius: {_scale_px(2)}px;"
         )
         self.action_dock.setFixedHeight(_scale_px(46))
         self.action_layout.setContentsMargins(_scale_px(7), _scale_px(4), _scale_px(7), _scale_px(4))
         self.action_layout.setSpacing(_scale_px(8))
         self.window.clock_label.apply_scale()
-        self.window.settings_button.setFixedHeight(_scale_px(38))
-        self.window.settings_button.setMinimumWidth(_scale_px(62))
+        self.window.settings_button.setFixedSize(_scale_px(42), _scale_px(38))
+        self.window.settings_button.setIconSize(QSize(_scale_px(18), _scale_px(18)))
         self.window.minimize_button.setFixedSize(_scale_px(42), _scale_px(38))
+        self.window.minimize_button.setIconSize(QSize(_scale_px(18), _scale_px(18)))
         self.window.close_button.setFixedSize(_scale_px(42), _scale_px(38))
+        self.window.close_button.setIconSize(QSize(_scale_px(18), _scale_px(18)))
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -427,6 +531,9 @@ class MainWindow(QMainWindow):
         self._background_random_timer.timeout.connect(self.rotate_random_background)
         self._toast_popups: list[FloatingToast] = []
         self.expanded_task_ids: set[str] = set()
+        self.task_scope_mode = "all"
+        self.task_sort_mode = "priority"
+        self._last_task_grid_columns = 0
         self.tasks = self.store.load_tasks()
 
         self.setWindowTitle(APP_DISPLAY_NAME)
@@ -439,23 +546,26 @@ class MainWindow(QMainWindow):
         self.clock_label = ClockDisplay()
         self.today_completion_label = QLabel("0%")
         self.active_count_label = QLabel("0")
+        self.soon_count_label = QLabel("0")
+        self.overdue_count_label = QLabel("0")
         self.focus_title_label = QLabel("没有进行中的任务")
         self.focus_meta_label = QLabel("等待任务")
         self.focus_deadline_label = QLabel("截止 --:--:--")
         self.focus_countdown_label = QLabel("倒计时 --:--:--")
         self.focus_countdown_label.setObjectName("focusCountdownLabel")
         self.focus_countdown_label.setAlignment(Qt.AlignCenter)
-        self.focus_countdown_label.setMinimumWidth(_scale_px(154))
+        self.focus_countdown_label.setMinimumWidth(_scale_px(196))
         self.focus_countdown_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.focus_work_timer_label = QLabel("计时 --:--:--")
         self.focus_work_timer_label.setObjectName("focusWorkTimerLabel")
         self.focus_work_timer_label.setAlignment(Qt.AlignCenter)
-        self.focus_work_timer_label.setMinimumWidth(_scale_px(144))
+        self.focus_work_timer_label.setMinimumWidth(_scale_px(188))
         self.focus_work_timer_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.focus_priority_label = QLabel("--")
         self.focus_priority_label.setObjectName("focusPriorityLabel")
         self.focus_priority_label.setAlignment(Qt.AlignCenter)
-        self.focus_priority_label.setMinimumHeight(_scale_px(34))
+        self.focus_priority_label.setTextFormat(Qt.RichText)
+        self.focus_priority_label.setMinimumHeight(_scale_px(40))
         self.focus_urgency_label = QLabel("等待")
         self.empty_state_label = QLabel("没有进行中的任务")
         self.empty_state_hint_label = QLabel("点击新增任务开始")
@@ -470,12 +580,13 @@ class MainWindow(QMainWindow):
         self.close_button = QPushButton("×")
 
         self._build_ui()
+        self._configure_task_controls()
         self.apply_ui_scale(self.settings.ui_scale, persist=False, refresh=False)
         self.add_button.clicked.connect(self.add_task)
         self.settings_button.clicked.connect(self.open_settings)
         self.history_button.clicked.connect(self.open_history)
         self._clock_timer = QTimer(self)
-        self._clock_timer.timeout.connect(self.refresh)
+        self._clock_timer.timeout.connect(self.refresh_live_state)
         self._clock_timer.start(1000)
         self.refresh()
         self._geometry_initialized = True
@@ -483,6 +594,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         root = AnimatedBackdrop()
         root.setObjectName("mainRoot")
+        root.setStyleSheet(_main_window_style())
         self.root_widget = root
         root_layout = QVBoxLayout(root)
         self.root_layout = root_layout
@@ -498,8 +610,10 @@ class MainWindow(QMainWindow):
         self.summary_layout = summary_layout
         summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(_scale_px(8))
-        summary_layout.addWidget(self._summary_card("今日完成", self.today_completion_label))
-        summary_layout.addWidget(self._summary_card("进行中", self.active_count_label))
+        summary_layout.addWidget(self._summary_card("今日完成", self.today_completion_label, "done"))
+        summary_layout.addWidget(self._summary_card("进行中", self.active_count_label, "active"))
+        summary_layout.addWidget(self._summary_card("临近", self.soon_count_label, "soon"))
+        summary_layout.addWidget(self._summary_card("超时", self.overdue_count_label, "overdue"))
         root_layout.addWidget(self.summary_widget)
 
         self.focus_card = FocusDropCard(self)
@@ -513,6 +627,26 @@ class MainWindow(QMainWindow):
         focus_layout.setContentsMargins(_scale_px(14), _scale_px(12), _scale_px(14), _scale_px(12))
         focus_layout.setSpacing(_scale_px(10))
 
+        focus_header = QHBoxLayout()
+        focus_header.setContentsMargins(0, 0, 0, 0)
+        focus_header.setSpacing(_scale_px(8))
+        focus_header_accent = QFrame()
+        focus_header_accent.setObjectName("focusSectionAccent")
+        focus_header_accent.setFixedSize(_scale_px(5), _scale_px(28))
+        focus_header.addWidget(focus_header_accent)
+        focus_header_label = QLabel("当前任务")
+        focus_header_label.setObjectName("focusSectionTitle")
+        focus_header.addWidget(focus_header_label)
+        focus_header.addStretch(1)
+        focus_star = QLabel("")
+        focus_star.setObjectName("focusStar")
+        focus_star.setAlignment(Qt.AlignCenter)
+        focus_star.setFixedSize(_scale_px(34), _scale_px(34))
+        _apply_svg_icon(focus_star, "focus-star.svg", _scale_px(18))
+        self.focus_star_label = focus_star
+        focus_header.addWidget(focus_star)
+        focus_layout.addLayout(focus_header)
+
         focus_top = QGridLayout()
         focus_top.setContentsMargins(0, 0, 0, 0)
         focus_top.setHorizontalSpacing(_scale_px(10))
@@ -520,19 +654,20 @@ class MainWindow(QMainWindow):
         self.focus_top_layout = focus_top
         self.focus_title_prefix = QLabel("进行中")
         self.focus_title_prefix.setAlignment(Qt.AlignCenter)
-        self.focus_title_prefix.setMinimumHeight(_scale_px(34))
+        self.focus_title_prefix.setMinimumHeight(_scale_px(40))
         self.focus_title_prefix.setStyleSheet(_focus_status_style())
         self.focus_meta_label.setAlignment(Qt.AlignCenter)
-        self.focus_meta_label.setMinimumHeight(_scale_px(34))
+        self.focus_meta_label.setMinimumHeight(_scale_px(40))
         self.focus_meta_label.setStyleSheet(_focus_meta_style())
         self.focus_urgency_label.setAlignment(Qt.AlignCenter)
-        self.focus_urgency_label.setMinimumHeight(_scale_px(34))
+        self.focus_urgency_label.setMinimumHeight(_scale_px(40))
         for index, widget in enumerate(
             (self.focus_title_prefix, self.focus_priority_label, self.focus_urgency_label, self.focus_meta_label)
         ):
-            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            focus_top.addWidget(widget, 0, index)
-            focus_top.setColumnStretch(index, 1)
+            widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            widget.setMinimumWidth(_scale_px(128))
+            focus_top.addWidget(widget, 0, index, Qt.AlignLeft | Qt.AlignVCenter)
+            focus_top.setColumnStretch(index, 0)
 
         deadline_panel = QFrame()
         deadline_panel.setObjectName("focusDeadlinePanel")
@@ -542,17 +677,19 @@ class MainWindow(QMainWindow):
         self.focus_deadline_panel = deadline_panel
         deadline_layout = QVBoxLayout(deadline_panel)
         self.deadline_layout = deadline_layout
-        deadline_layout.setContentsMargins(_scale_px(12), _scale_px(7), _scale_px(12), _scale_px(9))
-        deadline_layout.setSpacing(_scale_px(4))
-        self.focus_deadline_label.setAlignment(Qt.AlignCenter)
-        self.focus_deadline_label.setMinimumWidth(_scale_px(220))
-        deadline_layout.addWidget(self.focus_deadline_label)
+        deadline_layout.setContentsMargins(_scale_px(16), _scale_px(10), _scale_px(16), _scale_px(12))
+        deadline_layout.setSpacing(_scale_px(7))
+        self.focus_deadline_card = _focus_info_card("focusDeadlineInfoCard", "record-calendar.svg", self.focus_deadline_label)
+        self.focus_deadline_label.setMinimumWidth(_scale_px(336))
+        deadline_layout.addWidget(self.focus_deadline_card)
         focus_time_row = QHBoxLayout()
         self.focus_time_row = focus_time_row
         focus_time_row.setContentsMargins(0, 0, 0, 0)
-        focus_time_row.setSpacing(_scale_px(8))
-        focus_time_row.addWidget(self.focus_countdown_label, 1)
-        focus_time_row.addWidget(self.focus_work_timer_label, 1)
+        focus_time_row.setSpacing(_scale_px(12))
+        self.focus_countdown_card = _focus_info_card("focusCountdownCard", "task-deadline.svg", self.focus_countdown_label)
+        self.focus_work_timer_card = _focus_info_card("focusWorkTimerCard", "record-clock.svg", self.focus_work_timer_label)
+        focus_time_row.addWidget(self.focus_countdown_card, 1)
+        focus_time_row.addWidget(self.focus_work_timer_card, 1)
         deadline_layout.addLayout(focus_time_row)
 
         self.focus_title_label.setStyleSheet(_focus_title_style())
@@ -560,12 +697,35 @@ class MainWindow(QMainWindow):
         self.focus_title_label.setMinimumHeight(_scale_px(46))
         self.focus_title_label.setMaximumHeight(_scale_px(96))
         self.focus_title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.focus_title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.focus_title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         focus_top.addWidget(self.focus_title_label, 1, 0, 1, 4)
         focus_top.addWidget(deadline_panel, 0, 4, 2, 1)
-        focus_top.setColumnMinimumWidth(4, _scale_px(330))
+        focus_top.setColumnMinimumWidth(4, _scale_px(436))
         focus_top.setColumnStretch(4, 2)
         focus_layout.addLayout(focus_top)
+        progress_row = QHBoxLayout()
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.setSpacing(_scale_px(10))
+        focus_progress_caption = QLabel("进度")
+        focus_progress_caption.setObjectName("focusProgressCaption")
+        focus_progress_caption.setFixedWidth(_scale_px(48))
+        progress_row.addWidget(focus_progress_caption)
+        self.focus_progress_bar = QProgressBar()
+        self.focus_progress_bar.setObjectName("focusProgressDisplay")
+        self.focus_progress_bar.setRange(0, 100)
+        self.focus_progress_bar.setTextVisible(False)
+        self.focus_progress_bar.setFixedHeight(_scale_px(8))
+        progress_row.addWidget(self.focus_progress_bar, 1)
+        self.focus_progress_value_label = QLabel("")
+        self.focus_progress_value_label.setObjectName("focusProgressValue")
+        self.focus_progress_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.focus_progress_value_label.setFixedWidth(_scale_px(52))
+        self.focus_progress_value_label.setStyleSheet(_progress_value_style(selected=True))
+        progress_row.addWidget(self.focus_progress_value_label)
+        focus_layout.addLayout(progress_row)
+        focus_progress_caption.hide()
+        self.focus_progress_bar.hide()
+        self.focus_progress_value_label.hide()
         self.focus_notes_label = QLabel()
         self.focus_notes_label.setWordWrap(True)
         self.focus_notes_label.setObjectName("focusNotesLabel")
@@ -576,18 +736,13 @@ class MainWindow(QMainWindow):
         focus_actions = QHBoxLayout()
         focus_actions.setSpacing(_scale_px(8))
         self.focus_actions = focus_actions
-        focus_actions.addStretch(1)
-        self.focus_edit_button = QPushButton("编辑")
-        self.focus_edit_button.setToolTip("编辑当前进行中的任务")
-        self.focus_edit_button.clicked.connect(self.edit_focus_task)
-        focus_actions.addWidget(self.focus_edit_button)
         self.focus_pause_button = QPushButton("Ⅱ")
         self.focus_pause_button.setObjectName("focusPauseButton")
         self.focus_pause_button.setToolTip("暂停工作计时，截止倒计时仍继续")
         self.focus_pause_button.setAccessibleName("暂停或继续工作计时")
         self.focus_pause_button.setFixedSize(_scale_px(44), _scale_px(36))
         self.focus_pause_button.clicked.connect(self.toggle_focus_pause_task)
-        focus_actions.addWidget(self.focus_pause_button)
+        focus_actions.addWidget(self.focus_pause_button, 1)
         self.focus_resume_button = QPushButton()
         self.focus_resume_button.hide()
         self.focus_resume_button.clicked.connect(self.resume_focus_task)
@@ -595,12 +750,16 @@ class MainWindow(QMainWindow):
         self.focus_complete_button.setObjectName("focusCompleteButton")
         self.focus_complete_button.setToolTip("完成当前进行中的任务")
         self.focus_complete_button.clicked.connect(self.complete_focus_task)
-        focus_actions.addWidget(self.focus_complete_button)
+        focus_actions.addWidget(self.focus_complete_button, 1)
+        self.focus_edit_button = QPushButton("编辑")
+        self.focus_edit_button.setToolTip("编辑当前进行中的任务")
+        self.focus_edit_button.clicked.connect(self.edit_focus_task)
+        focus_actions.addWidget(self.focus_edit_button, 1)
         self.focus_delete_button = QPushButton("删除")
         self.focus_delete_button.setObjectName("dangerButton")
         self.focus_delete_button.setToolTip("删除当前进行中的任务")
         self.focus_delete_button.clicked.connect(self.delete_focus_task)
-        focus_actions.addWidget(self.focus_delete_button)
+        focus_actions.addWidget(self.focus_delete_button, 1)
         focus_layout.addLayout(focus_actions)
         root_layout.addWidget(self.focus_card)
         self._sync_focus_header_layout()
@@ -612,13 +771,33 @@ class MainWindow(QMainWindow):
         self.actions_layout = actions_layout
         actions_layout.setContentsMargins(0, _scale_px(6), 0, _scale_px(6))
         actions_layout.setAlignment(Qt.AlignVCenter)
-        section_label = QLabel("任务")
-        section_label.setStyleSheet("font-weight: 700;")
+        task_section_accent = QFrame()
+        task_section_accent.setObjectName("taskSectionAccent")
+        task_section_accent.setFixedSize(_scale_px(5), _scale_px(26))
+        actions_layout.addWidget(task_section_accent)
+        section_label = QLabel("任务列表")
+        section_label.setObjectName("taskSectionTitle")
         actions_layout.addWidget(section_label)
         actions_layout.addStretch(1)
+        self.task_scope_button = QPushButton("全部 v")
+        self.task_scope_button.setObjectName("taskFilterButton")
+        self.task_scope_button.setProperty("effectVariant", "utility")
+        self.task_scope_button.setToolTip("显示全部任务")
+        actions_layout.addWidget(self.task_scope_button)
+        self.task_sort_button = QPushButton("按优先级 v")
+        self.task_sort_button.setObjectName("taskFilterButton")
+        self.task_sort_button.setProperty("effectVariant", "utility")
+        self.task_sort_button.setToolTip("当前按优先级和时间排序")
+        actions_layout.addWidget(self.task_sort_button)
+        self.task_grid_button = QPushButton("卡片")
+        self.task_grid_button.setObjectName("taskViewButton")
+        self.task_grid_button.setToolTip("矩形卡片视图")
+        actions_layout.addWidget(self.task_grid_button)
         self.history_button.setToolTip("查看历史任务与完成体会")
+        self.history_button.setProperty("effectVariant", "utility")
         actions_layout.addWidget(self.history_button)
         self.add_button.setToolTip("新增任务")
+        self.add_button.setProperty("effectVariant", "primary")
         actions_layout.addWidget(self.add_button)
         root_layout.addWidget(self.task_section_widget)
 
@@ -658,22 +837,122 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(resize_row)
         self.apply_background_settings()
 
-    def _summary_card(self, caption: str, value_label: QLabel) -> QFrame:
+    def _summary_card(self, caption: str, value_label: QLabel, tone: str = "active") -> QFrame:
         card = QFrame()
-        card.setStyleSheet(_card_style())
+        card.setObjectName(f"summaryCard-{tone}")
+        card.setStyleSheet(_summary_card_style(tone))
         apply_soft_shadow(card, blur=_scale_px(24), y_offset=_scale_px(8), alpha=85)
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(_scale_px(10), _scale_px(8), _scale_px(10), _scale_px(8))
-        layout.setSpacing(_scale_px(2))
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(_scale_px(14), _scale_px(12), _scale_px(14), _scale_px(12))
+        layout.setSpacing(_scale_px(12))
+        icon = QLabel("")
+        icon.setObjectName("summaryIcon")
+        icon.setProperty("summaryTone", tone)
+        icon.setProperty("iconName", _summary_icon_name(tone))
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setFixedSize(_scale_px(34), _scale_px(34))
+        icon.setStyleSheet(_summary_icon_style(tone))
+        _apply_svg_icon(icon, _summary_icon_name(tone), _scale_px(18))
+        layout.addWidget(icon)
+        text_stack = QVBoxLayout()
+        text_stack.setContentsMargins(0, 0, 0, 0)
+        text_stack.setSpacing(_scale_px(3))
         caption_label = QLabel(caption)
-        caption_label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-size: {_scale_px(13)}px;")
-        value_label.setStyleSheet(f"font-size: {_scale_px(20)}px; font-weight: 700;")
-        layout.addWidget(caption_label)
-        layout.addWidget(value_label)
+        caption_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        caption_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        caption_label.setStyleSheet(f"color: #AFC3D8; font-size: {_scale_px(12)}px; font-weight: 800;")
+        value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        value_label.setStyleSheet(f"font-size: {_scale_px(24)}px; font-weight: 900; color: #F8FBFF;")
+        footer_label = QLabel(_summary_footer(tone))
+        footer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        footer_label.setStyleSheet(f"color: #8EA2B7; font-size: {_scale_px(11)}px; font-weight: 800;")
+        text_stack.addWidget(caption_label)
+        text_stack.addWidget(value_label)
+        text_stack.addWidget(footer_label)
+        layout.addLayout(text_stack, 1)
         return card
+
+    def _configure_task_controls(self) -> None:
+        scope_menu = QMenu(self.task_scope_button)
+        for mode in ("all", "active", "paused", "soon", "overdue"):
+            action = scope_menu.addAction(TASK_SCOPE_LABELS[mode])
+            action.triggered.connect(lambda checked=False, scope=mode: self._set_task_scope_mode(scope))
+        self.task_scope_button.setMenu(scope_menu)
+
+        sort_menu = QMenu(self.task_sort_button)
+        for mode in ("priority", "deadline", "created"):
+            action = sort_menu.addAction(TASK_SORT_LABELS[mode])
+            action.triggered.connect(lambda checked=False, sort_mode=mode: self._set_task_sort_mode(sort_mode))
+        self.task_sort_button.setMenu(sort_menu)
+
+        self.task_grid_button.hide()
+        self.task_grid_button.setEnabled(False)
+        self.task_grid_button.deleteLater()
+        del self.task_grid_button
+        self._update_task_control_labels()
+
+    def _set_task_scope_mode(self, mode: str) -> None:
+        if mode == self.task_scope_mode:
+            return
+        self.task_scope_mode = mode
+        self.refresh_data_view()
+
+    def _set_task_sort_mode(self, mode: str) -> None:
+        if mode == self.task_sort_mode:
+            return
+        self.task_sort_mode = mode
+        self.refresh_data_view()
+
+    def _update_task_control_labels(self) -> None:
+        scope_text = TASK_SCOPE_LABELS.get(self.task_scope_mode, TASK_SCOPE_LABELS["all"])
+        sort_text = TASK_SORT_LABELS.get(self.task_sort_mode, TASK_SORT_LABELS["priority"])
+        self.task_scope_button.setText(f"{scope_text} v")
+        self.task_scope_button.setToolTip(f"当前筛选：{scope_text}")
+        self.task_sort_button.setText(f"{sort_text} v")
+        self.task_sort_button.setToolTip(f"当前排序：{sort_text}")
+
+    def _task_rows_for_view(self, now: datetime) -> list[dict[str, object]]:
+        rows = list(task_rows(self.tasks, now))
+        tasks_by_id = {task.id: task for task in self.tasks}
+        if self.task_scope_mode == "active":
+            rows = [row for row in rows if not bool(row.get("is_paused"))]
+        elif self.task_scope_mode == "paused":
+            rows = [row for row in rows if bool(row.get("is_paused"))]
+        elif self.task_scope_mode == "soon":
+            rows = [
+                row
+                for row in rows
+                if not bool(row.get("is_paused")) and str(row.get("urgency")) in {"soon", "urgent", "critical"}
+            ]
+        elif self.task_scope_mode == "overdue":
+            rows = [row for row in rows if str(row.get("urgency")) == "overdue"]
+
+        if self.task_sort_mode == "deadline":
+            rows.sort(
+                key=lambda row: (
+                    tasks_by_id[str(row["id"])].deadline is None,
+                    tasks_by_id[str(row["id"])].deadline or datetime.max.replace(tzinfo=timezone.utc),
+                    str(row.get("priority") or ""),
+                )
+            )
+        elif self.task_sort_mode == "created":
+            rows.sort(
+                key=lambda row: (
+                    tasks_by_id[str(row["id"])].created_at,
+                    row.get("title") or "",
+                ),
+                reverse=True,
+            )
+        return rows
 
     def update_clock(self) -> None:
         self.clock_label.setText(datetime.now().strftime("%H:%M:%S"))
+
+    def _reactivate_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def focus_task(self) -> Task | None:
         if self.settings.focus_task_id:
@@ -696,7 +975,7 @@ class MainWindow(QMainWindow):
             return
         self.settings = replace(self.settings, focus_task_id=task_id)
         self._save_settings()
-        self.refresh()
+        self.refresh_data_view()
         animate_value_tick(self.focus_title_label, duration=190)
         animate_content_swap(self.task_rows_container, duration=150)
         self._pulse_widget(self.focus_card)
@@ -765,19 +1044,21 @@ class MainWindow(QMainWindow):
         updated = replace(self.tasks[index], progress=max(0, min(100, int(value))), updated_at=datetime.now(timezone.utc))
         self.tasks = [*self.tasks[:index], updated, *self.tasks[index + 1 :]]
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
 
     def add_task(self) -> None:
         dialog = TaskDialog(self)
         prepare_window_entrance(dialog)
-        if dialog.exec() != QDialog.Accepted:
+        accepted = dialog.exec() == QDialog.Accepted
+        self._reactivate_window()
+        if not accepted:
             return
         task = dialog.build_task()
         if not task.title.strip():
             return
         self.tasks = [*self.tasks, task]
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
 
     def edit_task(self, task_id: str) -> None:
         index = self._task_index(task_id)
@@ -785,14 +1066,16 @@ class MainWindow(QMainWindow):
             return
         dialog = TaskDialog(self, self.tasks[index])
         prepare_window_entrance(dialog)
-        if dialog.exec() != QDialog.Accepted:
+        accepted = dialog.exec() == QDialog.Accepted
+        self._reactivate_window()
+        if not accepted:
             return
         updated = dialog.build_task()
         if not updated.title.strip():
             return
         self.tasks = [*self.tasks[:index], updated, *self.tasks[index + 1 :]]
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
 
     def pause_task(self, task_id: str) -> None:
         index = self._task_index(task_id)
@@ -804,7 +1087,7 @@ class MainWindow(QMainWindow):
         self.settings = replace(self.settings, focus_task_id=task_id)
         self._save_settings()
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
         self.show_toast("工作计时已暂停", f"{paused.title}\n截止倒计时仍会继续，提醒也会按截止时间触发。", kind="info", duration_ms=4200)
 
     def resume_task(self, task_id: str, *, make_focus: bool = False) -> None:
@@ -818,7 +1101,7 @@ class MainWindow(QMainWindow):
             self.settings = replace(self.settings, focus_task_id=task_id)
             self._save_settings()
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
         self.show_toast("工作计时已继续", f"{resumed.title}\n已恢复工作计时，并设为进行中任务。", kind="success", duration_ms=3800)
         if make_focus:
             self._pulse_widget(self.focus_card)
@@ -837,13 +1120,15 @@ class MainWindow(QMainWindow):
             self.settings = replace(self.settings, focus_task_id=None)
             self._save_settings()
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
         self.show_completion_encouragement(completed)
 
     def confirm_complete_task(self, task: Task) -> bool:
         dialog = CompletionDialog(task, self)
         prepare_window_entrance(dialog)
-        return dialog.exec() == QDialog.Accepted
+        accepted = dialog.exec() == QDialog.Accepted
+        self._reactivate_window()
+        return accepted
 
     def show_completion_encouragement(self, task: Task) -> None:
         title, body = completion_toast_copy(task)
@@ -861,18 +1146,20 @@ class MainWindow(QMainWindow):
             self.settings = replace(self.settings, focus_task_id=None)
             self._save_settings()
         self.store.save_tasks(self.tasks)
-        self.refresh()
+        self.refresh_data_view()
 
     def confirm_delete_task(self, task: Task) -> bool:
         dialog = DeleteTaskDialog(task, self)
         prepare_window_entrance(dialog)
-        return dialog.exec() == QDialog.Accepted
+        accepted = dialog.exec() == QDialog.Accepted
+        self._reactivate_window()
+        return accepted
 
     def open_history(self) -> None:
         dialog = HistoryWindow(self.tasks, self.store, self)
         prepare_window_entrance(dialog)
         dialog.exec()
-        self.tasks = self.store.load_tasks()
+        self._reactivate_window()
         self.refresh()
 
     def _task_index(self, task_id: str) -> int | None:
@@ -1049,43 +1336,78 @@ class MainWindow(QMainWindow):
         if hasattr(self, "root_layout"):
             self.root_layout.setContentsMargins(_scale_px(16), _scale_px(14), _scale_px(16), _scale_px(16))
             self.root_layout.setSpacing(_scale_px(12))
+            self.root_widget.setStyleSheet(_main_window_style())
         if hasattr(self, "title_bar"):
             self.title_bar.apply_scale()
         if hasattr(self, "summary_layout"):
             self.summary_layout.setSpacing(_scale_px(8))
             for label in self.summary_widget.findChildren(QLabel):
-                if label in (self.today_completion_label, self.active_count_label):
-                    label.setStyleSheet(f"font-size: {_scale_px(20)}px; font-weight: 700;")
+                if label.objectName() == "summaryIcon":
+                    icon_name = str(label.property("iconName") or _summary_icon_name(str(label.property("summaryTone") or "active")))
+                    label.setFixedSize(_scale_px(34), _scale_px(34))
+                    label.setStyleSheet(_summary_icon_style(str(label.property("summaryTone") or "active")))
+                    _apply_svg_icon(label, icon_name, _scale_px(18))
+                    continue
+                if label in (
+                    self.today_completion_label,
+                    self.active_count_label,
+                    self.soon_count_label,
+                    self.overdue_count_label,
+                ):
+                    label.setStyleSheet(f"font-size: {_scale_px(21)}px; font-weight: 900; color: #F8FBFF;")
                 else:
-                    label.setStyleSheet(f"color: {THEME_COLORS['muted']}; font-size: {_scale_px(13)}px;")
+                    label.setStyleSheet(f"color: #AFC3D8; font-size: {_scale_px(12)}px; font-weight: 800;")
         if hasattr(self, "focus_card"):
             self.focus_card.setMinimumHeight(_scale_px(FOCUS_CARD_MINIMUM_HEIGHT))
         if hasattr(self, "focus_layout"):
             self.focus_layout.setContentsMargins(_scale_px(14), _scale_px(12), _scale_px(14), _scale_px(12))
             self.focus_layout.setSpacing(_scale_px(10))
         if hasattr(self, "focus_top_layout"):
-            self.focus_top_layout.setHorizontalSpacing(_scale_px(10))
-            self.focus_top_layout.setVerticalSpacing(_scale_px(8))
-            self.focus_title_prefix.setMinimumHeight(_scale_px(34))
-            self.focus_priority_label.setMinimumHeight(_scale_px(34))
-            self.focus_urgency_label.setMinimumHeight(_scale_px(34))
-            self.focus_meta_label.setMinimumHeight(_scale_px(34))
-            self.focus_top_layout.setColumnMinimumWidth(4, _scale_px(330))
+            self.focus_top_layout.setHorizontalSpacing(_scale_px(12))
+            self.focus_top_layout.setVerticalSpacing(_scale_px(10))
+            self.focus_title_prefix.setMinimumHeight(_scale_px(40))
+            self.focus_priority_label.setMinimumHeight(_scale_px(40))
+            self.focus_urgency_label.setMinimumHeight(_scale_px(40))
+            self.focus_meta_label.setMinimumHeight(_scale_px(40))
+            for widget in (self.focus_title_prefix, self.focus_priority_label, self.focus_urgency_label, self.focus_meta_label):
+                widget.setMinimumWidth(_scale_px(128))
+            self.focus_top_layout.setColumnMinimumWidth(4, _scale_px(436))
         if hasattr(self, "focus_deadline_panel"):
             self.focus_deadline_panel.setMinimumHeight(_scale_px(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT))
-            self.focus_deadline_label.setMinimumWidth(_scale_px(220))
-            self.focus_countdown_label.setMinimumWidth(_scale_px(154))
-            self.focus_work_timer_label.setMinimumWidth(_scale_px(144))
-            self.focus_work_timer_label.setMinimumHeight(_scale_px(42))
-            self.focus_work_timer_label.setStyleSheet(_focus_work_timer_style("normal", paused=False))
+            self.focus_deadline_label.setMinimumWidth(_scale_px(336))
+            self.focus_countdown_label.setMinimumWidth(_scale_px(196))
+            self.focus_work_timer_label.setMinimumWidth(_scale_px(188))
+            self.focus_deadline_label.setStyleSheet(_focus_deadline_text_style("none"))
+            self.focus_countdown_label.setStyleSheet(_focus_time_text_style("countdown", "none"))
+            self.focus_work_timer_label.setStyleSheet(_focus_time_text_style("timer", "none"))
+        if hasattr(self, "focus_progress_bar"):
+            self.focus_progress_bar.setFixedHeight(_scale_px(8))
+            self.focus_progress_value_label.setFixedWidth(_scale_px(52))
+            self.focus_progress_value_label.setStyleSheet(_progress_value_style(selected=True))
         if hasattr(self, "deadline_layout"):
-            self.deadline_layout.setContentsMargins(_scale_px(12), _scale_px(7), _scale_px(12), _scale_px(9))
-            self.deadline_layout.setSpacing(_scale_px(4))
+            self.deadline_layout.setContentsMargins(_scale_px(16), _scale_px(10), _scale_px(16), _scale_px(12))
+            self.deadline_layout.setSpacing(_scale_px(7))
+        for attr in ("focus_deadline_card", "focus_countdown_card", "focus_work_timer_card"):
+            card = getattr(self, attr, None)
+            if card is None:
+                continue
+            card.setMinimumHeight(_scale_px(52))
+            layout = card.layout()
+            if isinstance(layout, QHBoxLayout):
+                layout.setContentsMargins(_scale_px(14), _scale_px(11), _scale_px(16), _scale_px(11))
+                layout.setSpacing(_scale_px(10))
+        if hasattr(self, "focus_deadline_panel"):
+            for icon in self.focus_deadline_panel.findChildren(QLabel, "focusInfoIcon"):
+                icon_name = str(icon.property("iconName") or "")
+                icon.setFixedSize(_scale_px(28), _scale_px(28))
+                if icon_name:
+                    _apply_svg_icon(icon, icon_name, _scale_px(15))
         if hasattr(self, "focus_time_row"):
-            self.focus_time_row.setSpacing(_scale_px(8))
+            self.focus_time_row.setSpacing(_scale_px(12))
         if hasattr(self, "focus_title_label"):
             self.focus_title_label.setMinimumHeight(_scale_px(46))
             self.focus_title_label.setMaximumHeight(_scale_px(96))
+            self.focus_title_label.setStyleSheet(_focus_title_style())
         if hasattr(self, "focus_notes_label"):
             self.focus_notes_label.setMaximumHeight(_scale_px(62))
         if hasattr(self, "focus_actions"):
@@ -1104,6 +1426,10 @@ class MainWindow(QMainWindow):
             self.task_scroll_area.verticalScrollBar().setSingleStep(_scale_px(32))
         if hasattr(self, "resize_grip"):
             self.resize_grip.apply_scale()
+        focus_star = getattr(self, "focus_star_label", None)
+        if focus_star is not None:
+            focus_star.setFixedSize(_scale_px(34), _scale_px(34))
+            _apply_svg_icon(focus_star, "focus-star.svg", _scale_px(18))
         if refresh:
             self.refresh()
             self.updateGeometry()
@@ -1113,8 +1439,13 @@ class MainWindow(QMainWindow):
         previous_geometry = self.geometry()
         dialog = SettingsWindow(self.settings, self)
         prepare_window_entrance(dialog)
-        if dialog.exec() != QDialog.Accepted:
+        accepted = dialog.exec() == QDialog.Accepted
+        self._reactivate_window()
+        if not accepted:
             self.restore_settings_preview(previous_settings)
+            self.apply_ui_scale(previous_settings.ui_scale, persist=False, refresh=True)
+            self.apply_low_distraction_settings()
+            self._sync_focus_header_layout()
             return
         updated_settings = remove_deprecated_setting_features(dialog.build_settings())
         updated_settings = self._materialize_settings_resources(updated_settings)
@@ -1137,13 +1468,16 @@ class MainWindow(QMainWindow):
             self.apply_window_behavior_settings()
             self.apply_icon_settings()
             self.apply_background_settings()
-            self.apply_ui_scale(self.settings.ui_scale, persist=False, refresh=False)
+            self.apply_ui_scale(self.settings.ui_scale, persist=False, refresh=True)
             self.apply_low_distraction_settings()
             if self.settings.lock_position:
                 self.apply_saved_geometry()
             else:
                 self.setGeometry(previous_geometry)
             self.show()
+            self.centralWidget().layout().activate()
+            self._sync_focus_header_layout()
+            self.refresh()
         finally:
             self._restoring_geometry = False
 
@@ -1180,6 +1514,9 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self._sync_focus_header_layout()
         self._handle_geometry_change()
+        columns = self._task_grid_columns()
+        if columns != self._last_task_grid_columns:
+            self.refresh_data_view()
 
     def _sync_focus_header_layout(self) -> None:
         layout = getattr(self, "focus_top_layout", None)
@@ -1189,25 +1526,14 @@ class MainWindow(QMainWindow):
             return
         layout.removeWidget(deadline_panel)
         layout.removeWidget(title_label)
-        narrow = self.width() < _scale_px(820)
-        if narrow:
-            layout.addWidget(title_label, 1, 0, 1, 4)
-            layout.addWidget(deadline_panel, 2, 0, 1, 4)
-            layout.setColumnMinimumWidth(4, 0)
-            layout.setColumnStretch(4, 0)
-            title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-            self.focus_deadline_label.setAlignment(Qt.AlignCenter)
-            self.focus_countdown_label.setAlignment(Qt.AlignCenter)
-            self.focus_work_timer_label.setAlignment(Qt.AlignCenter)
-            return
         layout.addWidget(title_label, 1, 0, 1, 4)
-        layout.addWidget(deadline_panel, 0, 4, 2, 1)
-        layout.setColumnMinimumWidth(4, _scale_px(330))
-        layout.setColumnStretch(4, 2)
-        title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        self.focus_deadline_label.setAlignment(Qt.AlignCenter)
-        self.focus_countdown_label.setAlignment(Qt.AlignCenter)
-        self.focus_work_timer_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(deadline_panel, 2, 0, 1, 4)
+        layout.setColumnMinimumWidth(4, 0)
+        layout.setColumnStretch(4, 0)
+        title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.focus_deadline_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.focus_countdown_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.focus_work_timer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
     def _handle_geometry_change(self) -> None:
         if not self._geometry_initialized or self._restoring_geometry:
@@ -1308,16 +1634,42 @@ class MainWindow(QMainWindow):
         self.show_toast(title, message, kind=kind, duration_ms=7200, use_background=True)
 
     def refresh(self) -> None:
+        self.refresh_data_view(reload=True)
+
+    def refresh_data_view(self, *, reload: bool = False) -> None:
         self.update_clock()
         if self._task_drag_active:
             self._task_drag_refresh_pending = True
             return
-        self.tasks = self.store.load_tasks()
+        if reload:
+            self.tasks = self.store.load_tasks()
         now = datetime.now(timezone.utc)
         self.process_reminders(now)
+        rows = self._task_rows_for_view(now)
+        self._update_task_control_labels()
+        focus_task = self._render_summary_and_focus(now, rows)
+        self._render_task_rows(rows, focus_task.id if focus_task else None)
+        self.apply_low_distraction_settings()
+
+    def refresh_live_state(self) -> None:
+        self.update_clock()
+        if self._task_drag_active:
+            return
+        now = datetime.now(timezone.utc)
+        self.process_reminders(now)
+        rows = self._task_rows_for_view(now)
+        self._render_summary_and_focus(now, rows)
+        self.apply_low_distraction_settings()
+
+    def _render_summary_and_focus(self, now: datetime, rows: list[dict[str, object]]) -> Task | None:
+        all_rows = task_rows(self.tasks, now)
         active_count = sum(1 for task in self.tasks if task.status == "active")
         paused_count = sum(1 for task in self.tasks if task.status == "paused")
+        soon_count = sum(1 for row in all_rows if str(row.get("urgency")) in {"soon", "urgent", "critical"})
+        overdue_count = sum(1 for row in all_rows if str(row.get("urgency")) == "overdue")
         self.active_count_label.setText(str(active_count))
+        self.soon_count_label.setText(str(soon_count))
+        self.overdue_count_label.setText(str(overdue_count))
         self.today_completion_label.setText(f"{today_completion_percent(self.tasks)}%")
 
         focus_task = self.focus_task()
@@ -1329,11 +1681,16 @@ class MainWindow(QMainWindow):
             self.focus_notes_label.clear()
             self.focus_notes_label.hide()
             self.focus_deadline_label.setText("截止 --:--:--")
-            self.focus_deadline_label.setStyleSheet(_deadline_label_style("none"))
+            self.focus_deadline_card.setStyleSheet(_focus_info_card_style("deadline", "none"))
+            self.focus_deadline_label.setStyleSheet(_focus_deadline_text_style("none"))
             self.focus_countdown_label.setText("倒计时 --:--:--")
-            self.focus_countdown_label.setStyleSheet(_countdown_label_style("none", pulse=False))
+            self.focus_countdown_card.setStyleSheet(_focus_info_card_style("countdown", "none"))
+            self.focus_countdown_label.setStyleSheet(_focus_time_text_style("countdown", "none"))
             self.focus_work_timer_label.setText("计时 --:--:--")
-            self.focus_work_timer_label.setStyleSheet(_focus_work_timer_style("none", paused=False))
+            self.focus_work_timer_card.setStyleSheet(_focus_info_card_style("timer", "none", paused=False))
+            self.focus_work_timer_label.setStyleSheet(_focus_time_text_style("timer", "none"))
+            self.focus_progress_bar.setValue(0)
+            self.focus_progress_value_label.clear()
             self.focus_priority_label.setText("--")
             self.focus_priority_label.setStyleSheet(_priority_chip_style("none"))
             self.focus_urgency_label.setText("等待")
@@ -1342,42 +1699,44 @@ class MainWindow(QMainWindow):
             self._set_focus_action_state(None)
             self.empty_state_hint_label.setText("可继续暂停任务，或点击新增任务" if paused_count else "点击新增任务开始")
             self.empty_state_widget.show()
-        else:
-            is_paused_focus = focus_task.status == "paused"
-            urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
-            if is_paused_focus:
-                urgency_label = f"已暂停 · {urgency_label}"
-            self.focus_title_label.setText(focus_task.title)
-            self.focus_title_label.setToolTip(focus_task.title)
-            self.focus_title_prefix.setText("已暂停" if is_paused_focus else "进行中")
-            self.focus_meta_label.setText("暂停中" if is_paused_focus else "计时中")
-            self._set_focus_notes(focus_task.notes)
-            self.focus_priority_label.setText(priority_display_label(focus_task.priority))
-            self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
-            self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
-            self.focus_deadline_label.setStyleSheet(_deadline_label_style(urgency))
-            countdown_pulse = False
-            raw_countdown_text = countdown_label(focus_task.deadline, now)
-            countdown_text = _countdown_display(_focus_countdown_text(raw_countdown_text), countdown_pulse)
-            if self.focus_countdown_label.text() != countdown_text:
-                self.focus_countdown_label.setText(countdown_text)
-                if self.isVisible():
-                    animate_value_tick(self.focus_countdown_label, duration=170)
-            self.focus_countdown_label.setStyleSheet(_countdown_label_style(urgency, pulse=countdown_pulse))
-            work_timer_text = f"计时 {_elapsed_work_timer_text(work_timer_label(focus_task, now))}"
-            if self.focus_work_timer_label.text() != work_timer_text:
-                self.focus_work_timer_label.setText(work_timer_text)
-                if self.isVisible():
-                    animate_value_tick(self.focus_work_timer_label, duration=170)
-            self.focus_work_timer_label.setStyleSheet(_focus_work_timer_style(urgency, paused=is_paused_focus))
-            self.focus_urgency_label.setText(urgency_label)
-            self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
-            self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
-            self._set_focus_action_state(focus_task.status)
-            self.empty_state_widget.hide()
+            return None
 
-        self._render_task_rows(task_rows(self.tasks, now), focus_task.id if focus_task else None)
-        self.apply_low_distraction_settings()
+        is_paused_focus = focus_task.status == "paused"
+        urgency, urgency_label = deadline_urgency(focus_task.deadline, now)
+        if is_paused_focus:
+            urgency_label = f"已暂停 · {urgency_label}"
+        self.focus_title_label.setText(_task_name_display(focus_task.title))
+        self.focus_title_label.setToolTip(focus_task.title)
+        self.focus_title_prefix.setText("已暂停" if is_paused_focus else "进行中")
+        self.focus_meta_label.setText("暂停中" if is_paused_focus else "计时中")
+        self._set_focus_notes(focus_task.notes)
+        self.focus_priority_label.setText(_priority_inline_markup(focus_task.priority, size=_scale_px(13)))
+        self.focus_priority_label.setStyleSheet(_priority_chip_style(focus_task.priority))
+        self.focus_deadline_label.setText(f"截止 {deadline_at_label(focus_task.deadline)}")
+        self.focus_deadline_card.setStyleSheet(_focus_info_card_style("deadline", urgency))
+        self.focus_deadline_label.setStyleSheet(_focus_deadline_text_style(urgency))
+        countdown_pulse = False
+        raw_countdown_text = countdown_label(focus_task.deadline, now)
+        countdown_text = _countdown_display(_focus_countdown_text(raw_countdown_text), countdown_pulse)
+        if self.focus_countdown_label.text() != countdown_text:
+            self.focus_countdown_label.setText(countdown_text)
+        self.focus_countdown_card.setStyleSheet(_focus_info_card_style("countdown", urgency, pulse=countdown_pulse))
+        self.focus_countdown_label.setStyleSheet(_focus_time_text_style("countdown", urgency))
+        work_timer_text = f"计时 {_elapsed_work_timer_text(work_timer_label(focus_task, now))}"
+        if self.focus_work_timer_label.text() != work_timer_text:
+            self.focus_work_timer_label.setText(work_timer_text)
+            if self.isVisible():
+                animate_value_tick(self.focus_work_timer_label, duration=170)
+        self.focus_work_timer_card.setStyleSheet(_focus_info_card_style("timer", urgency, paused=is_paused_focus))
+        self.focus_work_timer_label.setStyleSheet(_focus_time_text_style("timer", urgency))
+        self.focus_progress_bar.setValue(focus_task.progress)
+        self.focus_progress_value_label.clear()
+        self.focus_urgency_label.setText(urgency_label)
+        self.focus_urgency_label.setStyleSheet(_urgency_chip_style(urgency))
+        self.focus_card.setStyleSheet(_card_style(urgency, selected=True))
+        self._set_focus_action_state(focus_task.status)
+        self.empty_state_widget.hide()
+        return focus_task
 
     def _render_task_rows(self, rows: list[dict[str, object]], focus_task_id: str | None = None) -> None:
         active_ids = {str(row["id"]) for row in rows}
@@ -1388,10 +1747,14 @@ class MainWindow(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
         columns = self._task_grid_columns()
+        self._last_task_grid_columns = columns
         for column in range(5):
             self.task_list_layout.setColumnStretch(column, 1 if column < columns else 0)
         for index, row in enumerate(rows):
             self.task_list_layout.addWidget(self._task_row(row, focus_task_id), index // columns, index % columns)
+        if rows:
+            add_index = len(rows)
+            self.task_list_layout.addWidget(self._add_task_tile(), add_index // columns, add_index % columns)
 
     def _task_grid_columns(self) -> int:
         width = self.task_scroll_area.viewport().width() if hasattr(self, "task_scroll_area") else self.width()
@@ -1403,12 +1766,24 @@ class MainWindow(QMainWindow):
             return 2
         return 1
 
+    def _add_task_tile(self) -> QPushButton:
+        tile = QPushButton("+\n新增任务")
+        tile.setObjectName("addTaskTile")
+        tile.setToolTip("新增任务")
+        tile.setCursor(Qt.PointingHandCursor)
+        tile.setMinimumHeight(_scale_px(214))
+        tile.setMinimumWidth(_scale_px(190))
+        tile.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        tile.setStyleSheet(_add_task_tile_style())
+        tile.clicked.connect(self.add_task)
+        return tile
+
     def toggle_task_details(self, task_id: str) -> None:
         if task_id in self.expanded_task_ids:
             self.expanded_task_ids.remove(task_id)
         else:
             self.expanded_task_ids.add(task_id)
-        self.refresh()
+        self.refresh_data_view()
         animate_content_swap(self.task_rows_container, duration=150)
 
     def _task_row(self, row: dict[str, object], focus_task_id: str | None = None) -> QFrame:
@@ -1420,8 +1795,8 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(_scale_px(220 if is_expanded else 184))
-        card.setMinimumWidth(_scale_px(168))
+        card.setMinimumHeight(_scale_px(244 if is_expanded else 214))
+        card.setMinimumWidth(_scale_px(190))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
@@ -1429,8 +1804,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(_scale_px(6))
 
         top = QHBoxLayout()
-        priority = QLabel(priority_display_label(str(row["priority"])))
+        priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(11)))
         priority.setAlignment(Qt.AlignCenter)
+        priority.setTextFormat(Qt.RichText)
         priority.setFixedHeight(_scale_px(30))
         priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
@@ -1444,7 +1820,7 @@ class MainWindow(QMainWindow):
         top.addStretch(1)
         layout.addLayout(top)
 
-        title = QLabel(str(row["title"]))
+        title = QLabel(_task_name_display(str(row["title"])))
         title.setObjectName("activeTaskTitle" if is_focused else "taskTitle")
         title.setToolTip(str(row["title"]))
         title.setWordWrap(True)
@@ -1469,6 +1845,27 @@ class MainWindow(QMainWindow):
         work_timer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         work_timer.setStyleSheet(_task_timer_style(urgency, selected=is_focused, paused=is_paused))
         layout.addWidget(work_timer)
+
+        progress_row = QHBoxLayout()
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.setSpacing(_scale_px(7))
+        progress_bar = QProgressBar()
+        progress_bar.setObjectName("activeTaskProgressDisplay" if is_focused else "taskProgressDisplay")
+        progress_bar.setRange(0, 100)
+        progress_bar.setValue(int(row.get("progress", 0)))
+        progress_bar.setTextVisible(False)
+        progress_bar.setFixedHeight(_scale_px(7))
+        progress_bar.setStyleSheet(_task_progress_style(selected=is_focused))
+        progress_row.addWidget(progress_bar, 1)
+        progress_value = QLabel("")
+        progress_value.setObjectName("activeTaskProgressValue" if is_focused else "taskProgressValue")
+        progress_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        progress_value.setFixedWidth(_scale_px(40))
+        progress_value.setStyleSheet(_progress_value_style(selected=is_focused))
+        progress_row.addWidget(progress_value)
+        layout.addLayout(progress_row)
+        progress_bar.hide()
+        progress_value.hide()
 
         compact_row = QHBoxLayout()
         compact_row.setSpacing(_scale_px(6))
@@ -1553,7 +1950,12 @@ class MainWindow(QMainWindow):
             button.setToolTip("暂停工作计时，截止倒计时仍继续")
             button.setAccessibleName("暂停工作计时")
         button.setCursor(Qt.PointingHandCursor)
-        button.setFixedSize(_scale_px(44), _scale_px(36))
+        if focus:
+            button.setFixedHeight(_scale_px(40))
+            button.setMinimumWidth(_scale_px(96))
+            button.setMaximumWidth(16777215)
+        else:
+            button.setFixedSize(_scale_px(44), _scale_px(36))
         button.style().unpolish(button)
         button.style().polish(button)
 
@@ -1634,17 +2036,219 @@ def _urgency_style(urgency: str) -> dict[str, str]:
 def _card_style(urgency: str = "normal", *, selected: bool = False) -> str:
     style = _urgency_style(urgency)
     selected_stop = style["selected"] if selected else style["surface_alt"]
-    glow_stop = "#24465A" if selected else selected_stop
-    mid_stop = "#132536" if selected else THEME_COLORS["surface"]
+    glow_stop = "#0E7490" if selected else selected_stop
+    mid_stop = "#0B2235" if selected else "#081725"
     return (
         "QFrame {"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-        f" stop:0 {style['surface']},"
+        f" stop:0 {style['surface_alt']},"
         f" stop:0.46 {mid_stop},"
         f" stop:1 {glow_stop});"
         "border: none;"
         "border-radius: 8px;"
         "}"
+    )
+
+
+def _summary_card_style(tone: str = "active") -> str:
+    stops = {
+        "done": ("#0A302B", "#0F4B45", "#0D382D"),
+        "active": ("#092949", "#0C4A7C", "#0A2E52"),
+        "soon": ("#3B2606", "#7A5310", "#4E3213"),
+        "overdue": ("#3B1020", "#7A1E3D", "#481525"),
+    }.get(tone, ("#0A1B2B", "#102A3E", "#0B2132"))
+    return (
+        "QFrame {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+        f" stop:0 {stops[0]},"
+        f" stop:0.54 {stops[1]},"
+        f" stop:1 {stops[2]});"
+        "border: 1px solid rgba(125, 211, 252, 0.16);"
+        f"border-radius: {_scale_px(8)}px;"
+        "}"
+    )
+
+
+def _summary_icon_name(tone: str = "active") -> str:
+    return {
+        "done": "record-status.svg",
+        "active": "nav-task.svg",
+        "soon": "task-deadline.svg",
+        "overdue": "priority-high.svg",
+    }.get(tone, "record-status.svg")
+
+
+def _summary_footer(tone: str = "active") -> str:
+    return {
+        "done": "完成率",
+        "active": "任务",
+        "soon": "即将到期",
+        "overdue": "已超时",
+    }.get(tone, "")
+
+
+def _summary_icon_style(tone: str = "active") -> str:
+    colors = {
+        "done": ("rgba(22, 101, 74, 0.72)", "#5EEAD4"),
+        "active": ("rgba(30, 64, 175, 0.62)", "#7DD3FC"),
+        "soon": ("rgba(146, 94, 15, 0.68)", "#F6C177"),
+        "overdue": ("rgba(127, 29, 29, 0.72)", "#FCA5A5"),
+    }.get(tone, ("#10263A", "#22D3EE"))
+    return (
+        f"background: {colors[0]};"
+        f"color: {colors[1]};"
+        "border: 1px solid rgba(255, 255, 255, 0.12);"
+        f"border-radius: {_scale_px(17)}px;"
+        f"font-size: {_scale_px(16)}px;"
+        "font-weight: 900;"
+    )
+
+
+def _main_window_style() -> str:
+    return """
+QFrame#focusSectionAccent, QFrame#taskSectionAccent {
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+    stop:0 #22D3EE,
+    stop:1 #0F766E);
+  border: none;
+  border-radius: 2px;
+}
+QLabel#focusSectionTitle, QLabel#taskSectionTitle {
+  color: #F8FBFF;
+  font-size: 18px;
+  font-weight: 900;
+}
+QLabel#focusStar {
+  background: rgba(14, 52, 74, 0.58);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 17px;
+}
+QLabel#focusInfoIcon {
+  background: rgba(6, 18, 31, 0.34);
+  border: 1px solid rgba(186, 230, 253, 0.2);
+  border-radius: 14px;
+}
+QLabel#focusProgressCaption {
+  color: #C4D8EA;
+  font-weight: 900;
+  font-size: 14px;
+}
+QProgressBar#focusProgressDisplay {
+  background: #0A2032;
+  border: none;
+  border-radius: 4px;
+}
+QProgressBar#focusProgressDisplay::chunk {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #5EEAD4,
+    stop:0.58 #22D3EE,
+    stop:1 #60A5FA);
+  border-radius: 4px;
+}
+QProgressBar#activeTaskProgressDisplay, QProgressBar#taskProgressDisplay {
+  background: #0A2032;
+  border: none;
+  border-radius: 4px;
+}
+QProgressBar#activeTaskProgressDisplay::chunk, QProgressBar#taskProgressDisplay::chunk {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #5EEAD4,
+    stop:0.58 #22D3EE,
+    stop:1 #60A5FA);
+  border-radius: 4px;
+}
+QPushButton#focusCompleteButton {
+  color: #DDFBE9;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0F766E,
+    stop:1 #047857);
+  font-weight: 900;
+}
+QPushButton#focusCompleteButton:hover {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+    stop:0 #0E7490,
+    stop:1 #059669);
+}
+QPushButton#taskFilterButton {
+  color: #D7E8F8;
+  background: rgba(10, 28, 45, 170);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-weight: 800;
+}
+QPushButton#taskFilterButton:hover {
+  background: rgba(14, 116, 144, 96);
+}
+QPushButton#taskViewButton {
+  color: #D7E8F8;
+  background: rgba(24, 52, 82, 190);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-weight: 900;
+}
+QPushButton#taskViewButton:hover {
+  background: rgba(34, 211, 238, 80);
+}
+QPushButton#titleIconButton {
+  color: #B8CBE0;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  padding: 0;
+}
+QPushButton#titleIconButton:hover {
+  background: rgba(125, 211, 252, 0.12);
+}
+"""
+
+
+def _task_progress_style(*, selected: bool = False) -> str:
+    chunk_end = "#5EEAD4" if selected else "#60A5FA"
+    return (
+        "QProgressBar {"
+        "background: #0A2032;"
+        "border: none;"
+        f"border-radius: {_scale_px(4)}px;"
+        "}"
+        "QProgressBar::chunk {"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        " stop:0 #5EEAD4,"
+        " stop:0.58 #22D3EE,"
+        f" stop:1 {chunk_end});"
+        f"border-radius: {_scale_px(4)}px;"
+        "}"
+    )
+
+
+def _add_task_tile_style() -> str:
+    return (
+        "QPushButton#addTaskTile {"
+        "color: #93A9BD;"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+        " stop:0 rgba(7, 20, 33, 168),"
+        " stop:1 rgba(9, 31, 49, 132));"
+        "border: 1px dashed rgba(172, 198, 220, 92);"
+        f"border-radius: {_scale_px(10)}px;"
+        f"font-size: {_scale_px(18)}px;"
+        "font-weight: 900;"
+        f"padding: {_scale_px(18)}px;"
+        "}"
+        "QPushButton#addTaskTile:hover {"
+        "color: #D7F8FF;"
+        "background: rgba(14, 116, 144, 92);"
+        "border: 1px dashed rgba(94, 234, 212, 170);"
+        "}"
+    )
+
+
+def _progress_value_style(*, selected: bool = False) -> str:
+    return (
+        f"color: {'#ECFEFF' if selected else '#BFD0E2'};"
+        f"font-size: {_scale_px(13)}px;"
+        "font-weight: 900;"
+        'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
     )
 
 
@@ -1660,6 +2264,53 @@ def _urgency_chip_style(urgency: str) -> str:
 
 def _deadline_label_style(urgency: str) -> str:
     return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: {_scale_px(13)}px;"
+
+
+def _focus_deadline_text_style(urgency: str) -> str:
+    accent = _countdown_style(urgency)["accent"]
+    return (
+        f"color: {accent};"
+        f"font-size: {_scale_px(16)}px;"
+        "font-weight: 900;"
+        'font-family: "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI", "Segoe UI Variable";'
+        "background: transparent;"
+        "border: none;"
+    )
+
+
+def _focus_time_text_style(kind: str, urgency: str) -> str:
+    style = _countdown_style(urgency)
+    size = _scale_px(19)
+    color = "#DDF8F3"
+    if urgency == "none":
+        color = "#B5CBD9"
+    return (
+        f"color: {color};"
+        f"font-size: {size}px;"
+        "font-weight: 900;"
+        'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
+        "background: transparent;"
+        "border: none;"
+    )
+
+
+def _focus_info_card_style(kind: str, urgency: str, *, pulse: bool = False, paused: bool = False) -> str:
+    style = _countdown_style("paused" if paused and kind == "timer" else urgency)
+    if kind == "deadline":
+        start = "#0A2438" if urgency != "none" else "#091521"
+        end = "#0D3A4A" if urgency not in {"none", "overdue"} else ("#122033" if urgency == "none" else "#4A1824")
+        border = style["accent"]
+    else:
+        start = "#1D2B3B" if paused else "#0E3C43"
+        end = "#243447" if paused else "#155E75"
+        border = "#94A3B8" if paused else "#37D7C2"
+    return (
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        f" stop:0 {start},"
+        f" stop:1 {end});"
+        f"border: 1px solid {border};"
+        f"border-radius: {_scale_px(14)}px;"
+    )
 
 
 def _countdown_label_style(urgency: str, *, pulse: bool) -> str:
@@ -1706,6 +2357,15 @@ def _countdown_display(text: str, pulse: bool) -> str:
     return text
 
 
+def _task_name_display(title: str) -> str:
+    title = str(title).strip()
+    if not title:
+        return "任务名称：--"
+    if title.startswith("任务名称："):
+        return title
+    return f"任务名称：{title}"
+
+
 def _focus_countdown_text(text: str) -> str:
     if text.startswith("超时 "):
         return text
@@ -1720,16 +2380,12 @@ def _elapsed_work_timer_text(text: str) -> str:
 
 def _focus_title_style() -> str:
     return (
-        f"font-size: {_scale_px(24)}px;"
+        f"font-size: {_scale_px(25)}px;"
         "font-weight: 900;"
         "color: #F8FBFF;"
-        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-        " stop:0 #143044,"
-        " stop:0.58 #10263A,"
-        " stop:1 #0F1A2A);"
+        "background: transparent;"
         "border: none;"
-        f"border-radius: {_scale_px(8)}px;"
-        f"padding: {_scale_px(8)}px {_scale_px(12)}px;"
+        f"padding: {_scale_px(8)}px 0;"
     )
 
 
@@ -1753,9 +2409,9 @@ def _focus_deadline_panel_style() -> str:
     return (
         "QFrame#focusDeadlinePanel {"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-        " stop:0 #0A1421,"
-        " stop:0.45 #10263A,"
-        " stop:1 #143A3E);"
+        " stop:0 #071A2B,"
+        " stop:0.44 #0B2C45,"
+        " stop:1 #0D3A4A);"
         "border: none;"
         f"border-radius: {_scale_px(8)}px;"
         "}"
@@ -1778,10 +2434,10 @@ def _focus_meta_style() -> str:
 
 def _task_title_style(*, selected: bool = False) -> str:
     if selected:
-        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #143B56, stop:1 #143D48)"
+        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0D4960, stop:1 #0B3F49)"
         color = "#F8FBFF"
     else:
-        background = "#0A121E"
+        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #071421, stop:1 #0A1D2E)"
         color = "#F3F7FC"
     return (
         f"color: {color};"
