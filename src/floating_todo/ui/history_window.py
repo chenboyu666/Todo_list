@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from floating_todo.domain import DEFAULT_TASK_TAG, Task, normalize_task_tag, work_elapsed_seconds, work_target_seconds
+from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
 from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
@@ -614,13 +616,8 @@ class HistoryWindow(QDialog):
         self.pagination_panel = self._build_pagination_panel()
         tasks_layout.addWidget(self.pagination_panel)
 
-        self.analysis_summary_panel = self._build_analysis_summary_panel()
-        analysis_layout.addWidget(self.analysis_summary_panel)
-        self.analysis_charts_panel = self._build_analysis_charts_panel()
-        analysis_layout.addWidget(self.analysis_charts_panel)
-        self.analysis_actions_panel = self._build_analysis_actions_panel()
-        analysis_layout.addWidget(self.analysis_actions_panel)
-        analysis_layout.addStretch(1)
+        self.history_graph_panel = self._build_history_graph_panel()
+        analysis_layout.addWidget(self.history_graph_panel, 1)
 
         resize_row = QHBoxLayout()
         resize_row.setContentsMargins(0, 0, 0, 0)
@@ -663,7 +660,7 @@ class HistoryWindow(QDialog):
         definitions = [
             ("tasks", "任务", "nav-task.svg", "返回主任务窗口", self._open_main_workspace),
             ("history", "历史任务", "nav-history.svg", "查看历史任务工作台", lambda: self._set_history_section("history")),
-            ("analysis", "统计分析", "nav-analysis.svg", "查看统计分析工作台", lambda: self._set_history_section("analysis")),
+            ("analysis", "洞察", "nav-analysis.svg", "查看任务星图洞察", lambda: self._set_history_section("analysis")),
             ("settings", "设置", "nav-settings.svg", "打开设置窗口", self._open_settings_workspace),
         ]
         for key, text, icon_name, tooltip, callback in definitions:
@@ -831,6 +828,40 @@ class HistoryWindow(QDialog):
         layout.setColumnStretch(2, 1)
         return panel
 
+    def _build_history_graph_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("historyGraphPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        title_stack = QVBoxLayout()
+        title_stack.setContentsMargins(0, 0, 0, 0)
+        title_stack.setSpacing(4)
+        title = QLabel("3D 任务关系图")
+        title.setObjectName("historySectionTitle")
+        subtitle = QLabel("根据已完成任务的标题、标签、备注和体会抽取关键词，形成 Obsidian 风格关系网络")
+        subtitle.setObjectName("historySubtitle")
+        subtitle.setWordWrap(True)
+        title_stack.addWidget(title)
+        title_stack.addWidget(subtitle)
+        header.addLayout(title_stack, 1)
+        self.history_graph_count_label = QLabel("0 条")
+        self.history_graph_count_label.setObjectName("historyGraphCountChip")
+        self.history_graph_count_label.setAlignment(Qt.AlignCenter)
+        header.addWidget(self.history_graph_count_label)
+        layout.addLayout(header)
+
+        self.history_graph_webview = QWebEngineView()
+        self.history_graph_webview.setObjectName("historyGraphWebView")
+        self.history_graph_webview.setMinimumHeight(620)
+        self.history_graph_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.history_graph_webview, 1)
+        self._analysis_graph_html = ""
+        return panel
+
     def _build_records_tools_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("historyToolbar")
@@ -981,157 +1012,6 @@ class HistoryWindow(QDialog):
         layout.addWidget(self.next_page_button)
         return panel
 
-    def _build_analysis_summary_panel(self) -> QFrame:
-        panel = QFrame()
-        panel.setObjectName("historyAnalysisSummaryPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        header = QHBoxLayout()
-        header.setSpacing(10)
-        stack = QVBoxLayout()
-        stack.setContentsMargins(0, 0, 0, 0)
-        stack.setSpacing(4)
-        title = QLabel("统计分析")
-        title.setObjectName("historyAnalysisSummaryTitle")
-        subtitle = QLabel("共享同一统计区间，聚焦趋势与完成质量")
-        subtitle.setObjectName("historySubtitle")
-        stack.addWidget(title)
-        stack.addWidget(subtitle)
-        header.addLayout(stack, 1)
-        self.analysis_count_label = QLabel("0 条")
-        self.analysis_count_label.setObjectName("historyAnalysisCountChip")
-        self.analysis_count_label.setAlignment(Qt.AlignCenter)
-        header.addWidget(self.analysis_count_label)
-        layout.addLayout(header)
-
-        info_grid = QGridLayout()
-        info_grid.setContentsMargins(0, 0, 0, 0)
-        info_grid.setHorizontalSpacing(10)
-        info_grid.setVerticalSpacing(10)
-        self.analysis_range_label = QLabel("")
-        self.analysis_range_label.setObjectName("historyAnalysisInfoChip")
-        self.analysis_range_label.setWordWrap(True)
-        self.analysis_range_label.setMinimumWidth(0)
-        self.analysis_range_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        info_grid.addWidget(self.analysis_range_label, 0, 0)
-        self.analysis_state_label = QLabel("已隐藏所有进度展示")
-        self.analysis_state_label.setObjectName("historyAnalysisInfoChip")
-        self.analysis_state_label.setWordWrap(True)
-        self.analysis_state_label.setMinimumWidth(0)
-        self.analysis_state_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        info_grid.addWidget(self.analysis_state_label, 1, 0)
-        layout.addLayout(info_grid)
-
-        rhythm_row = QHBoxLayout()
-        rhythm_row.setSpacing(10)
-        self.analysis_rhythm_hint_label = QLabel("完成节奏 = 最近一段时间每天完成任务数量的趋势")
-        self.analysis_rhythm_hint_label.setObjectName("historyAnalysisInfoChip")
-        self.analysis_rhythm_hint_label.setWordWrap(True)
-        self.analysis_rhythm_hint_label.setMinimumWidth(0)
-        self.analysis_rhythm_hint_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        rhythm_row.addWidget(self.analysis_rhythm_hint_label, 1)
-        layout.addLayout(rhythm_row)
-
-        insights = QGridLayout()
-        insights.setContentsMargins(0, 0, 0, 0)
-        insights.setHorizontalSpacing(12)
-        insights.setVerticalSpacing(12)
-        (
-            insight_total,
-            self.analysis_total_value_label,
-            self.analysis_total_detail_label,
-        ) = self._analysis_insight_card("完成总数", "当前统计区间内的完成记录")
-        (
-            insight_priority,
-            self.analysis_priority_value_label,
-            self.analysis_priority_detail_label,
-        ) = self._analysis_insight_card("优先级结论", "当前完成结构中的主导优先级")
-        (
-            insight_on_time,
-            self.analysis_on_time_value_label,
-            self.analysis_on_time_detail_label,
-        ) = self._analysis_insight_card("准时率结论", "只统计已设置截止时间的完成记录")
-        (
-            insight_peak,
-            self.analysis_peak_value_label,
-            self.analysis_peak_detail_label,
-        ) = self._analysis_insight_card("最近高峰", "完成更活跃的日期与数量")
-        (
-            insight_tag,
-            self.analysis_tag_value_label,
-            self.analysis_tag_detail_label,
-        ) = self._analysis_insight_card("主导标签", "按实际耗时统计的标签占比")
-        for index, card in enumerate((insight_total, insight_priority, insight_on_time, insight_peak)):
-            insights.addWidget(card, index // 2, index % 2)
-            insights.setColumnStretch(index % 2, 1)
-        insights.addWidget(insight_tag, 2, 0, 1, 2)
-        layout.addLayout(insights)
-        return panel
-
-    def _build_analysis_charts_panel(self) -> QFrame:
-        panel = QFrame()
-        panel.setObjectName("historyAnalysisChartsPanel")
-        layout = QGridLayout(panel)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setHorizontalSpacing(12)
-        layout.setVerticalSpacing(12)
-
-        self.analysis_priority_donut_chart = PriorityDonutChart()
-        self.analysis_completion_trend_chart = CompletionTrendChart()
-        self.analysis_deadline_outcome_chart = DeadlineOutcomeChart()
-        self.analysis_tag_duration_chart = TagDurationChart()
-        self.analysis_tag_duration_chart.tag_clicked.connect(self._jump_to_tag_records)
-        layout.addWidget(self._chart_card("优先级结构", "高 / 中 / 低完成占比", self.analysis_priority_donut_chart, "priority"), 0, 0)
-        layout.addWidget(self._chart_card("完成节奏", "最近每天完成任务数量趋势", self.analysis_completion_trend_chart, "trend"), 0, 1)
-        layout.addWidget(self._chart_card("准时率与超时分布", "准时、超时与无截止", self.analysis_deadline_outcome_chart, "deadline"), 1, 0, 1, 2)
-        layout.addWidget(self._chart_card("标签时长占比", "快速观察做了哪些类型任务", self.analysis_tag_duration_chart, "tag"), 2, 0, 1, 2)
-        layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(1, 1)
-        return panel
-
-    def _build_analysis_actions_panel(self) -> QFrame:
-        panel = QFrame()
-        panel.setObjectName("historyAnalysisActionPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        title = QLabel("整理建议")
-        title.setObjectName("historyAnalysisSummaryTitle")
-        layout.addWidget(title)
-
-        self.analysis_action_summary_label = QLabel("统计分析页会根据当前时间范围给出待补记、复盘和超时整理建议。")
-        self.analysis_action_summary_label.setObjectName("historySubtitle")
-        self.analysis_action_summary_label.setWordWrap(True)
-        layout.addWidget(self.analysis_action_summary_label)
-
-        metrics_row = QHBoxLayout()
-        metrics_row.setSpacing(10)
-        self.analysis_pending_notes_chip = QLabel("待补记 0 条")
-        self.analysis_pending_notes_chip.setObjectName("historyAnalysisInfoChip")
-        metrics_row.addWidget(self.analysis_pending_notes_chip)
-        self.analysis_reviewed_chip = QLabel("已复盘 0/0")
-        self.analysis_reviewed_chip.setObjectName("historyAnalysisInfoChip")
-        metrics_row.addWidget(self.analysis_reviewed_chip)
-        self.analysis_overdue_chip = QLabel("超时完成 0/0")
-        self.analysis_overdue_chip.setObjectName("historyAnalysisInfoChip")
-        metrics_row.addWidget(self.analysis_overdue_chip)
-        metrics_row.addStretch(1)
-        layout.addLayout(metrics_row)
-
-        action_row = QHBoxLayout()
-        action_row.setSpacing(10)
-        self.analysis_needs_notes_button = self._analysis_action_button("查看待补记", lambda: self._jump_to_history_records(status="needs_notes"))
-        self.analysis_reviewed_button = self._analysis_action_button("查看已复盘", lambda: self._jump_to_history_records(status="reviewed"))
-        self.analysis_overdue_button = self._analysis_action_button("查看超时记录", lambda: self._jump_to_history_records(status="overdue"))
-        for button in (self.analysis_needs_notes_button, self.analysis_reviewed_button, self.analysis_overdue_button):
-            action_row.addWidget(button)
-        action_row.addStretch(1)
-        layout.addLayout(action_row)
-        return panel
-
     def _create_section_page(self, object_name: str) -> tuple[QScrollArea, QFrame, QVBoxLayout]:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1195,31 +1075,12 @@ class HistoryWindow(QDialog):
         button.clicked.connect(callback)
         return button
 
-    def _analysis_action_button(self, text: str, callback) -> QPushButton:
+    def _history_action_button(self, text: str, callback) -> QPushButton:
         button = QPushButton(text)
         button.setObjectName("historyActionButton")
         button.setCursor(Qt.PointingHandCursor)
         button.clicked.connect(callback)
         return button
-
-    def _analysis_insight_card(self, title: str, detail: str) -> tuple[QFrame, QLabel, QLabel]:
-        card = QFrame()
-        card.setObjectName("historyAnalysisInsightCard")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(6)
-        title_label = QLabel(title)
-        title_label.setObjectName("historyChartTitle")
-        value_label = QLabel("--")
-        value_label.setObjectName("historyAnalysisInsightValue")
-        value_label.setTextFormat(Qt.RichText)
-        detail_label = QLabel(detail)
-        detail_label.setObjectName("historyChartSubtitle")
-        detail_label.setWordWrap(True)
-        layout.addWidget(title_label)
-        layout.addWidget(value_label)
-        layout.addWidget(detail_label)
-        return card, value_label, detail_label
 
     def _priority_markup(self, priority: str, *, size: int = 13, suffix: str = "") -> str:
         icon_path = (UI_ICON_DIR / PRIORITY_ICON_NAMES.get(priority, "priority-medium.svg")).as_posix()
@@ -1701,47 +1562,6 @@ class HistoryWindow(QDialog):
         self.completion_trend_chart.set_points(_completion_trend(completed))
         self.deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
         self.tag_duration_chart.set_stats(tag_stats)
-        self.analysis_priority_donut_chart.set_counts(counts)
-        self.analysis_completion_trend_chart.set_points(_completion_trend(completed))
-        self.analysis_deadline_outcome_chart.set_counts(on_time=on_time, overdue=overdue, no_deadline=no_deadline)
-        self.analysis_tag_duration_chart.set_stats(tag_stats)
-
-        dominant_priority = max(PRIORITY_ORDER, key=lambda priority: (counts[priority], -PRIORITY_ORDER.index(priority))) if total else "P2"
-        trend_points = _completion_trend(completed)
-        peak_point = max(trend_points, key=lambda item: (item[1], item[0]), default=None)
-        pending_notes = sum(1 for task in completed if not (task.notes.strip() or task.reflection.strip()))
-        dominant_text = self._priority_markup(dominant_priority, suffix=f"{counts[dominant_priority]} 条") if total else "--"
-        dominant_ratio = f"占比 {_ratio_text(counts[dominant_priority], total)}" if total else "暂无完成记录"
-        peak_text = f"{peak_point[0].strftime('%m-%d')} · {peak_point[1]} 条" if peak_point else "--"
-        peak_detail = "最近没有形成可分析的完成峰值" if peak_point is None else "当天完成数量达到当前区间峰值"
-        dominant_tag = tag_stats[0] if tag_stats else None
-        total_tag_seconds = sum(int(stat["seconds"]) for stat in tag_stats)
-        tag_value = str(dominant_tag["tag"]) if dominant_tag else "--"
-        tag_detail = (
-            f"时长占比 {_ratio_text(int(dominant_tag['seconds']), total_tag_seconds)} · {dominant_tag['count']} 条"
-            if dominant_tag
-            else "当前区间暂无可统计标签"
-        )
-
-        self.analysis_total_value_label.setText(f"{total} 条")
-        self.analysis_total_detail_label.setText("当前统计区间内的完成记录" if total else "当前统计区间内还没有完成记录")
-        self.analysis_priority_value_label.setText(dominant_text)
-        self.analysis_priority_detail_label.setText(dominant_ratio)
-        self.analysis_on_time_value_label.setText(on_time_rate)
-        self.analysis_on_time_detail_label.setText("只统计已设置截止时间的完成记录" if deadline_total else "当前区间内没有设置截止时间的完成记录")
-        self.analysis_peak_value_label.setText(peak_text)
-        self.analysis_peak_detail_label.setText(peak_detail)
-        self.analysis_tag_value_label.setText(tag_value)
-        self.analysis_tag_detail_label.setText(tag_detail)
-        self.analysis_pending_notes_chip.setText(f"待补记 {pending_notes} 条")
-        self.analysis_reviewed_chip.setText(f"已复盘 {reviewed}/{total}")
-        self.analysis_overdue_chip.setText(f"超时完成 {overdue}/{deadline_total}")
-        self.analysis_action_summary_label.setText(
-            "建议先补齐待补记记录，再回看超时完成任务的共性原因。"
-            if total
-            else "当前时间范围没有完成记录，可以调整统计区间后再查看洞察。"
-        )
-
     def _sync_pagination(self, total_tasks: list[Task]) -> None:
         page_count = self._page_count(total_tasks)
         if self._selected_page_index >= page_count:
@@ -1761,15 +1581,20 @@ class HistoryWindow(QDialog):
         self.prev_page_button.setEnabled(self._selected_page_index > 0)
         self.next_page_button.setEnabled(self._selected_page_index < page_count - 1)
 
+    def _update_history_graph(self, completed: list[Task]) -> None:
+        payload = build_history_graph_payload(completed)
+        self.history_graph_count_label.setText(f"{len(payload['tasks'])} 条")
+        html = render_history_graph_html(payload)
+        if html == self._analysis_graph_html:
+            return
+        self._analysis_graph_html = html
+        self.history_graph_webview.setHtml(html)
+
     def _render(self, *args) -> None:
         analytics_tasks = self._analytics_tasks()
         self._update_metrics(analytics_tasks)
         self.analytics_count_label.setText(f"{len(analytics_tasks)} 条")
-        self.analysis_count_label.setText(f"{len(analytics_tasks)} 条")
-        self.analysis_range_label.setText(
-            f"统计区间  {self.analytics_start_date.date().toString('yyyy-MM-dd')}  →  {self.analytics_end_date.date().toString('yyyy-MM-dd')}"
-        )
-        self.analysis_state_label.setText("洞察基于当前统计区间，不展示任务进度百分比")
+        self._update_history_graph(analytics_tasks)
 
         filtered = self._filtered_completed_tasks()
         self.count_label.setText(f"{len(filtered)} 条")
@@ -2061,10 +1886,8 @@ QFrame#historyAnalysisPage {
 QFrame#historyHeaderPanel,
 QFrame#historyStatsPanel,
 QFrame#historyAnalyticsPanel,
+QFrame#historyGraphPanel,
 QFrame#historyToolbar,
-QFrame#historyAnalysisSummaryPanel,
-QFrame#historyAnalysisChartsPanel,
-QFrame#historyAnalysisActionPanel,
 QScrollArea#historyRecordsPanel {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
     stop:0 #071421,
@@ -2093,7 +1916,7 @@ QLabel#historyCountChip,
 QLabel#historySectionCount,
 QLabel#historyExportCount,
 QLabel#historyAnalyticsCount,
-QLabel#historyAnalysisCountChip {
+QLabel#historyGraphCountChip {
   color: #EBFEFF;
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
     stop:0 #155E75,
@@ -2147,7 +1970,6 @@ QLabel#historyOverdueMetric { color: #FFD5DF; }
 QLabel#historyAnalyticsTitle,
 QLabel#historySectionTitle,
 QLabel#historyChartTitle,
-QLabel#historyAnalysisSummaryTitle,
 QLabel#historyToolbarLabel,
 QLabel#historyEmptyTitle {
   color: #F8FBFF;
@@ -2238,8 +2060,7 @@ QDateEdit#historyExportEndDate::down-arrow {
   border: none;
   image: none;
 }
-QLabel#historyPageLabel,
-QLabel#historyAnalysisInfoChip {
+QLabel#historyPageLabel {
   color: #D8E7F5;
   background: rgba(12, 23, 38, 0.95);
   border: 1px solid rgba(110, 156, 184, 26);
@@ -2290,18 +2111,6 @@ QFrame#historyPagerPanel {
     stop:1 #115E59);
   border: 1px solid rgba(98, 144, 176, 26);
   border-radius: 16px;
-}
-QFrame#historyAnalysisInsightCard {
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 rgba(10, 28, 46, 0.92),
-    stop:1 rgba(11, 53, 63, 0.88));
-  border: 1px solid rgba(98, 144, 176, 28);
-  border-radius: 16px;
-}
-QLabel#historyAnalysisInsightValue {
-  color: #F8FBFF;
-  font-size: 22px;
-  font-weight: 900;
 }
 QFrame#historyCard {
   background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
