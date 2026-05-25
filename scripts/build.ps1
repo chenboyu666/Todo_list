@@ -50,6 +50,10 @@ Remove-ProjectDirectory -RelativePath "dist"
     "PySide6.QtWidgets",
     "--hidden-import",
     "PySide6.QtSvg",
+    "--hidden-import",
+    "PySide6.QtWebEngineCore",
+    "--hidden-import",
+    "PySide6.QtWebEngineWidgets",
     "--exclude-module",
     "PySide6.Qt3DAnimation",
     "--exclude-module",
@@ -62,8 +66,6 @@ Remove-ProjectDirectory -RelativePath "dist"
     "PySide6.QtQuick",
     "--exclude-module",
     "PySide6.QtSql",
-    "--exclude-module",
-    "PySide6.QtWebEngineWidgets",
     "src/floating_todo/__main__.py"
 )
 

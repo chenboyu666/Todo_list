@@ -52,6 +52,34 @@ def make_task(title: str, task_id: str, *, status: str = "active", notes: str = 
     )
 
 
+def test_history_graph_payload_extracts_keyword_relationships() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
+
+    first = replace(
+        make_task("PySide6 UI release", "done-1", status="done", notes="UI package release notes", tag="work"),
+        reflection="PySide6 release review",
+    )
+    second = replace(
+        make_task("UI package smoke test", "done-2", status="done", notes="release package", tag="project"),
+        priority="P2",
+    )
+    active = make_task("active PySide6 task", "active-1", status="active", notes="UI", tag="work")
+
+    payload = build_history_graph_payload([first, second, active])
+
+    assert [node["id"] for node in payload["tasks"]] == ["done-1", "done-2"]
+    keyword_names = {node["word"] for node in payload["keywords"]}
+    assert {"ui", "release", "package", "pyside6"} <= keyword_names
+    assert any(link["source"] == "done-1" and link["target"] == "k-ui" for link in payload["links"])
+    assert any(link.get("shared") and link["source"] == "done-1" and link["target"] == "done-2" for link in payload["links"])
+
+    html = render_history_graph_html(payload)
+    assert "Todo list · 任务关系图" in html
+    assert "const GRAPH_PAYLOAD =" in html
+    assert "PySide6 UI release" in html
+    assert "加载 3D 任务关系图" not in html
+
+
 def test_history_window_saves_reflection(qapp: QApplication) -> None:
     from floating_todo.ui.history_window import HistoryWindow
 
@@ -159,14 +187,17 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert abs(scroll_bar.value() - records_target) <= 2
     window.tag_filter.setCurrentIndex(window.tag_filter.findData("all"))
     qapp.processEvents()
-    assert window.analysis_tag_duration_chart.tag_stats == window.tag_duration_chart.tag_stats
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
     assert window.history_tasks_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_analysis_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_records_panel.objectName() == "historyRecordsPanel"
+    assert window.history_graph_webview.objectName() == "historyGraphWebView"
+    assert "Todo list · 任务关系图" in window._analysis_graph_html
+    assert "const GRAPH_PAYLOAD =" in window._analysis_graph_html
+    assert first.title in window._analysis_graph_html
+    assert "historyGraphPanel" in window.styleSheet()
     assert "historyRecordsPanel" in window.styleSheet()
-    assert "historyAnalysisSummaryPanel" in window.styleSheet()
     assert "historyChartCard" in window.styleSheet()
     metric_icons = window.findChildren(QLabel, "historyMetricIcon")
     assert len(metric_icons) >= 8
@@ -179,21 +210,9 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     qapp.processEvents()
     assert window.history_section_stack.currentWidget() is window.history_analysis_scroll
     assert window.history_sidebar_buttons["analysis"].isChecked()
-    assert window.analysis_range_label.text().startswith("统计区间")
-    assert window.analysis_count_label.text() == "2 条"
-    assert "完成节奏 = 最近一段时间每天完成任务数量的趋势" in window.analysis_rhythm_hint_label.text()
-    assert window.analysis_total_value_label.text() == "2 条"
-    assert "<img" in window.analysis_priority_value_label.text()
-    assert any(label in window.analysis_priority_value_label.text() for label in ("高", "中", "低"))
-    assert window.analysis_tag_value_label.text() == "学习"
-    assert "60%" in window.analysis_tag_detail_label.text()
-    assert window.analysis_needs_notes_button.text() == "查看待补记"
-    window.analysis_reviewed_button.click()
-    qapp.processEvents()
-    assert window.history_section_stack.currentWidget() is window.history_tasks_scroll
-    assert window.status_filter.currentData() == "reviewed"
-    window.history_sidebar_buttons["analysis"].click()
-    qapp.processEvents()
+    assert not window.history_sidebar_buttons["history"].isChecked()
+    assert window.history_content_scroll is window.history_analysis_scroll
+    assert window.history_graph_count_label.text() == "2 条"
 
     window.fullscreen_button.click()
     qapp.processEvents()
@@ -493,8 +512,6 @@ def test_history_workspace_pagination_record_menu_and_chart_render(
         window.completion_trend_chart,
         window.deadline_outcome_chart,
         window.tag_duration_chart,
-        window.analysis_priority_donut_chart,
-        window.analysis_tag_duration_chart,
     ):
         chart.resize(240, 160)
         pixmap = QPixmap(chart.size())
