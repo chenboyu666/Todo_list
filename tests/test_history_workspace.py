@@ -78,6 +78,13 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "const GRAPH_PAYLOAD =" in html
     assert "PySide6 UI release" in html
     assert "加载 3D 任务关系图" not in html
+    assert "qrc:///qtwebchannel/qwebchannel.js" in html
+    assert "historyBridge.openNotes" in html
+    assert "historyBridge.editTag" in html
+    assert "historyBridge.exportHistory" in html
+    assert "无外部依赖" not in html
+    assert "grid-template-columns:250px minmax(360px,1fr) 300px" in html
+    assert "const INITIAL_ZOOM=.96" in html
 
 
 def test_history_window_saves_reflection(qapp: QApplication) -> None:
@@ -553,6 +560,37 @@ def test_history_note_editor_saves_notes_and_reflection(qapp: QApplication, monk
     assert captured["task"] == task
     assert captured["parent"] is window
     assert store.saved_tasks == [replace(task, notes="新的备注", reflection="新的体会")]
+
+    window.close()
+
+
+def test_history_graph_bridge_actions_update_window(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    import floating_todo.ui.history_window as history_window
+
+    task = replace(make_task("完成任务", "done-1", status="done", tag="工作"), notes="旧备注", reflection="旧体会")
+    store = MemoryStore([task])
+    window = history_window.HistoryWindow([task], store)
+    captured: dict[str, object] = {}
+
+    def fake_open_note_editor(selected_task: Task) -> None:
+        captured["note_task"] = selected_task
+
+    def fake_export_history() -> None:
+        captured["exported"] = True
+
+    monkeypatch.setattr(window, "open_note_editor", fake_open_note_editor)
+    monkeypatch.setattr(window, "export_history", fake_export_history)
+    monkeypatch.setattr(history_window.QInputDialog, "getText", lambda *args, **kwargs: ("复盘", True))
+
+    window._history_graph_bridge.openNotes("done-1")
+    window._history_graph_bridge.editTag("done-1")
+    window._history_graph_bridge.exportHistory()
+
+    assert captured["note_task"] == task
+    assert captured["exported"] is True
+    assert store.saved_tasks == [replace(task, tag="复盘")]
+    assert window.tag_filter.findData("复盘") >= 0
+    assert "复盘" in window._analysis_graph_html
 
     window.close()
 
