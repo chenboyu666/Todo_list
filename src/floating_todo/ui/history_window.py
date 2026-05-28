@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -577,10 +577,6 @@ class HistoryWindow(QDialog):
         self.store = store
         self._selected_page_index = 0
         self._current_history_section = "history"
-        self._search_debounce = QTimer(self)
-        self._search_debounce.setSingleShot(True)
-        self._search_debounce.setInterval(150)
-        self._search_debounce.timeout.connect(self._reset_page)
 
         self.setWindowTitle("历史任务")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
@@ -949,7 +945,7 @@ class HistoryWindow(QDialog):
         self.search_input = QLineEdit()
         self.search_input.setObjectName("historySearch")
         self.search_input.setPlaceholderText("搜索任务名称、备注或复盘")
-        self.search_input.textChanged.connect(lambda _text: self._search_debounce.start())
+        self.search_input.textChanged.connect(self._reset_page)
         filters_row.addWidget(self.search_input, 2)
 
         self.status_filter = NoWheelComboBox()
