@@ -142,8 +142,9 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert window.minimumHeight() >= 900
     assert window.isSizeGripEnabled()
     assert window.history_resize_grip.toolTip() == "拖动调整历史窗口大小"
-    assert window.history_section_stack.currentWidget() is window.history_tasks_scroll
+    assert window.history_section_stack.currentWidget() is window.history_overview_scroll
     assert window.history_sidebar_buttons["history"].isChecked()
+    assert not window.history_sidebar_buttons["records"].isChecked()
     assert not window.history_sidebar_buttons["analysis"].isChecked()
     assert window.top_settings_button.toolTip() == "打开设置"
     assert window.minimize_button.toolTip() == "最小化"
@@ -177,18 +178,20 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert learning_node is not None
     QTest.mouseClick(window.tag_duration_chart, Qt.LeftButton, pos=learning_node.center().toPoint())
     qapp.processEvents()
-    assert window.history_section_stack.currentWidget() is window.history_tasks_scroll
+    assert window.history_section_stack.currentWidget() is window.history_records_list_scroll
+    assert window.history_sidebar_buttons["records"].isChecked()
     assert window.tag_filter.currentData() == "学习"
     assert [label.text() for label in window.findChildren(QLabel, "historyRecordTitle")] == ["完成任务"]
     scroll_bar = window.history_content_scroll.verticalScrollBar()
     records_target = min(
         scroll_bar.maximum(),
-        max(0, window.history_records_panel.mapTo(window.history_tasks_page, QPoint(0, 0)).y() - 12),
+        max(0, window.history_records_panel.mapTo(window.history_records_list_page, QPoint(0, 0)).y() - 12),
     )
-    assert records_target > 0
+    assert records_target >= 0
     scroll_animation = getattr(window, "_history_scroll_animation", None)
-    assert scroll_animation is not None
-    assert scroll_animation.duration() >= 280
+    if records_target > 0:
+        assert scroll_animation is not None
+        assert scroll_animation.duration() >= 280
     QTest.qWait(360)
     qapp.processEvents()
     assert abs(scroll_bar.value() - records_target) <= 2
@@ -196,7 +199,8 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     qapp.processEvents()
     assert window.deadline_outcome_chart.outcome_counts == {"on_time": 2, "overdue": 0, "no_deadline": 0}
     assert [value for _, value in window.completion_trend_chart.trend_points] == [1, 1]
-    assert window.history_tasks_scroll.horizontalScrollBar().maximum() == 0
+    assert window.history_overview_scroll.horizontalScrollBar().maximum() == 0
+    assert window.history_records_list_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_analysis_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_records_panel.objectName() == "historyRecordsPanel"
     assert window.history_graph_webview.objectName() == "historyGraphWebView"

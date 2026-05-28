@@ -47,14 +47,19 @@ def test_build_script_safely_cleans_only_project_directories():
     assert "Remove-ProjectDirectory -RelativePath \"dist\"" in script
 
 
-def test_readme_documents_current_build_flow():
+def test_readme_documents_download_user_flow():
     readme = README.read_text(encoding="utf-8")
 
-    assert "```powershell\npowershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\build.ps1\n```" in readme
-    assert "https://github.com/chenboyu666/Todo_list/releases/tag/v1.0" in readme
-    assert "`Todo-list-V1.0-windows.exe`，双击运行即可。" in readme
-    assert "dist\\Todo list.exe" in readme
+    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.exe" in readme
+    assert "下载后双击 `Todo-list-V1.0-windows.exe` 即可运行。" in readme
+    assert "3D 洞察图" in readme
+    assert "CSV 导出" in readme
     assert "data\\" in readme
+    assert "## 本地开发" not in readme
+    assert "## 测试" not in readme
+    assert "## 构建" not in readme
+    assert "## 项目结构" not in readme
+    assert "dist\\Todo list.exe" not in readme
     assert "release\\V1.0" not in readme
     assert "快捷方式" not in readme
     assert "常见问题" not in readme
@@ -64,14 +69,11 @@ def test_readme_documents_current_build_flow():
     assert "later app bootstrap task" not in readme
 
 
-def test_readme_installs_project_before_local_run_command():
+def test_readme_describes_portable_data_folder():
     readme = README.read_text(encoding="utf-8")
-    run_section = readme.split("## 本地开发", 1)[1].split("## 测试", 1)[0]
 
-    editable_install = run_section.index("pip install -e .")
-    launch_command = run_section.index("python -m floating_todo")
-
-    assert editable_install < launch_command
+    assert "程序会在 exe 同级目录创建" in readme
+    assert "移动程序时，请把 `Todo-list-V1.0-windows.exe` 和同级 `data` 文件夹一起移动。" in readme
 
 
 def test_shortcuts_are_ignored_for_release_artifacts():
