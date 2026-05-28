@@ -5,8 +5,9 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QObject, QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -546,6 +548,28 @@ QDialogButtonBox QPushButton {
         return self.reflection_edit.toPlainText()
 
 
+class HistoryGraphBridge(QObject):
+    def __init__(self, window: "HistoryWindow") -> None:
+        super().__init__(window)
+        self._window = window
+
+    @Slot(str)
+    def openNotes(self, task_id: str) -> None:
+        self._window.open_history_graph_notes(task_id)
+
+    @Slot(str)
+    def editTag(self, task_id: str) -> None:
+        self._window.edit_history_graph_tag(task_id)
+
+    @Slot(str)
+    def filterKeyword(self, keyword: str) -> None:
+        self._window._jump_to_history_records(search=keyword)
+
+    @Slot()
+    def exportHistory(self) -> None:
+        self._window.export_history()
+
+
 class HistoryWindow(QDialog):
     def __init__(self, tasks: list[Task], store, parent=None) -> None:
         super().__init__(parent)
@@ -553,9 +577,14 @@ class HistoryWindow(QDialog):
         self.store = store
         self._selected_page_index = 0
         self._current_history_section = "history"
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(150)
+        self._search_debounce.timeout.connect(self._reset_page)
 
         self.setWindowTitle("历史任务")
-        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        self.setWindowModality(Qt.WindowModal)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setMinimumSize(1180, 900)
         self.resize(1320, 960)
@@ -595,26 +624,28 @@ class HistoryWindow(QDialog):
         self.history_section_stack.setObjectName("historySectionStack")
         content_root.addWidget(self.history_section_stack, 1)
 
-        self.history_tasks_scroll, self.history_tasks_page, tasks_layout = self._create_section_page("historyTasksPage")
+        self.history_overview_scroll, self.history_overview_page, overview_layout = self._create_section_page("historyOverviewPage")
+        self.history_records_list_scroll, self.history_records_list_page, records_layout = self._create_section_page("historyRecordsPage")
         self.history_analysis_scroll, self.history_analysis_page, analysis_layout = self._create_section_page("historyAnalysisPage")
-        self.history_section_stack.addWidget(self.history_tasks_scroll)
+        self.history_section_stack.addWidget(self.history_overview_scroll)
+        self.history_section_stack.addWidget(self.history_records_list_scroll)
         self.history_section_stack.addWidget(self.history_analysis_scroll)
-        self.history_content_scroll = self.history_tasks_scroll
+        self.history_content_scroll = self.history_overview_scroll
 
         self.header_panel = self._build_header_panel()
-        tasks_layout.addWidget(self.header_panel)
+        overview_layout.addWidget(self.header_panel)
         self.metrics_panel = self._build_metrics_panel()
-        tasks_layout.addWidget(self.metrics_panel)
+        overview_layout.addWidget(self.metrics_panel)
         self.analytics_panel = self._build_analytics_panel()
-        tasks_layout.addWidget(self.analytics_panel)
+        overview_layout.addWidget(self.analytics_panel)
         self.charts_panel = self._build_history_charts_panel()
-        tasks_layout.addWidget(self.charts_panel)
+        overview_layout.addWidget(self.charts_panel)
         self.records_tools_panel = self._build_records_tools_panel()
-        tasks_layout.addWidget(self.records_tools_panel)
+        records_layout.addWidget(self.records_tools_panel)
         self.history_records_panel, self.history_list_container, self.list_layout = self._build_records_panel()
-        tasks_layout.addWidget(self.history_records_panel, 1)
+        records_layout.addWidget(self.history_records_panel, 1)
         self.pagination_panel = self._build_pagination_panel()
-        tasks_layout.addWidget(self.pagination_panel)
+        records_layout.addWidget(self.pagination_panel)
 
         self.history_graph_panel = self._build_history_graph_panel()
         analysis_layout.addWidget(self.history_graph_panel, 1)
@@ -659,7 +690,8 @@ class HistoryWindow(QDialog):
         self.history_sidebar_buttons: dict[str, QPushButton] = {}
         definitions = [
             ("tasks", "任务", "nav-task.svg", "返回主任务窗口", self._open_main_workspace),
-            ("history", "历史任务", "nav-history.svg", "查看历史任务工作台", lambda: self._set_history_section("history")),
+            ("history", "概览", "nav-history.svg", "查看历史任务概览", lambda: self._set_history_section("history")),
+            ("records", "历史记录", "record-note.svg", "查看历史记录列表", lambda: self._set_history_section("records")),
             ("analysis", "洞察", "nav-analysis.svg", "查看任务星图洞察", lambda: self._set_history_section("analysis")),
             ("settings", "设置", "nav-settings.svg", "打开设置窗口", self._open_settings_workspace),
         ]
@@ -667,7 +699,7 @@ class HistoryWindow(QDialog):
             button = QPushButton(text)
             button.setObjectName("historySidebarButton")
             button.setProperty("effectVariant", "nav")
-            button.setCheckable(key in {"history", "analysis"})
+            button.setCheckable(key in {"history", "records", "analysis"})
             button.setCursor(Qt.PointingHandCursor)
             button.setToolTip(tooltip)
             button.setAccessibleName(text)
@@ -782,12 +814,19 @@ class HistoryWindow(QDialog):
         )
         self.analytics_start_date_chip = _date_chip("开始", self.analytics_start_date)
         self.analytics_end_date_chip = _date_chip("结束", self.analytics_end_date)
-        layout.addWidget(self.analytics_start_date_chip, 1, 0, 1, 3)
+        self.analytics_start_date_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.analytics_end_date_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        date_row_widget = QWidget()
+        date_row_layout = QHBoxLayout(date_row_widget)
+        date_row_layout.setContentsMargins(0, 0, 0, 0)
+        date_row_layout.setSpacing(10)
         arrow = QLabel("→")
         arrow.setObjectName("historyAnalyticsArrow")
         arrow.setAlignment(Qt.AlignCenter)
-        layout.addWidget(arrow, 1, 3)
-        layout.addWidget(self.analytics_end_date_chip, 1, 4, 1, 4)
+        date_row_layout.addWidget(self.analytics_start_date_chip, 1)
+        date_row_layout.addWidget(arrow)
+        date_row_layout.addWidget(self.analytics_end_date_chip, 1)
+        layout.addWidget(date_row_widget, 1, 0, 1, 7)
 
         self.sort_mode = NoWheelComboBox()
         self.sort_mode.setObjectName("historySortMode")
@@ -856,9 +895,33 @@ class HistoryWindow(QDialog):
 
         self.history_graph_webview = QWebEngineView()
         self.history_graph_webview.setObjectName("historyGraphWebView")
-        self.history_graph_webview.setMinimumHeight(620)
+        self.history_graph_webview.setMinimumHeight(520)
         self.history_graph_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.history_graph_webview, 1)
+        self._history_graph_channel = QWebChannel(self.history_graph_webview.page())
+        self._history_graph_bridge = HistoryGraphBridge(self)
+        self._history_graph_channel.registerObject("historyBridge", self._history_graph_bridge)
+        self.history_graph_webview.page().setWebChannel(self._history_graph_channel)
+
+        self.history_graph_stack = QStackedWidget()
+        self.history_graph_stack.setMinimumHeight(520)
+        self.history_graph_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.history_graph_placeholder = QLabel("正在准备 3D 关系图…")
+        self.history_graph_placeholder.setObjectName("historyGraphPlaceholder")
+        self.history_graph_placeholder.setAlignment(Qt.AlignCenter)
+        self.history_graph_placeholder.setStyleSheet(
+            "QLabel#historyGraphPlaceholder {"
+            "color: #9CB3C6; font-size: 14px; font-weight: 800;"
+            "background: rgba(4, 16, 29, 0.62);"
+            "border: 1px dashed rgba(110, 156, 184, 36);"
+            "border-radius: 14px;"
+            "}"
+        )
+        self.history_graph_stack.addWidget(self.history_graph_placeholder)
+        self.history_graph_stack.addWidget(self.history_graph_webview)
+        self.history_graph_webview.loadFinished.connect(
+            lambda _ok: self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
+        )
+        layout.addWidget(self.history_graph_stack, 1)
         self._analysis_graph_html = ""
         return panel
 
@@ -886,7 +949,7 @@ class HistoryWindow(QDialog):
         self.search_input = QLineEdit()
         self.search_input.setObjectName("historySearch")
         self.search_input.setPlaceholderText("搜索任务名称、备注或复盘")
-        self.search_input.textChanged.connect(self._reset_page)
+        self.search_input.textChanged.connect(lambda _text: self._search_debounce.start())
         filters_row.addWidget(self.search_input, 2)
 
         self.status_filter = NoWheelComboBox()
@@ -945,6 +1008,8 @@ class HistoryWindow(QDialog):
         )
         self.export_start_date_chip = _date_chip("开始", self.export_start_date)
         self.export_end_date_chip = _date_chip("结束", self.export_end_date)
+        self.export_start_date_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.export_end_date_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         export_row.addWidget(self.export_start_date_chip, 1)
         export_arrow = QLabel("→")
         export_arrow.setObjectName("historyExportArrow")
@@ -1128,12 +1193,17 @@ class HistoryWindow(QDialog):
             self.history_section_stack.setCurrentWidget(self.history_analysis_scroll)
             self.history_content_scroll = self.history_analysis_scroll
             animate_content_swap(self.history_analysis_page)
+        elif section == "records":
+            self.history_section_stack.setCurrentWidget(self.history_records_list_scroll)
+            self.history_content_scroll = self.history_records_list_scroll
+            animate_content_swap(self.history_records_list_page)
         else:
-            self.history_section_stack.setCurrentWidget(self.history_tasks_scroll)
-            self.history_content_scroll = self.history_tasks_scroll
-            animate_content_swap(self.history_tasks_page)
+            self.history_section_stack.setCurrentWidget(self.history_overview_scroll)
+            self.history_content_scroll = self.history_overview_scroll
+            animate_content_swap(self.history_overview_page)
 
         self.history_sidebar_buttons["history"].setChecked(section == "history")
+        self.history_sidebar_buttons["records"].setChecked(section == "records")
         self.history_sidebar_buttons["analysis"].setChecked(section == "analysis")
         if scroll_to_top:
             self._scroll_current_section_to_top()
@@ -1168,13 +1238,7 @@ class HistoryWindow(QDialog):
         animation.start()
 
     def _scroll_records_list_into_view(self, *, animated: bool = True) -> None:
-        page = self.history_content_scroll.widget()
-        if page is None:
-            return
-        if page.layout() is not None:
-            page.layout().activate()
-        target = self.history_records_panel.mapTo(page, QPoint(0, 0)).y() - 12
-        self._scroll_current_section_to_value(target, animated=animated)
+        self._set_history_section("records")
         animate_content_swap(self.history_list_container, duration=220)
 
     def _open_main_workspace(self) -> None:
@@ -1407,7 +1471,7 @@ class HistoryWindow(QDialog):
         card = QFrame()
         card.setObjectName("historyCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        card.setMinimumHeight(190)
+        card.setMinimumHeight(160)
         apply_soft_shadow(card, blur=24, y_offset=8, alpha=96)
 
         shell = QHBoxLayout(card)
@@ -1465,10 +1529,15 @@ class HistoryWindow(QDialog):
                 strong=True,
             )
         )
-        notes_text = self._compact_text(task.notes) if task.notes.strip() else "任务备注：暂无"
-        reflection_text = self._compact_text(task.reflection) if task.reflection.strip() else "完成体会：暂无"
-        middle.addWidget(self._preview_line("record-note.svg", notes_text))
-        middle.addWidget(self._preview_line("record-note.svg", reflection_text))
+        has_notes = bool(task.notes.strip())
+        has_reflection = bool(task.reflection.strip())
+        if has_notes:
+            middle.addWidget(self._preview_line("record-note.svg", self._compact_text(task.notes)))
+        if has_reflection:
+            middle.addWidget(self._preview_line("record-note.svg", self._compact_text(task.reflection)))
+        if not has_notes and not has_reflection:
+            middle.addWidget(self._preview_line("record-note.svg", "任务备注与完成体会：暂无"))
+        middle.addStretch(1)
         layout.addLayout(middle, 2)
 
         right = QVBoxLayout()
@@ -1606,17 +1675,53 @@ class HistoryWindow(QDialog):
         self._render_records(self._paged_tasks(filtered))
 
     def _jump_to_history_records(self, *, status: str = "all", priority: str = "all", tag: str = "all", search: str = "") -> None:
-        self._set_history_section("history", scroll_to_top=False)
         self.search_input.setText(search)
         self.status_filter.setCurrentIndex(max(0, self.status_filter.findData(status)))
         self.priority_filter.setCurrentIndex(max(0, self.priority_filter.findData(priority)))
         self.tag_filter.setCurrentIndex(max(0, self.tag_filter.findData(tag)))
         self._selected_page_index = 0
         self._render()
-        self._scroll_records_list_into_view(animated=True)
+        self._set_history_section("records")
+        animate_content_swap(self.history_list_container, duration=220)
 
     def _jump_to_tag_records(self, tag: str) -> None:
         self._jump_to_history_records(tag=normalize_task_tag(tag))
+
+    def _task_by_id(self, task_id: str) -> Task | None:
+        return next((task for task in self.tasks if task.id == task_id), None)
+
+    def open_history_graph_notes(self, task_id: str) -> None:
+        task = self._task_by_id(task_id)
+        if task is None:
+            return
+        self.open_note_editor(task)
+
+    def edit_history_graph_tag(self, task_id: str) -> None:
+        task = self._task_by_id(task_id)
+        if task is None:
+            return
+        current_tag = _task_tag(task)
+        new_tag, accepted = QInputDialog.getText(self, "修改任务标签", "新的标签：", text=current_tag)
+        if not accepted:
+            return
+        normalized = normalize_task_tag(new_tag)
+        if normalized == current_tag:
+            return
+        self.tasks = [replace(item, tag=normalized) if item.id == task_id else item for item in self.tasks]
+        self.store.save_tasks(self.tasks)
+        self._refresh_tag_filter_options(selected=normalized)
+        self._render()
+
+    def _refresh_tag_filter_options(self, *, selected: str = "all") -> None:
+        selected = normalize_task_tag(selected) if selected != "all" else "all"
+        self.tag_filter.blockSignals(True)
+        self.tag_filter.clear()
+        self.tag_filter.addItem("全部标签", "all")
+        for tag in _task_tags(self.tasks):
+            self.tag_filter.addItem(tag, tag)
+        index = self.tag_filter.findData(selected)
+        self.tag_filter.setCurrentIndex(index if index >= 0 else 0)
+        self.tag_filter.blockSignals(False)
 
     def export_history(self) -> None:
         tasks = self._exportable_tasks()
@@ -1873,12 +1978,14 @@ QStackedWidget#historySectionStack {
   background: transparent;
   border: none;
 }
-QScrollArea#historyTasksPageScroll,
+QScrollArea#historyOverviewPageScroll,
+QScrollArea#historyRecordsPageScroll,
 QScrollArea#historyAnalysisPageScroll {
   border: none;
   background: transparent;
 }
-QFrame#historyTasksPage,
+QFrame#historyOverviewPage,
+QFrame#historyRecordsPage,
 QFrame#historyAnalysisPage {
   background: transparent;
   border: none;

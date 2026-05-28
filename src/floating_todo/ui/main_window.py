@@ -180,7 +180,7 @@ class ClockDisplay(QLabel):
             "background: transparent;"
             f"font-size: {_scale_px(26)}px;"
             "font-weight: 900;"
-            'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
+            'font-family: "Cascadia Mono", "JetBrains Mono", "Consolas", "SF Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
             f"padding: 0 {_scale_px(4)}px;"
             "}"
         )

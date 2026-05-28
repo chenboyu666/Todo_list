@@ -394,4 +394,15 @@ QMenu::separator {{
   background: #253044;
   margin: 6px 8px;
 }}
+QToolTip {{
+  color: #ECFEFF;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #0B1C2E,
+    stop:1 #0E2B3A);
+  border: 1px solid {THEME_COLORS["accent"]};
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  opacity: 235;
+}}
 """
