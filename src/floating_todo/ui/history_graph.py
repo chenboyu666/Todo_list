@@ -120,6 +120,8 @@ def build_history_graph_payload(tasks: list[Task], *, max_keywords: int = 18) ->
 
 def render_history_graph_html(payload: dict[str, Any]) -> str:
     graph_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    is_empty = not payload.get("tasks") and not payload.get("keywords")
+    body_class = "is-empty" if is_empty else ""
     return f"""<!doctype html>
 <html lang=\"zh-CN\">
 <head>
@@ -138,10 +140,30 @@ def render_history_graph_html(payload: dict[str, Any]) -> str:
       margin:0; width:100vw; height:100vh; overflow:hidden; color:var(--text);
       background:radial-gradient(circle at 18% 16%,rgba(50,220,255,.12),transparent 28%),
         radial-gradient(circle at 72% 18%,rgba(167,139,250,.09),transparent 30%),
-        linear-gradient(145deg,#01050b,#04101e 58%,#061927);
+        linear-gradient(145deg,#04101e,#071b2c 58%,#0A3741);
     }}
     canvas {{ position:fixed; inset:0; width:100vw; height:100vh; display:block; cursor:grab; }}
     canvas:active {{ cursor:grabbing; }}
+    body.is-empty canvas {{ cursor:default; }}
+    .empty-state {{
+      position:fixed; inset:0; display:none; place-items:center; padding:28px;
+      pointer-events:none;
+    }}
+    body.is-empty .empty-state {{ display:grid; }}
+    .empty-card {{
+      width:min(520px, calc(100vw - 56px)); min-height:190px; border-radius:24px;
+      display:grid; place-items:center; text-align:center; padding:28px;
+      background:linear-gradient(145deg,rgba(6,22,36,.86),rgba(8,48,62,.70));
+      box-shadow:0 28px 80px rgba(0,0,0,.24), inset 0 0 0 1px rgba(78,207,255,.18);
+    }}
+    .empty-orbit {{
+      width:68px; height:68px; border-radius:50%; margin:0 auto 16px;
+      background:radial-gradient(circle,rgba(50,220,255,.62),rgba(50,220,255,.12) 46%,transparent 48%),
+        conic-gradient(from 30deg,rgba(50,220,255,.0),rgba(50,220,255,.76),rgba(167,139,250,.55),rgba(50,220,255,.0));
+      box-shadow:0 0 34px rgba(50,220,255,.28);
+    }}
+    .empty-card h2 {{ margin:0; font-size:22px; line-height:1.2; }}
+    .empty-card p {{ margin:10px auto 0; max-width:360px; color:var(--soft); line-height:1.6; font-size:13px; font-weight:850; }}
     .hud {{ position:fixed; inset:12px; pointer-events:none; display:grid; grid-template-columns:250px minmax(360px,1fr) 300px; gap:12px; }}
     .glass {{
       pointer-events:auto; border:1px solid var(--line); border-radius:22px;
@@ -171,8 +193,9 @@ def render_history_graph_html(payload: dict[str, Any]) -> str:
     .ops {{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }} .ops button {{ border:0; min-height:38px; border-radius:12px; color:var(--soft); background:rgba(5,15,28,.82); box-shadow:inset 0 0 0 1px rgba(78,207,255,.13); font-weight:900; cursor:pointer; }} .ops button:hover {{ color:var(--text); box-shadow:inset 0 0 0 1px rgba(50,220,255,.38),0 10px 26px rgba(0,0,0,.22); }} .ops button:disabled {{ cursor:not-allowed; opacity:.42; }}
   </style>
 </head>
-<body>
+<body class=\"{body_class}\">
   <canvas id=\"graph\"></canvas>
+  <div class=\"empty-state\"><section class=\"empty-card\"><div class=\"empty-orbit\"></div><h2>暂无已完成任务</h2><p>完成任务后会自动生成关系图，用标签和高频主题词展示任务之间的连接。</p></section></div>
   <div class=\"hud\">
     <section class=\"glass left\"><h1>任务关系图图例</h1><p class=\"sub\">每个小点是一条已完成任务；标签是分类中心；高频主题词来自反复出现的任务名称。</p><div class=\"chips\"><span class=\"chip\">拖动旋转</span><span class=\"chip\">滚轮缩放</span><span class=\"chip\">点击查看</span></div><div class=\"legend\"><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--cyan);background:var(--cyan)\"></i><span>已完成任务</span><b id=\"legendTasks\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--gold);background:var(--gold)\"></i><span>标签</span><b id=\"legendTagKeywords\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--violet);background:var(--violet)\"></i><span>高频主题词</span><b id=\"legendTitleKeywords\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--rose);background:var(--rose)\"></i><span>超时标记</span><b id=\"legendLate\">0</b></div></div></section>
     <section class=\"glass top\"><div><h1>Obsidian 风格历史洞察</h1><p class=\"sub\">用关系发现可合并的项目、孤立记录和需要补标签的任务。</p></div><div class=\"metric-grid\"><div class=\"metric\"><b id=\"metricNodes\">0</b><span>节点</span></div><div class=\"metric\"><b id=\"metricLinks\">0</b><span>连接</span></div><div class=\"metric\"><b id=\"metricGroups\">0</b><span>主题簇</span></div></div></section>

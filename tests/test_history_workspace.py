@@ -108,6 +108,34 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "keywordSourceText" in html
 
 
+def test_history_graph_empty_state_renders_initial_panel() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
+
+    payload = build_history_graph_payload([])
+    html = render_history_graph_html(payload)
+
+    assert payload["tasks"] == []
+    assert 'body class="is-empty"' in html
+    assert 'class="empty-state"' in html
+    assert "暂无已完成任务" in html
+    assert "完成任务后会自动生成关系图" in html
+    assert "linear-gradient(145deg,#04101e,#071b2c 58%,#0A3741)" in html
+    assert "background:#000" not in html
+    assert "background: #000" not in html
+
+
+def test_history_graph_empty_tasks_uses_native_initial_panel(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    window = HistoryWindow([], MemoryStore([]))
+
+    assert window.history_graph_stack.currentWidget() is window.history_graph_empty_state
+    assert "暂无已完成任务" in window.history_graph_empty_title.text()
+    assert "完成任务后" in window.history_graph_empty_hint.text()
+
+    window.close()
+
+
 def test_history_graph_skips_webview_reload_for_unchanged_tasks(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -893,6 +893,7 @@ class HistoryWindow(QDialog):
         self.history_graph_webview.setObjectName("historyGraphWebView")
         self.history_graph_webview.setMinimumHeight(520)
         self.history_graph_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.history_graph_webview.page().setBackgroundColor(QColor("#071421"))
         self._history_graph_channel = QWebChannel(self.history_graph_webview.page())
         self._history_graph_bridge = HistoryGraphBridge(self)
         self._history_graph_channel.registerObject("historyBridge", self._history_graph_bridge)
@@ -912,10 +913,60 @@ class HistoryWindow(QDialog):
             "border-radius: 14px;"
             "}"
         )
+        self.history_graph_empty_state = QFrame()
+        self.history_graph_empty_state.setObjectName("historyGraphEmptyState")
+        empty_layout = QVBoxLayout(self.history_graph_empty_state)
+        empty_layout.setContentsMargins(24, 24, 24, 24)
+        empty_layout.setSpacing(0)
+        empty_layout.addStretch(1)
+
+        empty_card = QFrame()
+        empty_card.setObjectName("historyGraphEmptyCard")
+        empty_card.setMaximumWidth(560)
+        empty_card_layout = QVBoxLayout(empty_card)
+        empty_card_layout.setContentsMargins(34, 32, 34, 32)
+        empty_card_layout.setSpacing(14)
+
+        empty_orbit = QLabel()
+        empty_orbit.setObjectName("historyGraphEmptyOrbit")
+        empty_orbit.setFixedSize(76, 76)
+        empty_orbit.setAlignment(Qt.AlignCenter)
+        empty_card_layout.addWidget(empty_orbit, 0, Qt.AlignHCenter)
+
+        self.history_graph_empty_title = QLabel("暂无已完成任务")
+        self.history_graph_empty_title.setObjectName("historyGraphEmptyTitle")
+        self.history_graph_empty_title.setAlignment(Qt.AlignCenter)
+        empty_card_layout.addWidget(self.history_graph_empty_title)
+
+        self.history_graph_empty_hint = QLabel(
+            "完成任务后，这里会自动生成关系图，用标签和高频主题词展示任务之间的连接。"
+        )
+        self.history_graph_empty_hint.setObjectName("historyGraphEmptyHint")
+        self.history_graph_empty_hint.setAlignment(Qt.AlignCenter)
+        self.history_graph_empty_hint.setWordWrap(True)
+        empty_card_layout.addWidget(self.history_graph_empty_hint)
+
+        chip_row = QHBoxLayout()
+        chip_row.setContentsMargins(0, 6, 0, 0)
+        chip_row.setSpacing(8)
+        chip_row.addStretch(1)
+        for text in ("标签连接", "主题聚类", "复盘检索"):
+            chip = QLabel(text)
+            chip.setObjectName("historyGraphEmptyChip")
+            chip.setAlignment(Qt.AlignCenter)
+            chip_row.addWidget(chip)
+        chip_row.addStretch(1)
+        empty_card_layout.addLayout(chip_row)
+
+        empty_layout.addWidget(empty_card, 0, Qt.AlignHCenter)
+        empty_layout.addStretch(1)
+
+        self._history_graph_has_completed = False
         self.history_graph_stack.addWidget(self.history_graph_placeholder)
+        self.history_graph_stack.addWidget(self.history_graph_empty_state)
         self.history_graph_stack.addWidget(self.history_graph_webview)
         self.history_graph_webview.loadFinished.connect(
-            lambda _ok: self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
+            self._show_history_graph_webview_if_ready
         )
         layout.addWidget(self.history_graph_stack, 1)
         self._analysis_graph_html = ""
@@ -1647,18 +1698,33 @@ class HistoryWindow(QDialog):
         self.prev_page_button.setEnabled(self._selected_page_index > 0)
         self.next_page_button.setEnabled(self._selected_page_index < page_count - 1)
 
+    def _show_history_graph_webview_if_ready(self, _ok: bool = True) -> None:
+        if self._history_graph_has_completed:
+            self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
+
     def _update_history_graph(self, completed: list[Task]) -> None:
         signature = self._history_graph_signature(completed)
         done_count = len([task for task in completed if task.status == "done"])
         self.history_graph_count_label.setText(f"{done_count} 条")
+        if done_count == 0:
+            self._history_graph_has_completed = False
+            self.history_graph_stack.setCurrentWidget(self.history_graph_empty_state)
+            self._analysis_graph_signature = signature
+            self._analysis_graph_html = render_history_graph_html(build_history_graph_payload(completed))
+            return
+
+        self._history_graph_has_completed = True
         if signature == self._analysis_graph_signature:
+            self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
             return
         self._analysis_graph_signature = signature
         payload = build_history_graph_payload(completed)
         html = render_history_graph_html(payload)
         if html == self._analysis_graph_html:
+            self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
             return
         self._analysis_graph_html = html
+        self.history_graph_stack.setCurrentWidget(self.history_graph_placeholder)
         self.history_graph_webview.setHtml(html)
 
     def _history_graph_signature(self, tasks: list[Task]) -> tuple[tuple[object, ...], ...]:
@@ -2021,6 +2087,52 @@ QScrollArea#historyRecordsPanel {
     stop:1 #0A3741);
   border: 1px solid rgba(98, 144, 176, 36);
   border-radius: 18px;
+}
+QFrame#historyGraphEmptyState {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 #061322,
+    stop:0.54 #082235,
+    stop:1 #0A3B43);
+  border: none;
+}
+QFrame#historyGraphEmptyCard {
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+    stop:0 rgba(7, 24, 39, 0.96),
+    stop:1 rgba(9, 54, 66, 0.82));
+  border: 1px solid rgba(103, 232, 249, 34);
+  border-radius: 24px;
+}
+QLabel#historyGraphEmptyOrbit {
+  background: qconicalgradient(cx:0.5, cy:0.5, angle:30,
+    stop:0 rgba(50, 220, 255, 0),
+    stop:0.32 rgba(50, 220, 255, 0.82),
+    stop:0.62 rgba(167, 139, 250, 0.62),
+    stop:1 rgba(50, 220, 255, 0));
+  border: 1px solid rgba(103, 232, 249, 54);
+  border-radius: 38px;
+}
+QLabel#historyGraphEmptyTitle {
+  color: #F8FBFF;
+  background: transparent;
+  font-size: 24px;
+  font-weight: 900;
+}
+QLabel#historyGraphEmptyHint {
+  color: #BFE7F5;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+QLabel#historyGraphEmptyChip {
+  color: #CFFAFE;
+  background: rgba(7, 22, 34, 0.88);
+  border: 1px solid rgba(103, 232, 249, 28);
+  border-radius: 10px;
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
 }
 QWidget#historyRecordsViewport {
   background: transparent;
