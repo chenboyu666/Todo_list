@@ -919,6 +919,7 @@ class HistoryWindow(QDialog):
         )
         layout.addWidget(self.history_graph_stack, 1)
         self._analysis_graph_html = ""
+        self._analysis_graph_signature: tuple[tuple[object, ...], ...] | None = None
         return panel
 
     def _build_records_tools_panel(self) -> QFrame:
@@ -1647,13 +1648,35 @@ class HistoryWindow(QDialog):
         self.next_page_button.setEnabled(self._selected_page_index < page_count - 1)
 
     def _update_history_graph(self, completed: list[Task]) -> None:
+        signature = self._history_graph_signature(completed)
+        done_count = len([task for task in completed if task.status == "done"])
+        self.history_graph_count_label.setText(f"{done_count} 条")
+        if signature == self._analysis_graph_signature:
+            return
+        self._analysis_graph_signature = signature
         payload = build_history_graph_payload(completed)
-        self.history_graph_count_label.setText(f"{len(payload['tasks'])} 条")
         html = render_history_graph_html(payload)
         if html == self._analysis_graph_html:
             return
         self._analysis_graph_html = html
         self.history_graph_webview.setHtml(html)
+
+    def _history_graph_signature(self, tasks: list[Task]) -> tuple[tuple[object, ...], ...]:
+        return tuple(
+            (
+                task.id,
+                task.status,
+                task.title,
+                normalize_task_tag(task.tag),
+                task.priority,
+                task.deadline.isoformat() if task.deadline else "",
+                task.completed_at.isoformat() if task.completed_at else "",
+                task.updated_at.isoformat(),
+                work_elapsed_seconds(task, task.completed_at or task.updated_at),
+            )
+            for task in tasks
+            if task.status == "done"
+        )
 
     def _render(self, *args) -> None:
         analytics_tasks = self._analytics_tasks()

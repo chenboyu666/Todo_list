@@ -1822,7 +1822,7 @@ class MainWindow(QMainWindow):
         tile.setObjectName("addTaskTile")
         tile.setToolTip("新增任务")
         tile.setCursor(Qt.PointingHandCursor)
-        tile.setMinimumHeight(_scale_px(214))
+        tile.setMinimumHeight(_scale_px(192))
         tile.setMinimumWidth(_scale_px(190))
         tile.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         tile.setStyleSheet(_add_task_tile_style())
@@ -1846,13 +1846,13 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(_scale_px(244 if is_expanded else 214))
+        card.setMinimumHeight(_scale_px(228 if is_expanded else 192))
         card.setMinimumWidth(_scale_px(190))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(_scale_px(10), _scale_px(8), _scale_px(10), _scale_px(9))
-        layout.setSpacing(_scale_px(6))
+        layout.setContentsMargins(_scale_px(10), _scale_px(7), _scale_px(10), _scale_px(8))
+        layout.setSpacing(_scale_px(5))
 
         top = QHBoxLayout()
         priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(11)))
@@ -1863,7 +1863,7 @@ class MainWindow(QMainWindow):
         priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
         top.addWidget(priority)
         tag_name = str(row.get("tag", "未分类"))
-        tag_chip = QLabel(f"#{tag_name if len(tag_name) <= 6 else tag_name[:6] + '...'}")
+        tag_chip = QLabel(f"#{tag_name if len(tag_name) <= 8 else tag_name[:8] + '...'}")
         tag_chip.setObjectName("activeTaskTag" if is_focused else "taskTag")
         tag_chip.setAlignment(Qt.AlignCenter)
         tag_chip.setFixedHeight(_scale_px(30))
@@ -1886,7 +1886,7 @@ class MainWindow(QMainWindow):
         title.setToolTip(str(row["title"]))
         title.setWordWrap(True)
         title.setMinimumHeight(_scale_px(38))
-        title.setMaximumHeight(_scale_px(44))
+        title.setMaximumHeight(_scale_px(48))
         title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         title.setStyleSheet(_task_title_style(selected=is_focused))
         layout.addWidget(title)
@@ -2318,7 +2318,7 @@ def _urgency_chip_style(urgency: str) -> str:
     return (
         f"font-size: {_scale_px(14)}px; font-weight: 900; "
         f"padding: {_scale_px(5)}px {_scale_px(10)}px; border-radius: {_scale_px(8)}px; "
-        f"min-width: {_scale_px(72)}px; "
+        f"min-width: {_scale_px(78)}px; "
         f"background: {style['chip_bg']}; color: {style['chip_text']};"
     )
 
@@ -2341,8 +2341,8 @@ def _focus_deadline_text_style(urgency: str) -> str:
 
 def _focus_time_text_style(kind: str, urgency: str) -> str:
     style = _countdown_style(urgency)
-    size = _scale_px(19)
-    color = "#DDF8F3"
+    size = _scale_px(23 if kind == "countdown" else 18)
+    color = "#E9FFFB" if kind == "countdown" else "#CDEFEA"
     if urgency == "none":
         color = "#B5CBD9"
     return (
@@ -2361,9 +2361,13 @@ def _focus_info_card_style(kind: str, urgency: str, *, pulse: bool = False, paus
         start = "#0A2438" if urgency != "none" else "#091521"
         end = "#0D3A4A" if urgency not in {"none", "overdue"} else ("#122033" if urgency == "none" else "#4A1824")
         border = style["accent"]
+    elif kind == "countdown":
+        start = "#06364A" if urgency not in {"urgent", "critical", "overdue"} else style["start"]
+        end = "#0B5B64" if urgency not in {"urgent", "critical", "overdue"} else style["end"]
+        border = style["accent"]
     else:
-        start = "#1D2B3B" if paused else "#0E3C43"
-        end = "#243447" if paused else "#155E75"
+        start = "#1D2B3B" if paused else "#0B2B3B"
+        end = "#243447" if paused else "#0D4B50"
         border = "#94A3B8" if paused else "#37D7C2"
     return (
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
@@ -2505,20 +2509,19 @@ def _focus_meta_style() -> str:
 
 def _task_title_style(*, selected: bool = False) -> str:
     if selected:
-        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0D4960, stop:1 #0B3F49)"
         color = "#F8FBFF"
+        size = _scale_px(16)
     else:
-        background = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #071421, stop:1 #0A1D2E)"
         color = "#F3F7FC"
+        size = _scale_px(15)
     return (
         f"color: {color};"
-        f"background: {background};"
+        "background: transparent;"
         "border: none;"
-        f"border-radius: {_scale_px(8)}px;"
-        f"padding: {_scale_px(4)}px {_scale_px(8)}px;"
-        f"font-size: {_scale_px(15)}px;"
+        f"padding: {_scale_px(2)}px {_scale_px(2)}px;"
+        f"font-size: {size}px;"
         "font-weight: 900;"
-        f"line-height: {_scale_px(18)}px;"
+        f"line-height: {_scale_px(19)}px;"
     )
 
 
@@ -2552,15 +2555,14 @@ def _task_timer_style(urgency: str, *, selected: bool = False, paused: bool = Fa
 def _notes_style(*, selected: bool = False) -> str:
     if selected:
         return (
-            "color: #D7F8FF; background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            " stop:0 #14485C, stop:1 #166552);"
+            "color: #CFE5EE; background: rgba(9, 24, 37, 0.58);"
         f"border: none; border-radius: {_scale_px(8)}px; "
         f"padding: {_scale_px(6)}px {_scale_px(8)}px; font-weight: 600; font-size: {_scale_px(13)}px;"
         )
     return (
-        f"color: {THEME_COLORS['muted']}; background: #101A27; "
+        "color: #8EA3B8; background: rgba(8, 18, 30, 0.54); "
         f"border: none; border-radius: {_scale_px(8)}px; "
-        f"padding: {_scale_px(5)}px {_scale_px(8)}px; font-size: {_scale_px(13)}px;"
+        f"padding: {_scale_px(5)}px {_scale_px(8)}px; font-weight: 500; font-size: {_scale_px(12)}px;"
     )
 
 
@@ -2709,20 +2711,22 @@ def _priority_style(priority: str) -> dict[str, str]:
 def _priority_chip_style(priority: str) -> str:
     style = _priority_style(priority)
     return (
-        f"font-size: {_scale_px(14)}px; font-weight: 900; "
-        f"padding: {_scale_px(5)}px {_scale_px(10)}px; border-radius: {_scale_px(8)}px; "
-        f"min-width: {_scale_px(72)}px; "
+        f"font-size: {_scale_px(13)}px; font-weight: 900; "
+        f"padding: {_scale_px(4)}px {_scale_px(8)}px; border-radius: {_scale_px(8)}px; "
+        f"min-width: {_scale_px(78)}px; "
         f"background: {style['background']}; color: {style['text']};"
     )
 
 
 def _task_tag_chip_style(*, selected: bool = False) -> str:
     return (
-        f"font-size: {_scale_px(13)}px; font-weight: 900; "
-        f"padding: {_scale_px(5)}px {_scale_px(9)}px; border-radius: {_scale_px(8)}px; "
-        f"min-width: {_scale_px(54)}px; "
-        f"background: {'#155E75' if selected else '#10263A'}; "
-        f"color: {'#DDFBFF' if selected else '#BDE7F4'};"
+        f"font-size: {_scale_px(14)}px; font-weight: 900; "
+        f"padding: {_scale_px(5)}px {_scale_px(12)}px; border-radius: {_scale_px(9)}px; "
+        f"min-width: {_scale_px(92)}px; "
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+        f" stop:0 {'#0EA5B7' if selected else '#0E7490'},"
+        f" stop:1 {'#0F766E' if selected else '#155E75'}); "
+        f"color: {'#ECFEFF' if selected else '#DDFBFF'};"
     )
 
 

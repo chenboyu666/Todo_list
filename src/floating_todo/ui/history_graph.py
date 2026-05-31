@@ -30,17 +30,36 @@ def build_history_graph_payload(tasks: list[Task], *, max_keywords: int = 18) ->
     completed = [task for task in tasks if task.status == "done"]
     task_nodes: list[dict[str, Any]] = []
     task_keywords: dict[str, set[str]] = {}
-    keyword_counts: Counter[str] = Counter()
+    tag_counts: Counter[str] = Counter()
+    title_counts: Counter[str] = Counter()
+    task_tags: dict[str, str] = {}
+    task_title_keywords: dict[str, set[str]] = {}
 
     for task in completed:
-        keywords = _task_keywords(task)
+        tag = normalize_task_tag(task.tag)
+        title_keywords = _extract_keywords(task.title)
+        task_tags[task.id] = tag
+        task_title_keywords[task.id] = title_keywords
+        if tag:
+            tag_counts.update([tag])
+        title_counts.update(title_keywords)
+
+    selected_tags = [tag for tag, _count in tag_counts.most_common()]
+    tag_set = set(selected_tags)
+    selected_title_keywords = [
+        word for word, count in title_counts.most_common() if count >= 2 and word not in tag_set
+    ][:max_keywords]
+    keyword_set = set(selected_tags) | set(selected_title_keywords)
+
+    for task in completed:
+        keywords = {task_tags[task.id]} | (task_title_keywords[task.id] & set(selected_title_keywords))
+        keywords.discard("")
         task_keywords[task.id] = keywords
-        keyword_counts.update(keywords)
         task_nodes.append(
             {
                 "id": task.id,
                 "title": task.title,
-                "tag": normalize_task_tag(task.tag),
+                "tag": task_tags[task.id],
                 "priority": task.priority,
                 "priorityText": priority_text(task.priority),
                 "late": _task_completed_late(task),
@@ -49,16 +68,24 @@ def build_history_graph_payload(tasks: list[Task], *, max_keywords: int = 18) ->
             }
         )
 
-    selected_keywords = [
-        word
-        for word, count in keyword_counts.most_common()
-        if count >= 2 or _is_cjk_word(word) or len(completed) <= 4
-    ][:max_keywords]
-    keyword_set = set(selected_keywords)
-    keyword_nodes = [
-        {"id": f"k-{_keyword_id(word)}", "word": word, "count": keyword_counts[word]}
-        for word in selected_keywords
+    keyword_nodes: list[dict[str, Any]] = [
+        {
+            "id": f"k-{_keyword_id(tag)}",
+            "word": tag,
+            "count": tag_counts[tag],
+            "source": "tag",
+        }
+        for tag in selected_tags
     ]
+    keyword_nodes.extend(
+        {
+            "id": f"k-{_keyword_id(word)}",
+            "word": word,
+            "count": title_counts[word],
+            "source": "title",
+        }
+        for word in selected_title_keywords
+    )
 
     links: list[dict[str, Any]] = []
     for task in task_nodes:
@@ -147,9 +174,9 @@ def render_history_graph_html(payload: dict[str, Any]) -> str:
 <body>
   <canvas id=\"graph\"></canvas>
   <div class=\"hud\">
-    <section class=\"glass left\"><h1>任务-关键词关系图</h1><p class=\"sub\">已完成任务形成节点；标题、标签、备注、体会中的关键词生成连接，用于发现主题簇、孤立任务和需要补标签的记录。</p><div class=\"chips\"><span class=\"chip\">拖动旋转</span><span class=\"chip\">滚轮缩放</span><span class=\"chip\">点击节点</span></div><div class=\"legend\"><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--cyan);background:var(--cyan)\"></i><span>任务节点</span><b id=\"legendTasks\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--violet);background:var(--violet)\"></i><span>关键词节点</span><b id=\"legendKeywords\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--gold);background:var(--gold)\"></i><span>高优先级</span><b id=\"legendHigh\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--rose);background:var(--rose)\"></i><span>超时风险</span><b id=\"legendLate\">0</b></div></div></section>
+    <section class=\"glass left\"><h1>任务关系图图例</h1><p class=\"sub\">每个小点是一条已完成任务；标签是分类中心；高频主题词来自反复出现的任务名称。</p><div class=\"chips\"><span class=\"chip\">拖动旋转</span><span class=\"chip\">滚轮缩放</span><span class=\"chip\">点击查看</span></div><div class=\"legend\"><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--cyan);background:var(--cyan)\"></i><span>已完成任务</span><b id=\"legendTasks\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--gold);background:var(--gold)\"></i><span>标签</span><b id=\"legendTagKeywords\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--violet);background:var(--violet)\"></i><span>高频主题词</span><b id=\"legendTitleKeywords\">0</b></div><div class=\"legend-item\"><i class=\"dot\" style=\"color:var(--rose);background:var(--rose)\"></i><span>超时标记</span><b id=\"legendLate\">0</b></div></div></section>
     <section class=\"glass top\"><div><h1>Obsidian 风格历史洞察</h1><p class=\"sub\">用关系发现可合并的项目、孤立记录和需要补标签的任务。</p></div><div class=\"metric-grid\"><div class=\"metric\"><b id=\"metricNodes\">0</b><span>节点</span></div><div class=\"metric\"><b id=\"metricLinks\">0</b><span>连接</span></div><div class=\"metric\"><b id=\"metricGroups\">0</b><span>主题簇</span></div></div></section>
-    <aside class=\"glass right\"><div><h2>节点详情</h2><div class=\"selected\"><div id=\"selectedTitle\" class=\"selected-title\">点击一个任务或关键词</div><div id=\"selectedType\" class=\"selected-type\">右侧会显示相关任务，用于补标签、复盘或导出。</div><div id=\"selectedChips\" class=\"chips\"></div></div></div><div><h2>关联任务</h2></div><div id=\"taskQueue\" class=\"queue\"></div><div class=\"ops\"><button id=\"noteButton\" type=\"button\">补备注</button><button id=\"tagButton\" type=\"button\">改标签</button><button id=\"exportButton\" type=\"button\">导出</button></div></aside>
+    <aside class=\"glass right\"><div><h2>节点详情</h2><div class=\"selected\"><div id=\"selectedTitle\" class=\"selected-title\">点击一个点</div><div id=\"selectedType\" class=\"selected-type\">选择任务可补备注/改标签；选择词会列出包含该词的任务。</div><div id=\"selectedChips\" class=\"chips\"></div></div></div><div><h2>关联任务</h2></div><div id=\"taskQueue\" class=\"queue\"></div><div class=\"ops\"><button id=\"noteButton\" type=\"button\">补备注</button><button id=\"tagButton\" type=\"button\">改标签</button><button id=\"exportButton\" type=\"button\">导出</button></div></aside>
   </div>
   <script src=\"qrc:///qtwebchannel/qwebchannel.js\"></script>
   <script>
@@ -167,39 +194,46 @@ def render_history_graph_html(payload: dict[str, Any]) -> str:
     const nodes = [];
     const nodeMap = new Map();
     function addNode(node) {{ nodes.push(node); nodeMap.set(node.id, node); }}
+    function keywordColor(source) {{ return source==='tag'?'#f4b45f':'#a78bfa'; }}
+    function keywordRadius(keyword) {{ return keyword.source==='tag'?12.5+keyword.count*1.6:8.8+keyword.count*1.1; }}
+    function keywordLabelStyle(source,scale) {{
+      if(source==='tag') return {{font:`900 ${{Math.max(12,14*scale)}}px Microsoft YaHei UI`,fill:'rgba(255,223,178,.96)'}};
+      return {{font:`850 ${{Math.max(11,12.6*scale)}}px Microsoft YaHei UI`,fill:'rgba(226,218,255,.9)'}};
+    }}
     tasks.forEach((task, index) => {{ const a = index * 1.72; addNode({{...task,type:'task',color:task.late?'#ff6f91':task.priority==='P1'?'#f4b45f':'#32dcff',radius:task.priority==='P1'?8:task.priority==='P2'?7:6,x:Math.cos(a)*(76+(index%3)*18),y:Math.sin(index*.91)*44,z:Math.sin(index*1.37)*(66+(index%4)*14),vx:0,vy:0,vz:0}}); }});
-    keywords.forEach((keyword,index)=>{{ const a=index/Math.max(1,keywords.length)*Math.PI*2; addNode({{...keyword,title:keyword.word,type:'keyword',color:'#a78bfa',radius:8.5+keyword.count*1.1,x:Math.cos(a)*118,y:Math.sin(index*1.4)*42,z:Math.sin(a)*118,vx:0,vy:0,vz:0}}); }});
-    const INITIAL_ZOOM=.96;
+    keywords.forEach((keyword,index)=>{{ const a=index/Math.max(1,keywords.length)*Math.PI*2; addNode({{...keyword,title:keyword.word,type:'keyword',color:keywordColor(keyword.source),radius:keywordRadius(keyword),x:Math.cos(a)*82,y:Math.sin(index*1.4)*30,z:Math.sin(a)*82,vx:0,vy:0,vz:0}}); }});
+    const INITIAL_ZOOM=1.08;
     let width=0,height=0,rotX=-.14,rotY=.58,zoom=INITIAL_ZOOM,drag=null,selected=nodes.find(n=>n.type==='keyword')||nodes[0],projected=[];
     function resize() {{ const dpr=Math.min(devicePixelRatio||1,2); width=innerWidth; height=innerHeight; canvas.width=Math.floor(width*dpr); canvas.height=Math.floor(height*dpr); ctx.setTransform(dpr,0,0,dpr,0,0); }}
     let simEnergy=Infinity;
-    function step() {{ for (const n of nodes) {{ n.vx+=-n.x*.00016; n.vy+=-n.y*.00016; n.vz+=-n.z*.00016; }} for(let i=0;i<nodes.length;i++){{ for(let j=i+1;j<nodes.length;j++){{ const a=nodes[i],b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z,d2=Math.max(500,dx*dx+dy*dy+dz*dz),f=24/d2; a.vx+=dx*f; a.vy+=dy*f; a.vz+=dz*f; b.vx-=dx*f; b.vy-=dy*f; b.vz-=dz*f; }} }} for(const l of links){{ const a=nodeMap.get(l.source),b=nodeMap.get(l.target); if(!a||!b) continue; const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,d=Math.max(1,Math.sqrt(dx*dx+dy*dy+dz*dz)),target=(a.type==='keyword'||b.type==='keyword')?54:44,f=(d-target)*(l.kind==='task'?.012:.02),nx=dx/d,ny=dy/d,nz=dz/d; a.vx+=nx*f; a.vy+=ny*f; a.vz+=nz*f; b.vx-=nx*f; b.vy-=ny*f; b.vz-=nz*f; }} simEnergy=0; for(const n of nodes){{ n.vx*=.84; n.vy*=.84; n.vz*=.84; n.x+=n.vx; n.y+=n.vy; n.z+=n.vz; simEnergy+=n.vx*n.vx+n.vy*n.vy+n.vz*n.vz; }} }}
+    function selectedNeighborhood(n) {{ return selected&&(n.id===selected.id||links.some(l=>(l.source===selected.id&&l.target===n.id)||(l.target===selected.id&&l.source===n.id))); }}
+    function step() {{ for (const n of nodes) {{ n.vx+=-n.x*.00026; n.vy+=-n.y*.00026; n.vz+=-n.z*.00026; }} for(let i=0;i<nodes.length;i++){{ for(let j=i+1;j<nodes.length;j++){{ const a=nodes[i],b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z,d2=Math.max(360,dx*dx+dy*dy+dz*dz),f=9.2/d2; a.vx+=dx*f; a.vy+=dy*f; a.vz+=dz*f; b.vx-=dx*f; b.vy-=dy*f; b.vz-=dz*f; }} }} for(const l of links){{ const a=nodeMap.get(l.source),b=nodeMap.get(l.target); if(!a||!b) continue; const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,d=Math.max(1,Math.sqrt(dx*dx+dy*dy+dz*dz)),target=(a.type==='keyword'||b.type==='keyword')?36:30,f=(d-target)*(l.kind==='task' ? .018 : .028),nx=dx/d,ny=dy/d,nz=dz/d; a.vx+=nx*f; a.vy+=ny*f; a.vz+=nz*f; b.vx-=nx*f; b.vy-=ny*f; b.vz-=nz*f; }} simEnergy=0; for(const n of nodes){{ const damp=(selected&&n.id===selected.id) ? .22 : selectedNeighborhood(n) ? .48 : .78; n.vx*=damp; n.vy*=damp; n.vz*=damp; n.x+=n.vx; n.y+=n.vy; n.z+=n.vz; simEnergy+=n.vx*n.vx+n.vy*n.vy+n.vz*n.vz; }} }}
     function project(n) {{ const cy=Math.cos(rotY),sy=Math.sin(rotY),cx=Math.cos(rotX),sx=Math.sin(rotX); let x=n.x*cy-n.z*sy,z=n.x*sy+n.z*cy,y=n.y*cx-z*sx; z=n.y*sx+z*cx; const p=620/(620+z); return {{node:n,x:width*.52+x*p*zoom,y:height*.55+y*p*zoom,z,scale:p*zoom}}; }}
     function rgba(hex,a) {{ const v=hex.replace('#',''),r=parseInt(v.slice(0,2),16),g=parseInt(v.slice(2,4),16),b=parseInt(v.slice(4,6),16); return `rgba(${{r}},${{g}},${{b}},${{a}})`; }}
-    function draw() {{ ctx.clearRect(0,0,width,height); const bg=ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,Math.max(width,height)*.62); bg.addColorStop(0,'rgba(15,45,66,.34)'); bg.addColorStop(1,'rgba(1,5,11,0)'); ctx.fillStyle=bg; ctx.fillRect(0,0,width,height); projected=nodes.map(project).sort((a,b)=>a.z-b.z); const pm=new Map(projected.map(p=>[p.node.id,p])); for(const l of links){{ const a=pm.get(l.source),b=pm.get(l.target); if(!a||!b) continue; const active=selected&&(selected.id===l.source||selected.id===l.target); ctx.strokeStyle=active?'rgba(50,220,255,.62)':l.kind==='task'?'rgba(167,139,250,.22)':'rgba(78,207,255,.15)'; ctx.lineWidth=active?1.8:l.kind==='task'?1.25:.9; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }} const t=performance.now()*.002; for(const p of projected){{ const n=p.node,r=Math.max(3.5,n.radius*p.scale),active=selected&&selected.id===n.id,pulse=1+Math.sin(t+n.x*.01)*.055; const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*(active?5.2:n.late?4.2:3.2)); glow.addColorStop(0,rgba(n.color,active?.62:.36)); glow.addColorStop(.36,rgba(n.color,active?.22:.11)); glow.addColorStop(1,rgba(n.color,0)); ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,r*(active?5.2:3.6),0,Math.PI*2); ctx.fill(); ctx.fillStyle=rgba(n.color,n.type==='keyword'?.92:.86); ctx.beginPath(); ctx.arc(p.x,p.y,r*pulse,0,Math.PI*2); ctx.fill(); if(n.priority==='P1'||n.type==='keyword'){{ ctx.strokeStyle=n.type==='keyword'?'rgba(216,204,255,.72)':'rgba(244,180,95,.72)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(p.x,p.y,r*1.62,0,Math.PI*2); ctx.stroke(); }} ctx.font=`${{Math.max(10,12*p.scale)}}px Microsoft YaHei UI`; ctx.fillStyle=n.type==='keyword'?'rgba(232,223,255,.92)':'rgba(226,248,255,.88)'; ctx.textAlign='center'; ctx.fillText(n.type==='keyword'?n.word:n.title.slice(0,8),p.x,p.y+r+15); }} }}
+    function draw() {{ ctx.clearRect(0,0,width,height); const bg=ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,Math.max(width,height)*.62); bg.addColorStop(0,'rgba(15,45,66,.34)'); bg.addColorStop(1,'rgba(1,5,11,0)'); ctx.fillStyle=bg; ctx.fillRect(0,0,width,height); projected=nodes.map(project).sort((a,b)=>a.z-b.z); const pm=new Map(projected.map(p=>[p.node.id,p])); for(const l of links){{ const a=pm.get(l.source),b=pm.get(l.target); if(!a||!b) continue; const active=selected&&(selected.id===l.source||selected.id===l.target); ctx.strokeStyle=active?'rgba(50,220,255,.62)':l.kind==='task'?'rgba(167,139,250,.22)':'rgba(78,207,255,.15)'; ctx.lineWidth=active?1.8:l.kind==='task'?1.25:.9; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }} const t=performance.now()*.002; for(const p of projected){{ const n=p.node,r=Math.max(3.5,n.radius*p.scale),active=selected&&selected.id===n.id,pulse=1+Math.sin(t+n.x*.01)*.055; const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*(active?5.2:n.late?4.2:3.2)); glow.addColorStop(0,rgba(n.color,active ? .62 : .36)); glow.addColorStop(.36,rgba(n.color,active ? .22 : .11)); glow.addColorStop(1,rgba(n.color,0)); ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,r*(active?5.2:3.6),0,Math.PI*2); ctx.fill(); ctx.fillStyle=rgba(n.color,n.type==='keyword' ? .92 : .86); ctx.beginPath(); ctx.arc(p.x,p.y,r*pulse,0,Math.PI*2); ctx.fill(); if(n.type==='keyword'){{ ctx.strokeStyle='rgba(216,204,255,.72)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(p.x,p.y,r*1.62,0,Math.PI*2); ctx.stroke(); }} const style=n.type==='keyword'?keywordLabelStyle(n.source,p.scale):{{font:`850 ${{Math.max(10.5,12*p.scale)}}px Microsoft YaHei UI`,fill:'rgba(226,248,255,.86)'}}; ctx.font=style.font; ctx.fillStyle=style.fill; ctx.textAlign='center'; ctx.fillText(n.type==='keyword'?n.word:n.title.slice(0,9),p.x,p.y+r+15); }} }}
     function related(n) {{ if(!n) return []; if(n.type==='keyword') return tasks.filter(t=>(t.words||[]).includes(n.word)); const set=new Set(n.words||[]); return tasks.map(t=>({{task:t,shared:(t.words||[]).filter(w=>set.has(w)).length}})).filter(i=>i.task.id===n.id||i.shared>0).sort((a,b)=>b.shared-a.shared).map(i=>i.task); }}
     function updateActions() {{ const isTask=selected&&selected.type==='task'; noteButton.disabled=!isTask; tagButton.disabled=!isTask; }}
     function openSelectedNotes() {{ if(selected&&selected.type==='task'&&historyBridge&&historyBridge.openNotes) historyBridge.openNotes(selected.id); }}
     function editSelectedTag() {{ if(selected&&selected.type==='task'&&historyBridge&&historyBridge.editTag) historyBridge.editTag(selected.id); }}
     function exportSelectedHistory() {{ if(historyBridge&&historyBridge.exportHistory) historyBridge.exportHistory(); }}
-    function select(n) {{ if(!n) return; selected=n; selectedTitle.textContent=n.type==='keyword'?n.word:n.title; selectedType.textContent=n.type==='keyword'?`关键词节点 · 关联 ${{related(n).length}} 条任务，点击关联任务可继续补备注或改标签`:`${{n.tag}} · ${{n.priorityText||n.priority}} · ${{n.late?'超时完成':'准时完成'}}`; selectedChips.innerHTML=''; (n.type==='keyword'?[n.word]:(n.words||[])).slice(0,5).forEach(w=>{{ const c=document.createElement('span'); c.className='chip'; c.textContent=w; selectedChips.appendChild(c); }}); renderQueue(n); updateActions(); }}
+    function keywordSourceText(source) {{ return source==='tag'?'标签：任务的分类中心':'高频主题词：来自反复出现的任务名称'; }}
+    function select(n) {{ if(!n) return; selected=n; selectedTitle.textContent=n.type==='keyword'?n.word:n.title; selectedType.textContent=n.type==='keyword'?`${{keywordSourceText(n.source)}} · 关联 ${{related(n).length}} 条任务`:`已完成任务 · 标签：${{n.tag}} · ${{n.priorityText||n.priority}} · ${{n.late?'超时完成':'准时完成'}}`; selectedChips.innerHTML=''; (n.type==='keyword'?[n.word]:(n.words||[])).slice(0,5).forEach(w=>{{ const c=document.createElement('span'); c.className='chip'; c.textContent=w; selectedChips.appendChild(c); }}); renderQueue(n); updateActions(); }}
     function renderQueue(n=selected) {{ taskQueue.innerHTML=''; related(n).slice(0,7).forEach(t=>{{ const b=document.createElement('button'); b.className=`task-card ${{selected&&selected.id===t.id?'active':''}}`; b.innerHTML=`<strong>${{t.title}}</strong><span>#${{t.tag}}</span><span>${{t.priorityText||t.priority}}</span><span>${{t.late?'超时':'准时'}}</span>`; b.onclick=()=>select(nodeMap.get(t.id)); taskQueue.appendChild(b); }}); }}
     function hit(x,y) {{ return [...projected].sort((a,b)=>b.z-a.z).find(p=>{{ const r=Math.max(8,p.node.radius*p.scale*2.4),dx=p.x-x,dy=p.y-y; return dx*dx+dy*dy<=r*r; }})?.node; }}
     canvas.addEventListener('pointerdown',e=>{{ const n=hit(e.clientX,e.clientY); if(n) select(n); drag={{x:e.clientX,y:e.clientY}}; canvas.setPointerCapture(e.pointerId); }});
     canvas.addEventListener('pointermove',e=>{{ if(!drag) return; rotY+=(e.clientX-drag.x)*.006; rotX+=(e.clientY-drag.y)*.004; rotX=Math.max(-1.15,Math.min(1.15,rotX)); drag={{x:e.clientX,y:e.clientY}}; }});
-    canvas.addEventListener('pointerup',()=>drag=null); canvas.addEventListener('wheel',e=>{{ e.preventDefault(); zoom*=e.deltaY>0?.92:1.08; zoom=Math.max(.64,Math.min(1.9,zoom)); }},{{passive:false}});
+    canvas.addEventListener('pointerup',()=>drag=null); canvas.addEventListener('wheel',e=>{{ e.preventDefault(); zoom*=e.deltaY>0 ? .92 : 1.08; zoom=Math.max(.64,Math.min(1.9,zoom)); }},{{passive:false}});
     noteButton.onclick=openSelectedNotes;
     tagButton.onclick=editSelectedTag;
     exportButton.onclick=exportSelectedHistory;
     function animate() {{ if(simEnergy>0.008||drag) {{ step(); step(); }} if(!drag) rotY+=.0012; draw(); requestAnimationFrame(animate); }}
-    legendTasks.textContent=tasks.length; legendKeywords.textContent=keywords.length; legendHigh.textContent=tasks.filter(t=>t.priority==='P1').length; legendLate.textContent=tasks.filter(t=>t.late).length; metricNodes.textContent=tasks.length+keywords.length; metricLinks.textContent=links.length; metricGroups.textContent=Math.max(1, Math.min(9, keywords.length)); addEventListener('resize', resize); resize(); select(selected); animate();
+    legendTasks.textContent=tasks.length; legendTagKeywords.textContent=keywords.filter(k=>k.source==='tag').length; legendTitleKeywords.textContent=keywords.filter(k=>k.source==='title').length; legendLate.textContent=tasks.filter(t=>t.late).length; metricNodes.textContent=tasks.length+keywords.length; metricLinks.textContent=links.length; metricGroups.textContent=Math.max(1, Math.min(9, keywords.length)); addEventListener('resize', resize); resize(); select(selected); animate();
   </script>
 </body>
 </html>"""
 
 
-def _task_keywords(task: Task) -> set[str]:
-    text = " ".join([task.title, normalize_task_tag(task.tag), task.notes, task.reflection])
+def _extract_keywords(text: str) -> set[str]:
     words = {_normalize_keyword(match) for match in re.findall(r"[A-Za-z0-9_+\-.#]+|[\u4e00-\u9fff]{2,}", text)}
     return {word for word in words if word and word not in STOP_WORDS and len(word) >= 2}
 
@@ -211,10 +245,6 @@ def _normalize_keyword(value: str) -> str:
 
 def _keyword_id(word: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_\-\u4e00-\u9fff]+", "-", word).strip("-").lower()
-
-
-def _is_cjk_word(word: str) -> bool:
-    return any("\u4e00" <= char <= "\u9fff" for char in word)
 
 
 def _task_completed_late(task: Task) -> bool:

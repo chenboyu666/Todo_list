@@ -199,7 +199,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
         _card_style,
         _countdown_display,
         _countdown_label_style,
+        _focus_info_card_style,
+        _focus_time_text_style,
+        _notes_style,
         _priority_chip_style,
+        _task_tag_chip_style,
+        _task_title_style,
     )
 
     task = make_task("临近任务", "task-1", notes="先确认接口，再整理交付材料")
@@ -268,6 +273,15 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
+    assert "min-width: 92px" in _task_tag_chip_style(selected=True)
+    assert "#0EA5B7" in _task_tag_chip_style(selected=True)
+    assert "background: transparent" in _task_title_style(selected=False)
+    assert "font-size: 16px" in _task_title_style(selected=True)
+    assert "font-weight: 500" in _notes_style(selected=False)
+    assert "font-size: 23px" in _focus_time_text_style("countdown", "normal")
+    assert "font-size: 18px" in _focus_time_text_style("timer", "normal")
+    assert "#06364A" in _focus_info_card_style("countdown", "normal")
+    assert "#0B2B3B" in _focus_info_card_style("timer", "normal")
     assert "高" in window.focus_priority_label.text()
     assert "<img" in window.focus_priority_label.text()
     assert "font-size: 25px" in window.focus_title_label.styleSheet()
@@ -314,6 +328,19 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert drag_handles == []
 
     window.close()
+
+
+def test_global_button_effects_are_compact_and_calm(qapp: QApplication) -> None:
+    from floating_todo.ui.effects import _button_effect_profile
+
+    button = QPushButton("保存")
+    button.setProperty("effectVariant", "primary")
+
+    profile = _button_effect_profile(button)
+
+    assert profile["burst_duration"] <= 240
+    assert profile["hover_blur"] <= 14
+    assert profile["press_blur"] <= 20
 
 
 def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_path) -> None:

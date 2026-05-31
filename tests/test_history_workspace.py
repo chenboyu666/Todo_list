@@ -56,11 +56,11 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
 
     first = replace(
-        make_task("PySide6 UI release", "done-1", status="done", notes="UI package release notes", tag="work"),
+        make_task("PySide6 UI package release", "done-1", status="done", notes="UI package context", tag="work"),
         reflection="PySide6 release review",
     )
     second = replace(
-        make_task("UI package smoke test", "done-2", status="done", notes="release package", tag="project"),
+        make_task("PySide6 UI package release smoke test", "done-2", status="done", notes="release package", tag="project"),
         priority="P2",
     )
     active = make_task("active PySide6 task", "active-1", status="active", notes="UI", tag="work")
@@ -69,14 +69,19 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
 
     assert [node["id"] for node in payload["tasks"]] == ["done-1", "done-2"]
     keyword_names = {node["word"] for node in payload["keywords"]}
-    assert {"ui", "release", "package", "pyside6"} <= keyword_names
+    assert {"ui", "release", "package", "pyside6", "work", "project"} <= keyword_names
+    keyword_sources = {node["word"]: node["source"] for node in payload["keywords"]}
+    assert keyword_sources["work"] == "tag"
+    assert keyword_sources["pyside6"] == "title"
+    assert "context" not in keyword_sources
+    assert {node["source"] for node in payload["keywords"]} <= {"tag", "title"}
     assert any(link["source"] == "done-1" and link["target"] == "k-ui" for link in payload["links"])
     assert any(link.get("shared") and link["source"] == "done-1" and link["target"] == "done-2" for link in payload["links"])
 
     html = render_history_graph_html(payload)
     assert "Todo list · 任务关系图" in html
     assert "const GRAPH_PAYLOAD =" in html
-    assert "PySide6 UI release" in html
+    assert "PySide6 UI package release" in html
     assert "加载 3D 任务关系图" not in html
     assert "qrc:///qtwebchannel/qwebchannel.js" in html
     assert "historyBridge.openNotes" in html
@@ -84,7 +89,52 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "historyBridge.exportHistory" in html
     assert "无外部依赖" not in html
     assert "grid-template-columns:250px minmax(360px,1fr) 300px" in html
-    assert "const INITIAL_ZOOM=.96" in html
+    assert "const INITIAL_ZOOM=1.08" in html
+    assert "source==='tag'" in html
+    assert "keywordLabelStyle" in html
+    assert "selectedNeighborhood" in html
+    assert "target=(a.type==='keyword'||b.type==='keyword')?36:30" in html
+    assert "已完成任务" in html
+    assert "标签" in html
+    assert "高频主题词" in html
+    assert "高优先级标记" not in html
+    assert "超时标记" in html
+    assert "legendTagKeywords" in html
+    assert "legendTitleKeywords" in html
+    assert "legendHigh" not in html
+    assert "dot-ring" not in html
+    assert "n.priority==='P1'||n.type==='keyword'" not in html
+    assert "legendNoteKeywords" not in html
+    assert "keywordSourceText" in html
+
+
+def test_history_graph_skips_webview_reload_for_unchanged_tasks(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("PySide6 graph cache", "done-graph", status="done", notes="cache context", tag="work")
+    store = MemoryStore([task])
+    window = HistoryWindow([task], store)
+
+    calls: list[str] = []
+    monkeypatch.setattr(window.history_graph_webview, "setHtml", calls.append)
+    current_html = window._analysis_graph_html
+
+    window._update_history_graph([task])
+    assert calls == []
+    assert window._analysis_graph_html == current_html
+
+    changed_notes = replace(task, notes="cache context marker")
+    window._update_history_graph([changed_notes])
+    assert calls == []
+
+    changed = replace(task, title="PySide6 graph cache marker")
+    window._update_history_graph([changed])
+    assert len(calls) == 1
+    assert "marker" in window._analysis_graph_html
+
+    window.close()
 
 
 def test_history_window_saves_reflection(qapp: QApplication) -> None:

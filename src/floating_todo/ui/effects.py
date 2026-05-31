@@ -354,12 +354,12 @@ def _button_effect_profile(button: QAbstractButton) -> dict[str, int | str]:
             variant = "utility"
 
     profiles: dict[str, dict[str, int | str]] = {
-        "danger": {"hover_blur": 16, "press_blur": 24, "hover_duration": 150, "press_duration": 95, "burst_duration": 320, "hover_alpha": 86, "press_alpha": 150},
-        "primary": {"hover_blur": 18, "press_blur": 26, "hover_duration": 145, "press_duration": 90, "burst_duration": 380, "hover_alpha": 96, "press_alpha": 156},
-        "nav": {"hover_blur": 20, "press_blur": 28, "hover_duration": 165, "press_duration": 105, "burst_duration": 420, "hover_alpha": 98, "press_alpha": 162},
-        "icon": {"hover_blur": 14, "press_blur": 21, "hover_duration": 125, "press_duration": 82, "burst_duration": 290, "hover_alpha": 82, "press_alpha": 142},
-        "secondary": {"hover_blur": 15, "press_blur": 22, "hover_duration": 140, "press_duration": 90, "burst_duration": 330, "hover_alpha": 86, "press_alpha": 142},
-        "utility": {"hover_blur": 16, "press_blur": 22, "hover_duration": 150, "press_duration": 90, "burst_duration": 340, "hover_alpha": 90, "press_alpha": 145},
+        "danger": {"hover_blur": 13, "press_blur": 19, "hover_duration": 125, "press_duration": 78, "burst_duration": 220, "hover_alpha": 72, "press_alpha": 126},
+        "primary": {"hover_blur": 14, "press_blur": 20, "hover_duration": 120, "press_duration": 76, "burst_duration": 230, "hover_alpha": 78, "press_alpha": 132},
+        "nav": {"hover_blur": 14, "press_blur": 20, "hover_duration": 135, "press_duration": 84, "burst_duration": 240, "hover_alpha": 76, "press_alpha": 130},
+        "icon": {"hover_blur": 11, "press_blur": 17, "hover_duration": 105, "press_duration": 68, "burst_duration": 190, "hover_alpha": 66, "press_alpha": 116},
+        "secondary": {"hover_blur": 12, "press_blur": 18, "hover_duration": 115, "press_duration": 74, "burst_duration": 210, "hover_alpha": 68, "press_alpha": 118},
+        "utility": {"hover_blur": 12, "press_blur": 18, "hover_duration": 120, "press_duration": 74, "burst_duration": 215, "hover_alpha": 70, "press_alpha": 120},
     }
     return profiles.get(variant, profiles["utility"])
 
