@@ -7,7 +7,7 @@ README = PROJECT_ROOT / "README.md"
 GITIGNORE = PROJECT_ROOT / ".gitignore"
 
 
-def test_build_script_uses_repeatable_pyinstaller_onefile_contract():
+def test_build_script_uses_repeatable_pyinstaller_portable_folder_contract():
     script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
     assert '$ErrorActionPreference = "Stop"' in script
@@ -15,8 +15,8 @@ def test_build_script_uses_repeatable_pyinstaller_onefile_contract():
     assert '.venv\\Scripts\\python.exe" -m pip install --upgrade pip' in script
     assert '.venv\\Scripts\\python.exe" -m pip install -r "requirements.txt"' in script
     assert '"--noconfirm"' in script
-    assert '"--onefile"' in script
-    assert '"--onedir"' not in script
+    assert '"--onedir"' in script
+    assert '"--onefile"' not in script
     assert '"--windowed"' in script
     assert '"--name"' in script
     assert '"Todo list"' in script
@@ -44,8 +44,8 @@ def test_build_script_uses_repeatable_pyinstaller_onefile_contract():
     assert '"--exclude-module",\n    "PySide6.QtPositioning"' not in script
     assert '"--exclude-module",\n    "PySide6.QtPrintSupport"' not in script
     assert '"src/floating_todo/__main__.py"' in script
-    assert "dist/data" in script
-    assert "Build complete: dist/Todo list.exe" in script
+    assert "dist/Todo list/data" in script
+    assert "Build complete: dist/Todo list/Todo list.exe" in script
 
 
 def test_build_script_safely_cleans_only_project_directories():
@@ -64,8 +64,10 @@ def test_build_script_safely_cleans_only_project_directories():
 def test_readme_documents_download_user_flow():
     readme = README.read_text(encoding="utf-8")
 
-    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.exe" in readme
-    assert "下载后双击 `Todo-list-V1.0-windows.exe` 即可运行。" in readme
+    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-portable-windows.zip" in readme
+    assert "完整解压 ZIP" in readme
+    assert "双击 `Todo list.exe`" in readme
+    assert "请保留 `_internal` 文件夹" in readme
     assert "3D 洞察图" in readme
     assert "CSV 导出" in readme
     assert "data\\" in readme
@@ -74,7 +76,6 @@ def test_readme_documents_download_user_flow():
     assert "## 构建" not in readme
     assert "## 项目结构" not in readme
     assert "dist\\Todo list.exe" not in readme
-    assert "release\\V1.0" not in readme
     assert "快捷方式" not in readme
     assert "常见问题" not in readme
     assert "不提交到 GitHub" not in readme
@@ -86,8 +87,10 @@ def test_readme_documents_download_user_flow():
 def test_readme_describes_portable_data_folder():
     readme = README.read_text(encoding="utf-8")
 
+    assert "便携文件夹" in readme
+    assert "_internal" in readme
     assert "程序会在 exe 同级目录创建" in readme
-    assert "移动程序时，请把 `Todo-list-V1.0-windows.exe` 和同级 `data` 文件夹一起移动。" in readme
+    assert "移动程序时，请整体移动便携文件夹" in readme
 
 
 def test_shortcuts_are_ignored_for_release_artifacts():

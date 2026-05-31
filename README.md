@@ -4,11 +4,11 @@
 
 ## 下载与运行
 
-在 Releases 页面下载最新版：
+推荐下载 Windows 便携版：
 
-[下载 Todo-list-V1.0-windows.exe](https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.exe)
+[下载 Todo-list-V1.0-portable-windows.zip](https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-portable-windows.zip)
 
-下载后双击 `Todo-list-V1.0-windows.exe` 即可运行。首次启动时，程序会在同级目录自动创建 `data` 文件夹，用来保存任务、设置、历史记录、背景图片和自定义图标等数据。
+下载后完整解压 ZIP，进入 `V1.0-portable` 文件夹，双击 `Todo list.exe` 即可运行。请保留 `_internal` 文件夹，不要单独移动 exe。首次启动时，程序会在 exe 同级目录自动创建 `data` 文件夹，用来保存任务、设置、历史记录、背景图片和自定义图标等数据。
 
 ## 主要功能
 
@@ -26,7 +26,7 @@
 
 ## 基础使用
 
-1. 双击 `Todo-list-V1.0-windows.exe` 启动程序。
+1. 进入便携文件夹，双击 `Todo list.exe` 启动程序。
 2. 点击新增任务，填写任务名称、优先级、预估工作量、截止时间和备注。
 3. 在任务列表中选择任务，可将其设为当前任务。
 4. 当前任务区域会显示工作计时、截止倒计时、完成/删除等常用操作。
@@ -48,16 +48,18 @@
 
 ## 数据保存
 
-程序会在 exe 同级目录创建：
+便携文件夹结构如下：
 
 ```text
+Todo list.exe
+_internal\
 data\
 ```
 
-这里保存任务、设置、历史记录和自定义资源。移动程序时，请把 `Todo-list-V1.0-windows.exe` 和同级 `data` 文件夹一起移动。
+程序会在 exe 同级目录创建 `data` 文件夹。这里保存任务、设置、历史记录和自定义资源。移动程序时，请整体移动便携文件夹。
 
 ## 注意事项
 
 - 程序适用于 Windows 系统。
-- 如果系统提示未知发布者，请确认文件来自本项目 Releases 页面后再运行。
+- 如果系统提示未知发布者，请确认文件来自可信来源后再运行。
 - 关闭窗口后，程序可能会按设置最小化到托盘；可从托盘图标恢复或退出。

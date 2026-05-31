@@ -1,23 +1,17 @@
 from __future__ import annotations
 
-from math import hypot
-
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QObject,
     QPoint,
-    QPointF,
     QParallelAnimationGroup,
     QPropertyAnimation,
-    QRectF,
     QTimer,
     Qt,
-    Property,
 )
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRadialGradient
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QAbstractButton,
     QApplication,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -33,151 +27,11 @@ def apply_soft_shadow(widget: QWidget, *, blur: int = 28, y_offset: int = 10, al
     widget.setGraphicsEffect(effect)
 
 
-class ClickBurst(QWidget):
-    def __init__(self, parent: QWidget, origin: QPoint, color: QColor, *, duration: int = 360) -> None:
-        super().__init__(parent)
-        self._progress = 0.0
-        self._origin = QPointF(origin)
-        self._color = color
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WA_NoSystemBackground, True)
-        self.setGeometry(parent.rect())
-        self.show()
-        self.raise_()
-
-        self._animation = QPropertyAnimation(self, b"progress", self)
-        self._animation.setDuration(duration)
-        self._animation.setStartValue(0.0)
-        self._animation.setEndValue(1.0)
-        self._animation.setEasingCurve(QEasingCurve.OutCubic)
-        self._animation.finished.connect(self.deleteLater)
-        self._animation.start()
-
-    def _get_progress(self) -> float:
-        return self._progress
-
-    def _set_progress(self, value: float) -> None:
-        self._progress = max(0.0, min(1.0, float(value)))
-        self.update()
-
-    progress = Property(float, _get_progress, _set_progress)
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        rect = QRectF(self.rect())
-        if rect.isEmpty():
-            return
-
-        radius = 5 + hypot(rect.width(), rect.height()) * 0.72 * self._progress
-        fade = 1.0 - self._progress
-        path = QPainterPath()
-        path.addRoundedRect(rect.adjusted(1, 1, -1, -1), 8, 8)
-        painter.setClipPath(path)
-
-        fill = QColor(self._color)
-        fill.setAlpha(int(115 * fade))
-        edge = QColor(self._color)
-        edge.setAlpha(int(34 * fade))
-        transparent = QColor(self._color)
-        transparent.setAlpha(0)
-
-        gradient = QRadialGradient(self._origin, radius)
-        gradient.setColorAt(0.0, fill)
-        gradient.setColorAt(0.58, edge)
-        gradient.setColorAt(1.0, transparent)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(gradient)
-        painter.drawEllipse(self._origin, radius, radius)
-
-        ring = QColor(self._color)
-        ring.setAlpha(int(135 * fade))
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(ring, 1.4))
-        painter.drawEllipse(self._origin, radius * 0.58, radius * 0.58)
-
-
 class InteractionEffectFilter(QObject):
     def eventFilter(self, watched, event) -> bool:
         if isinstance(watched, QWidget) and event.type() == QEvent.MouseButtonPress:
             self._play_backdrop_pulse(watched, event)
-
-        if not isinstance(watched, QAbstractButton):
-            return super().eventFilter(watched, event)
-        if not watched.isEnabled():
-            return super().eventFilter(watched, event)
-
-        event_type = event.type()
-        if event_type == QEvent.Enter:
-            self._apply_button_glow(watched)
-        elif event_type == QEvent.Leave:
-            self._clear_button_glow(watched)
-        elif event_type == QEvent.MouseButtonPress and _event_button(event) == Qt.LeftButton:
-            profile = _button_effect_profile(watched)
-            ClickBurst(watched, _event_pos(event, watched), _button_effect_color(watched), duration=int(profile["burst_duration"]))
-            self._apply_button_glow(watched, stronger=True)
-        elif event_type == QEvent.MouseButtonRelease:
-            self._apply_button_glow(watched)
         return super().eventFilter(watched, event)
-
-    def _apply_button_glow(self, button: QAbstractButton, *, stronger: bool = False) -> None:
-        existing = button.graphicsEffect()
-        if existing is not None and not getattr(button, "_floating_todo_button_glow", False):
-            return
-        effect = existing if getattr(button, "_floating_todo_button_glow", False) else QGraphicsDropShadowEffect(button)
-        start_radius = effect.blurRadius() if getattr(button, "_floating_todo_button_glow", False) else 0
-        profile = _button_effect_profile(button)
-        color = _button_effect_color(button)
-        color.setAlpha(int(profile["press_alpha"] if stronger else profile["hover_alpha"]))
-        effect.setColor(color)
-        effect.setOffset(0, 0)
-        effect.setBlurRadius(start_radius)
-        button.setGraphicsEffect(effect)
-        button._floating_todo_button_glow = True
-        self._animate_button_glow(
-            button,
-            effect,
-            int(profile["press_blur"] if stronger else profile["hover_blur"]),
-            int(profile["press_duration"] if stronger else profile["hover_duration"]),
-        )
-
-    def _clear_button_glow(self, button: QAbstractButton) -> None:
-        if getattr(button, "_floating_todo_button_glow", False):
-            effect = button.graphicsEffect()
-            if isinstance(effect, QGraphicsDropShadowEffect):
-                self._animate_button_glow(button, effect, 0, 130, clear_when_finished=True)
-            else:
-                button.setGraphicsEffect(None)
-                button._floating_todo_button_glow = False
-
-    def _animate_button_glow(
-        self,
-        button: QAbstractButton,
-        effect: QGraphicsDropShadowEffect,
-        target_radius: int,
-        duration: int,
-        *,
-        clear_when_finished: bool = False,
-    ) -> None:
-        old_animation = getattr(button, "_floating_todo_button_glow_animation", None)
-        if old_animation is not None:
-            old_animation.stop()
-        animation = QPropertyAnimation(effect, b"blurRadius", button)
-        animation.setDuration(duration)
-        animation.setStartValue(effect.blurRadius())
-        animation.setEndValue(target_radius)
-        animation.setEasingCurve(QEasingCurve.OutCubic)
-        button._floating_todo_button_glow_animation = animation
-
-        def finish() -> None:
-            button._floating_todo_button_glow_animation = None
-            if clear_when_finished and button.graphicsEffect() is effect:
-                button.setGraphicsEffect(None)
-                button._floating_todo_button_glow = False
-
-        animation.finished.connect(finish)
-        animation.start()
 
     def _play_backdrop_pulse(self, widget: QWidget, event) -> None:
         global_pos = _event_global_pos(event, widget)
@@ -303,11 +157,6 @@ def _start_window_entrance(widget: QWidget, target_opacity: float, slide: int, d
         return
 
 
-def _event_button(event):
-    button = getattr(event, "button", None)
-    return button() if callable(button) else None
-
-
 def _event_pos(event, widget: QWidget) -> QPoint:
     position = getattr(event, "position", None)
     if callable(position):
@@ -326,59 +175,6 @@ def _event_global_pos(event, widget: QWidget) -> QPoint:
     if callable(global_pos):
         return global_pos()
     return widget.mapToGlobal(_event_pos(event, widget))
-
-
-def _button_effect_profile(button: QAbstractButton) -> dict[str, int | str]:
-    variant = str(button.property("effectVariant") or "").strip().lower()
-    text = button.text().lower()
-    object_name = button.objectName().lower()
-    has_icon = hasattr(button, "icon") and not button.icon().isNull()
-
-    if not variant:
-        if object_name == "dangerbutton" or "delete" in text or "删除" in text:
-            variant = "danger"
-        elif object_name in {"historysidebarbutton", "settingssidebaritem"} or button.isCheckable():
-            variant = "nav"
-        elif object_name in {
-            "taskdialogsavebutton",
-            "historyexportbutton",
-            "settingssavebutton",
-            "currenttaskbutton",
-        } or "save" in text or "保存" in text or "export" in text or "导出" in text:
-            variant = "primary"
-        elif has_icon and not text:
-            variant = "icon"
-        elif object_name in {"taskdialogcancelbutton", "settingscancelbutton"} or "cancel" in text or "取消" in text:
-            variant = "secondary"
-        else:
-            variant = "utility"
-
-    profiles: dict[str, dict[str, int | str]] = {
-        "danger": {"hover_blur": 13, "press_blur": 19, "hover_duration": 125, "press_duration": 78, "burst_duration": 220, "hover_alpha": 72, "press_alpha": 126},
-        "primary": {"hover_blur": 14, "press_blur": 20, "hover_duration": 120, "press_duration": 76, "burst_duration": 230, "hover_alpha": 78, "press_alpha": 132},
-        "nav": {"hover_blur": 14, "press_blur": 20, "hover_duration": 135, "press_duration": 84, "burst_duration": 240, "hover_alpha": 76, "press_alpha": 130},
-        "icon": {"hover_blur": 11, "press_blur": 17, "hover_duration": 105, "press_duration": 68, "burst_duration": 190, "hover_alpha": 66, "press_alpha": 116},
-        "secondary": {"hover_blur": 12, "press_blur": 18, "hover_duration": 115, "press_duration": 74, "burst_duration": 210, "hover_alpha": 68, "press_alpha": 118},
-        "utility": {"hover_blur": 12, "press_blur": 18, "hover_duration": 120, "press_duration": 74, "burst_duration": 215, "hover_alpha": 70, "press_alpha": 120},
-    }
-    return profiles.get(variant, profiles["utility"])
-
-
-def _button_effect_color(button: QAbstractButton) -> QColor:
-    text = button.text().lower()
-    variant = str(button.property("effectVariant") or "").strip().lower()
-    object_name = button.objectName().lower()
-    if variant == "danger" or object_name == "dangerbutton" or "delete" in text or "删除" in text:
-        return QColor("#FCA5A5")
-    if variant == "primary" or "save" in text or "保存" in text or "export" in text or "导出" in text or "+" in text:
-        return QColor("#A7F3D0")
-    if variant == "nav" or object_name in {"historysidebarbutton", "settingssidebaritem"}:
-        return QColor("#67E8F9")
-    if variant == "icon":
-        return QColor("#BAE6FD")
-    if variant == "secondary":
-        return QColor("#93C5FD")
-    return QColor("#7DD3FC")
 
 
 def _find_backdrop_root(widget: QWidget) -> QWidget | None:

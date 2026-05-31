@@ -52,7 +52,6 @@ from floating_todo.ui.effects import (
     install_global_interaction_effects,
     prepare_window_entrance,
 )
-from floating_todo.ui.history_window import HistoryWindow
 from floating_todo.ui.settings_window import SettingsWindow
 from floating_todo.ui.task_dialog import TaskDialog
 from floating_todo.ui.toast import FloatingToast
@@ -1163,6 +1162,8 @@ class MainWindow(QMainWindow):
         return accepted
 
     def open_history(self) -> None:
+        from floating_todo.ui.history_window import HistoryWindow
+
         dialog = HistoryWindow(self.tasks, self.store, self)
         prepare_window_entrance(dialog)
         dialog.exec()

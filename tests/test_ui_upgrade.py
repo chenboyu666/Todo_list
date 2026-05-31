@@ -330,19 +330,6 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     window.close()
 
 
-def test_global_button_effects_are_compact_and_calm(qapp: QApplication) -> None:
-    from floating_todo.ui.effects import _button_effect_profile
-
-    button = QPushButton("保存")
-    button.setProperty("effectVariant", "primary")
-
-    profile = _button_effect_profile(button)
-
-    assert profile["burst_duration"] <= 240
-    assert profile["hover_blur"] <= 14
-    assert profile["press_blur"] <= 20
-
-
 def test_set_focus_task_button_can_replace_current_task(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import MainWindow
 
@@ -968,7 +955,7 @@ def test_global_interaction_effect_filter_installs_once(qapp: QApplication) -> N
     assert isinstance(first, InteractionEffectFilter)
 
 
-def test_button_interaction_filter_adds_animated_glow(qapp: QApplication) -> None:
+def test_button_interaction_filter_avoids_expensive_graphics_effects(qapp: QApplication) -> None:
     from floating_todo.ui.effects import InteractionEffectFilter
 
     button = QPushButton("保存")
@@ -976,12 +963,14 @@ def test_button_interaction_filter_adds_animated_glow(qapp: QApplication) -> Non
 
     effect_filter.eventFilter(button, QEvent(QEvent.Enter))
 
-    assert getattr(button, "_floating_todo_button_glow", False) is True
-    assert getattr(button, "_floating_todo_button_glow_animation", None) is not None
+    assert button.graphicsEffect() is None
+    assert getattr(button, "_floating_todo_button_glow", False) is False
+    assert getattr(button, "_floating_todo_button_glow_animation", None) is None
 
     effect_filter.eventFilter(button, QEvent(QEvent.Leave))
 
-    assert getattr(button, "_floating_todo_button_glow_animation", None) is not None
+    assert button.graphicsEffect() is None
+    assert getattr(button, "_floating_todo_button_glow_animation", None) is None
     button.close()
 
 

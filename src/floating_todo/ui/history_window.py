@@ -5,10 +5,8 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSize, Qt, Signal, Slot
+from PySide6.QtCore import QObject, QDate, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSignalBlocker, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -889,15 +887,9 @@ class HistoryWindow(QDialog):
         header.addWidget(self.history_graph_count_label)
         layout.addLayout(header)
 
-        self.history_graph_webview = QWebEngineView()
-        self.history_graph_webview.setObjectName("historyGraphWebView")
-        self.history_graph_webview.setMinimumHeight(520)
-        self.history_graph_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.history_graph_webview.page().setBackgroundColor(QColor("#071421"))
-        self._history_graph_channel = QWebChannel(self.history_graph_webview.page())
         self._history_graph_bridge = HistoryGraphBridge(self)
-        self._history_graph_channel.registerObject("historyBridge", self._history_graph_bridge)
-        self.history_graph_webview.page().setWebChannel(self._history_graph_channel)
+        self.history_graph_webview = None
+        self._history_graph_channel = None
 
         self.history_graph_stack = QStackedWidget()
         self.history_graph_stack.setMinimumHeight(520)
@@ -962,16 +954,36 @@ class HistoryWindow(QDialog):
         empty_layout.addStretch(1)
 
         self._history_graph_has_completed = False
+        self._history_graph_requested = False
         self.history_graph_stack.addWidget(self.history_graph_placeholder)
         self.history_graph_stack.addWidget(self.history_graph_empty_state)
-        self.history_graph_stack.addWidget(self.history_graph_webview)
-        self.history_graph_webview.loadFinished.connect(
-            self._show_history_graph_webview_if_ready
-        )
         layout.addWidget(self.history_graph_stack, 1)
         self._analysis_graph_html = ""
         self._analysis_graph_signature: tuple[tuple[object, ...], ...] | None = None
         return panel
+
+    def _ensure_history_graph_webview(self) -> None:
+        if self.history_graph_webview is not None:
+            return
+
+        from PySide6.QtWebChannel import QWebChannel
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+
+        webview = QWebEngineView()
+        webview.setObjectName("historyGraphWebView")
+        webview.setMinimumHeight(520)
+        webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        webview.page().setBackgroundColor(QColor("#071421"))
+        self._history_graph_channel = QWebChannel(webview.page())
+        self._history_graph_channel.registerObject("historyBridge", self._history_graph_bridge)
+        webview.page().setWebChannel(self._history_graph_channel)
+        webview.loadFinished.connect(self._show_history_graph_webview_if_ready)
+        self.history_graph_webview = webview
+        self.history_graph_stack.addWidget(webview)
+
+    def _ensure_history_graph_ready(self) -> None:
+        self._history_graph_requested = True
+        self._update_history_graph(self._analytics_tasks())
 
     def _build_records_tools_panel(self) -> QFrame:
         panel = QFrame()
@@ -1238,6 +1250,7 @@ class HistoryWindow(QDialog):
     def _set_history_section(self, section: str, *, scroll_to_top: bool = True) -> None:
         self._current_history_section = section
         if section == "analysis":
+            self._ensure_history_graph_ready()
             self.history_section_stack.setCurrentWidget(self.history_analysis_scroll)
             self.history_content_scroll = self.history_analysis_scroll
             animate_content_swap(self.history_analysis_page)
@@ -1356,12 +1369,24 @@ class HistoryWindow(QDialog):
         self.analytics_end_date.setDate(QDate(end.year, end.month, end.day))
 
     def _reset_filters(self) -> None:
-        self.search_input.clear()
-        self.status_filter.setCurrentIndex(0)
-        self.priority_filter.setCurrentIndex(0)
-        self.tag_filter.setCurrentIndex(0)
-        self.sort_mode.setCurrentIndex(0)
-        self.page_size_combo.setCurrentIndex(0)
+        controls = (
+            self.search_input,
+            self.status_filter,
+            self.priority_filter,
+            self.tag_filter,
+            self.sort_mode,
+            self.page_size_combo,
+        )
+        blockers = [QSignalBlocker(control) for control in controls]
+        try:
+            self.search_input.clear()
+            self.status_filter.setCurrentIndex(0)
+            self.priority_filter.setCurrentIndex(0)
+            self.tag_filter.setCurrentIndex(0)
+            self.sort_mode.setCurrentIndex(0)
+            self.page_size_combo.setCurrentIndex(0)
+        finally:
+            blockers.clear()
         self._selected_page_index = 0
         self._render()
 
@@ -1699,7 +1724,7 @@ class HistoryWindow(QDialog):
         self.next_page_button.setEnabled(self._selected_page_index < page_count - 1)
 
     def _show_history_graph_webview_if_ready(self, _ok: bool = True) -> None:
-        if self._history_graph_has_completed:
+        if self._history_graph_has_completed and self.history_graph_webview is not None:
             self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
 
     def _update_history_graph(self, completed: list[Task]) -> None:
@@ -1713,19 +1738,27 @@ class HistoryWindow(QDialog):
             self._analysis_graph_html = render_history_graph_html(build_history_graph_payload(completed))
             return
 
+        if not self._history_graph_requested:
+            return
+
+        self._ensure_history_graph_webview()
+        webview = self.history_graph_webview
+        if webview is None:
+            return
+
         self._history_graph_has_completed = True
         if signature == self._analysis_graph_signature:
-            self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
+            self.history_graph_stack.setCurrentWidget(webview)
             return
         self._analysis_graph_signature = signature
         payload = build_history_graph_payload(completed)
         html = render_history_graph_html(payload)
         if html == self._analysis_graph_html:
-            self.history_graph_stack.setCurrentWidget(self.history_graph_webview)
+            self.history_graph_stack.setCurrentWidget(webview)
             return
         self._analysis_graph_html = html
         self.history_graph_stack.setCurrentWidget(self.history_graph_placeholder)
-        self.history_graph_webview.setHtml(html)
+        webview.setHtml(html)
 
     def _history_graph_signature(self, tasks: list[Task]) -> tuple[tuple[object, ...], ...]:
         return tuple(
@@ -1760,10 +1793,15 @@ class HistoryWindow(QDialog):
         self._render_records(self._paged_tasks(filtered))
 
     def _jump_to_history_records(self, *, status: str = "all", priority: str = "all", tag: str = "all", search: str = "") -> None:
-        self.search_input.setText(search)
-        self.status_filter.setCurrentIndex(max(0, self.status_filter.findData(status)))
-        self.priority_filter.setCurrentIndex(max(0, self.priority_filter.findData(priority)))
-        self.tag_filter.setCurrentIndex(max(0, self.tag_filter.findData(tag)))
+        controls = (self.search_input, self.status_filter, self.priority_filter, self.tag_filter)
+        blockers = [QSignalBlocker(control) for control in controls]
+        try:
+            self.search_input.setText(search)
+            self.status_filter.setCurrentIndex(max(0, self.status_filter.findData(status)))
+            self.priority_filter.setCurrentIndex(max(0, self.priority_filter.findData(priority)))
+            self.tag_filter.setCurrentIndex(max(0, self.tag_filter.findData(tag)))
+        finally:
+            blockers.clear()
         self._selected_page_index = 0
         self._render()
         self._set_history_section("records")

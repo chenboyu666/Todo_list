@@ -136,6 +136,24 @@ def test_history_graph_empty_tasks_uses_native_initial_panel(qapp: QApplication)
     window.close()
 
 
+def test_history_graph_webview_is_created_only_after_opening_analysis(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("延迟加载洞察", "done-lazy-graph", status="done", tag="项目")
+    window = HistoryWindow([task], MemoryStore([task]))
+
+    assert window.history_graph_webview is None
+    assert window._analysis_graph_html == ""
+
+    window._set_history_section("analysis")
+
+    assert window.history_graph_webview is not None
+    assert window.history_graph_webview.objectName() == "historyGraphWebView"
+    assert "Todo list · 任务关系图" in window._analysis_graph_html
+
+    window.close()
+
+
 def test_history_graph_skips_webview_reload_for_unchanged_tasks(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -144,6 +162,8 @@ def test_history_graph_skips_webview_reload_for_unchanged_tasks(
     task = make_task("PySide6 graph cache", "done-graph", status="done", notes="cache context", tag="work")
     store = MemoryStore([task])
     window = HistoryWindow([task], store)
+    window._set_history_section("analysis")
+    assert window.history_graph_webview is not None
 
     calls: list[str] = []
     monkeypatch.setattr(window.history_graph_webview, "setHtml", calls.append)
@@ -161,6 +181,39 @@ def test_history_graph_skips_webview_reload_for_unchanged_tasks(
     window._update_history_graph([changed])
     assert len(calls) == 1
     assert "marker" in window._analysis_graph_html
+
+    window.close()
+
+
+def test_jump_to_history_records_renders_once(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("筛选目标", "done-filter-once", status="done", tag="项目")
+    window = HistoryWindow([task], MemoryStore([task]))
+    calls: list[bool] = []
+    monkeypatch.setattr(window, "_render", lambda *args: calls.append(True))
+
+    window._jump_to_history_records(status="all", priority="P1", tag="项目", search="筛选")
+
+    assert calls == [True]
+
+    window.close()
+
+
+def test_reset_filters_renders_once(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("筛选目标", "done-reset-once", status="done", tag="项目")
+    window = HistoryWindow([task], MemoryStore([task]))
+    window.search_input.setText("筛选")
+    window.priority_filter.setCurrentIndex(window.priority_filter.findData("P1"))
+    window.tag_filter.setCurrentIndex(window.tag_filter.findData("项目"))
+    calls: list[bool] = []
+    monkeypatch.setattr(window, "_render", lambda *args: calls.append(True))
+
+    window._reset_filters()
+
+    assert calls == [True]
 
     window.close()
 
@@ -281,10 +334,8 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert window.history_records_list_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_analysis_scroll.horizontalScrollBar().maximum() == 0
     assert window.history_records_panel.objectName() == "historyRecordsPanel"
-    assert window.history_graph_webview.objectName() == "historyGraphWebView"
-    assert "Todo list · 任务关系图" in window._analysis_graph_html
-    assert "const GRAPH_PAYLOAD =" in window._analysis_graph_html
-    assert first.title in window._analysis_graph_html
+    assert window.history_graph_webview is None
+    assert window._analysis_graph_html == ""
     assert "historyGraphPanel" in window.styleSheet()
     assert "historyRecordsPanel" in window.styleSheet()
     assert "historyChartCard" in window.styleSheet()
@@ -302,6 +353,11 @@ def test_history_workspace_navigation_and_actions(qapp: QApplication) -> None:
     assert not window.history_sidebar_buttons["history"].isChecked()
     assert window.history_content_scroll is window.history_analysis_scroll
     assert window.history_graph_count_label.text() == "2 条"
+    assert window.history_graph_webview is not None
+    assert window.history_graph_webview.objectName() == "historyGraphWebView"
+    assert "Todo list · 任务关系图" in window._analysis_graph_html
+    assert "const GRAPH_PAYLOAD =" in window._analysis_graph_html
+    assert first.title in window._analysis_graph_html
 
     window.fullscreen_button.click()
     qapp.processEvents()
@@ -664,6 +720,7 @@ def test_history_graph_bridge_actions_update_window(qapp: QApplication, monkeypa
     monkeypatch.setattr(window, "export_history", fake_export_history)
     monkeypatch.setattr(history_window.QInputDialog, "getText", lambda *args, **kwargs: ("复盘", True))
 
+    window._set_history_section("analysis")
     window._history_graph_bridge.openNotes("done-1")
     window._history_graph_bridge.editTag("done-1")
     window._history_graph_bridge.exportHistory()
