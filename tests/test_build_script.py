@@ -22,13 +22,27 @@ def test_build_script_uses_repeatable_pyinstaller_onefile_contract():
     assert '"Todo list"' in script
     assert '"--add-data"' in script
     assert '"src/floating_todo/assets;floating_todo/assets"' in script
-    assert '"--collect-all"' not in script
+    assert '"--collect-all"' in script
     assert '"PySide6.QtCore"' in script
     assert '"PySide6.QtGui"' in script
     assert '"PySide6.QtWidgets"' in script
     assert '"PySide6.QtSvg"' in script
+    assert '"PySide6.QtWebEngineCore"' in script
     assert '"--exclude-module"' in script
     assert '"PySide6.QtWebEngineWidgets"' in script
+    assert '"PySide6.QtWebChannel"' in script
+    assert '"PySide6.QtQml"' in script
+    assert '"PySide6.QtQuick"' in script
+    assert '"PySide6.QtQuickWidgets"' in script
+    assert '"PySide6.QtPositioning"' in script
+    assert '"PySide6.QtPrintSupport"' in script
+    assert '"--exclude-module",\n    "PySide6.QtWebEngineCore"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtWebEngineWidgets"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtQml"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtQuick"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtQuickWidgets"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtPositioning"' not in script
+    assert '"--exclude-module",\n    "PySide6.QtPrintSupport"' not in script
     assert '"src/floating_todo/__main__.py"' in script
     assert "dist/data" in script
     assert "Build complete: dist/Todo list.exe" in script
