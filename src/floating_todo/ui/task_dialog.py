@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QDateTime, QEvent, QSize, QTimeZone, Qt
+from PySide6.QtCore import QDate, QDateTime, QEvent, QSize, QTimeZone, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
@@ -85,6 +85,22 @@ class EffortInputAdapter:
 
     def toolTip(self) -> str:
         return self.dialog.effort_minute_input.toolTip()
+
+
+class PriorityPreviewCard(QFrame):
+    clicked = Signal(str)
+
+    def __init__(self, priority: str) -> None:
+        super().__init__()
+        self.priority = priority
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(f"选择{priority_text(priority)}优先级")
+        self.setAccessibleName(f"选择{priority_text(priority)}优先级")
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self.priority)
 
 
 class TaskDialog(QDialog):
@@ -197,6 +213,8 @@ class TaskDialog(QDialog):
         self.effort_minute_input.valueChanged.connect(self._sync_effort_from_fields)
         self.title_input.textChanged.connect(self._sync_counters)
         self.notes_input.textChanged.connect(self._sync_counters)
+        self.priority_input.currentIndexChanged.connect(self._sync_priority_preview_selection)
+        self._sync_priority_preview_selection()
         self._install_submit_shortcuts()
 
     def accept(self) -> None:
@@ -321,9 +339,15 @@ class TaskDialog(QDialog):
         priority_grid.setContentsMargins(0, 0, 0, 0)
         priority_grid.setHorizontalSpacing(8)
         priority_grid.setVerticalSpacing(8)
-        priority_grid.addWidget(_priority_preview("高", "紧急且重要", "P1"), 0, 0)
-        priority_grid.addWidget(_priority_preview("中", "重要但不紧急", "P2"), 0, 1)
-        priority_grid.addWidget(_priority_preview("低", "可延后处理", "P3"), 0, 2)
+        self.priority_preview_cards = {
+            "P1": _priority_preview("高", "紧急且重要", "P1"),
+            "P2": _priority_preview("中", "重要但不紧急", "P2"),
+            "P3": _priority_preview("低", "可延后处理", "P3"),
+        }
+        for column, priority in enumerate(PRIORITY_ORDER):
+            card = self.priority_preview_cards[priority]
+            card.clicked.connect(self._set_priority_value)
+            priority_grid.addWidget(card, 0, column)
         priority_grid.addWidget(self.priority_input, 1, 0, 1, 3)
         priority_section.layout().addLayout(priority_grid)
         priority_hint = QLabel("设置优先级有助于合理安排任务顺序")
@@ -414,6 +438,14 @@ class TaskDialog(QDialog):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._sync_panel_width()
+        QTimer.singleShot(0, self._focus_title_input)
+
+    def _focus_title_input(self) -> None:
+        if not self.isVisible():
+            return
+        self.title_input.setFocus(Qt.OtherFocusReason)
+        if self.task is not None:
+            self.title_input.selectAll()
 
     def _sync_panel_width(self) -> None:
         panel = getattr(self, "panel", None)
@@ -475,6 +507,13 @@ class TaskDialog(QDialog):
         index = self.priority_input.findData(priority_from_display(priority))
         fallback = self.priority_input.findData("P2")
         self.priority_input.setCurrentIndex(index if index >= 0 else max(0, fallback))
+
+    def _sync_priority_preview_selection(self, *args) -> None:
+        selected = self._selected_priority()
+        for priority, card in self.priority_preview_cards.items():
+            card.setProperty("selected", priority == selected)
+            card.style().unpolish(card)
+            card.style().polish(card)
 
     def _progress_value(self) -> int:
         return self.task.progress if self.task else 0
@@ -661,8 +700,8 @@ def _priority_icon_name(priority: str) -> str:
     }.get(priority, "priority-medium.svg")
 
 
-def _priority_preview(title: str, subtitle: str, priority: str) -> QFrame:
-    frame = QFrame()
+def _priority_preview(title: str, subtitle: str, priority: str) -> PriorityPreviewCard:
+    frame = PriorityPreviewCard(priority)
     frame.setObjectName(f"taskPriorityPreview{priority}")
     frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     frame.setFixedHeight(72)
@@ -677,6 +716,7 @@ def _priority_preview(title: str, subtitle: str, priority: str) -> QFrame:
 
     icon = QLabel("")
     icon.setObjectName("taskPriorityPreviewIcon")
+    icon.setAttribute(Qt.WA_TransparentForMouseEvents, True)
     icon.setAlignment(Qt.AlignCenter)
     icon.setFixedSize(26, 26)
     icon.setPixmap(QIcon(str(UI_ICON_DIR / _priority_icon_name(priority))).pixmap(QSize(14, 14)))
@@ -684,12 +724,14 @@ def _priority_preview(title: str, subtitle: str, priority: str) -> QFrame:
 
     title_label = QLabel(title)
     title_label.setObjectName("taskPriorityPreviewTitle")
+    title_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
     title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     header.addWidget(title_label, 1)
     layout.addLayout(header)
 
     subtitle_label = QLabel(subtitle)
     subtitle_label.setObjectName("taskPriorityPreviewSubtitle")
+    subtitle_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
     subtitle_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     layout.addWidget(subtitle_label)
     return frame
@@ -805,13 +847,18 @@ QFrame#taskPriorityPreviewP1 {{
 }}
 QFrame#taskPriorityPreviewP2 {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #12335F, stop:1 #164E63);
-  border: 1px solid rgba(56, 189, 248, 0.55);
+  border: none;
   border-radius: 14px;
 }}
 QFrame#taskPriorityPreviewP3 {{
   background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0F3C43, stop:1 #145246);
   border: none;
   border-radius: 14px;
+}}
+QFrame#taskPriorityPreviewP1[selected="true"],
+QFrame#taskPriorityPreviewP2[selected="true"],
+QFrame#taskPriorityPreviewP3[selected="true"] {{
+  border: 2px solid rgba(125, 211, 252, 0.92);
 }}
 QLabel#taskPriorityPreviewIcon {{
   background: rgba(6, 18, 30, 0.24);

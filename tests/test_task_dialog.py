@@ -146,6 +146,69 @@ def test_dialog_defaults_for_new_task(qapp: QApplication) -> None:
     dialog.close()
 
 
+def test_dialog_focuses_title_input_when_shown(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+    QTest.qWait(0)
+
+    assert dialog.title_input.hasFocus()
+
+    dialog.close()
+
+
+def test_edit_dialog_focuses_and_selects_existing_title(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog(None, make_task())
+    dialog.show()
+    qapp.processEvents()
+    QTest.qWait(0)
+
+    assert dialog.title_input.hasFocus()
+    assert dialog.title_input.selectedText() == "旧任务"
+
+    dialog.close()
+
+
+def test_priority_preview_cards_select_priority_and_follow_combo(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    dialog = TaskDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    high = dialog.priority_preview_cards["P1"]
+    medium = dialog.priority_preview_cards["P2"]
+    low = dialog.priority_preview_cards["P3"]
+
+    assert medium.property("selected") is True
+    assert high.property("selected") is False
+    assert low.property("selected") is False
+
+    QTest.mouseClick(high, Qt.LeftButton)
+    assert dialog.priority_combo.currentData() == "P1"
+    assert high.property("selected") is True
+    assert medium.property("selected") is False
+
+    QTest.mouseClick(low, Qt.LeftButton)
+    assert dialog.priority_combo.currentData() == "P3"
+    assert low.property("selected") is True
+    assert high.property("selected") is False
+
+    dialog.priority_combo.setCurrentIndex(dialog.priority_combo.findData("P2"))
+    assert medium.property("selected") is True
+    assert low.property("selected") is False
+
+    assert high.toolTip() == "选择高优先级"
+    assert medium.accessibleName() == "选择中优先级"
+    assert low.cursor().shape() == Qt.PointingHandCursor
+
+    dialog.close()
+
+
 def test_dialog_accepts_parent_as_first_argument_for_new_task(qapp: QApplication) -> None:
     from floating_todo.ui.task_dialog import TaskDialog
 
