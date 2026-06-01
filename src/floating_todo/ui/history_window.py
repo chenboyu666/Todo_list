@@ -1641,6 +1641,8 @@ class HistoryWindow(QDialog):
         self._set_button_icon(menu_button, "more-vertical.svg", size=16, icon_only=True)
         menu = QMenu(menu_button)
         menu.addAction("查看/编辑备注", lambda: self.open_note_editor(task))
+        menu.addAction("修改任务名称", lambda: self.rename_history_task(task.id))
+        menu.addAction("删除历史记录", lambda: self.delete_history_task(task.id))
         menu.addAction("复制记录摘要", lambda: self._copy_record_summary(task))
         menu.addAction("导出当前记录", lambda: self._export_single_record(task))
         menu_button.setMenu(menu)
@@ -1834,6 +1836,38 @@ class HistoryWindow(QDialog):
         self.store.save_tasks(self.tasks)
         self._refresh_tag_filter_options(selected=normalized)
         self._render()
+
+    def rename_history_task(self, task_id: str) -> None:
+        task = self._task_by_id(task_id)
+        if task is None or task.status != "done":
+            return
+        title, accepted = QInputDialog.getText(self, "修改任务名称", "新的任务名称：", text=task.title)
+        normalized = title.strip()
+        if not accepted or not normalized or normalized == task.title:
+            return
+        self.tasks = [replace(item, title=normalized) if item.id == task_id else item for item in self.tasks]
+        self.store.save_tasks(self.tasks)
+        self._render()
+
+    def delete_history_task(self, task_id: str) -> None:
+        task = self._task_by_id(task_id)
+        if task is None or task.status != "done" or not self.confirm_delete_history_task(task):
+            return
+        selected_tag = str(self.tag_filter.currentData() or "all")
+        self.tasks = [item for item in self.tasks if item.id != task_id]
+        self.store.save_tasks(self.tasks)
+        self._refresh_tag_filter_options(selected=selected_tag)
+        self._render()
+
+    def confirm_delete_history_task(self, task: Task) -> bool:
+        result = QMessageBox.question(
+            self,
+            "删除历史记录",
+            f"确认永久删除历史记录“{task.title}”吗？\n删除后无法恢复。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return result == QMessageBox.Yes
 
     def _refresh_tag_filter_options(self, *, selected: str = "all") -> None:
         selected = normalize_task_tag(selected) if selected != "all" else "all"

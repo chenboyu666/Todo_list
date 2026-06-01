@@ -640,7 +640,13 @@ def test_history_workspace_pagination_record_menu_and_chart_render(
     assert not menu_button.icon().isNull()
     menu = menu_button.menu()
     assert menu is not None
-    assert [action.text() for action in menu.actions()] == ["查看/编辑备注", "复制记录摘要", "导出当前记录"]
+    assert [action.text() for action in menu.actions()] == [
+        "查看/编辑备注",
+        "修改任务名称",
+        "删除历史记录",
+        "复制记录摘要",
+        "导出当前记录",
+    ]
 
     window._copy_record_summary(tasks[0])
     assert "完成记录 0" in QApplication.clipboard().text()
@@ -730,6 +736,142 @@ def test_history_graph_bridge_actions_update_window(qapp: QApplication, monkeypa
     assert store.saved_tasks == [replace(task, tag="复盘")]
     assert window.tag_filter.findData("复盘") >= 0
     assert "复盘" in window._analysis_graph_html
+
+    window.close()
+
+
+def test_rename_history_task_saves_trimmed_title_and_refreshes_graph(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.history_window as history_window
+
+    task = make_task("旧名称", "done-rename", status="done", tag="项目")
+    store = MemoryStore([task])
+    window = history_window.HistoryWindow([task], store)
+    window._set_history_section("analysis")
+    monkeypatch.setattr(history_window.QInputDialog, "getText", lambda *args, **kwargs: ("  新名称  ", True))
+
+    window.rename_history_task("done-rename")
+
+    assert store.saved_tasks == [replace(task, title="新名称")]
+    assert "新名称" in window._analysis_graph_html
+    assert "旧名称" not in window._analysis_graph_html
+
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("returned_title", "accepted"),
+    [
+        ("旧名称", True),
+        ("   ", True),
+        ("新名称", False),
+    ],
+)
+def test_rename_history_task_ignores_noop_blank_cancel_and_missing_task(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    returned_title: str,
+    accepted: bool,
+) -> None:
+    import floating_todo.ui.history_window as history_window
+
+    task = make_task("旧名称", "done-rename", status="done")
+    store = MemoryStore([task])
+    window = history_window.HistoryWindow([task], store)
+    monkeypatch.setattr(history_window.QInputDialog, "getText", lambda *args, **kwargs: (returned_title, accepted))
+
+    window.rename_history_task("done-rename")
+    window.rename_history_task("missing")
+
+    assert store.saved_tasks is None
+
+    window.close()
+
+
+def test_delete_history_task_removes_record_and_returns_to_valid_page(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    tasks = [
+        make_task(f"记录 {index}", f"done-{index}", status="done", tag="唯一标签" if index == 8 else "项目")
+        for index in range(9)
+    ]
+    store = MemoryStore(tasks)
+    window = HistoryWindow(tasks, store)
+    window.page_size_combo.setCurrentIndex(window.page_size_combo.findData(8))
+    window._selected_page_index = 1
+    window._render()
+    monkeypatch.setattr(window, "confirm_delete_history_task", lambda task: True)
+
+    window.delete_history_task("done-8")
+
+    assert store.saved_tasks == tasks[:8]
+    assert window._selected_page_index == 0
+    assert window.tag_filter.findData("唯一标签") == -1
+    assert window.tag_filter.currentData() == "all"
+    assert window.page_summary_label.text().startswith("1-8 / 8 条")
+
+    window.close()
+
+
+def test_delete_history_task_returns_removed_selected_tag_to_all(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    tasks = [
+        make_task("保留记录", "done-keep", status="done", tag="项目"),
+        make_task("删除记录", "done-remove", status="done", tag="唯一标签"),
+    ]
+    store = MemoryStore(tasks)
+    window = HistoryWindow(tasks, store)
+    window.tag_filter.setCurrentIndex(window.tag_filter.findData("唯一标签"))
+    monkeypatch.setattr(window, "confirm_delete_history_task", lambda task: True)
+
+    window.delete_history_task("done-remove")
+
+    assert store.saved_tasks == tasks[:1]
+    assert window.tag_filter.findData("唯一标签") == -1
+    assert window.tag_filter.currentData() == "all"
+
+    window.close()
+
+
+def test_delete_history_task_ignores_declined_and_missing_task(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("保留记录", "done-keep", status="done")
+    store = MemoryStore([task])
+    window = HistoryWindow([task], store)
+    monkeypatch.setattr(window, "confirm_delete_history_task", lambda selected: False)
+
+    window.delete_history_task("missing")
+    window.delete_history_task("done-keep")
+
+    assert store.saved_tasks is None
+    assert window.tasks == [task]
+
+    window.close()
+
+
+def test_delete_history_task_ignores_non_completed_task(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    task = make_task("进行中任务", "active-keep", status="active")
+    store = MemoryStore([task])
+    window = HistoryWindow([task], store)
+    monkeypatch.setattr(window, "confirm_delete_history_task", lambda selected: True)
+
+    window.delete_history_task("active-keep")
+
+    assert store.saved_tasks is None
+    assert window.tasks == [task]
 
     window.close()
 
