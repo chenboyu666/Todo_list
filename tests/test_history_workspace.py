@@ -766,6 +766,23 @@ def test_rename_history_task_saves_trimmed_title_and_refreshes_graph(
     window.close()
 
 
+def test_rename_history_task_limits_title_to_task_dialog_maximum(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.history_window as history_window
+
+    task = make_task("旧名称", "done-rename", status="done")
+    store = MemoryStore([task])
+    window = history_window.HistoryWindow([task], store)
+    monkeypatch.setattr(history_window.QInputDialog, "getText", lambda *args, **kwargs: ("新" * 101, True))
+
+    window.rename_history_task("done-rename")
+
+    assert store.saved_tasks == [replace(task, title="新" * 100)]
+
+    window.close()
+
+
 @pytest.mark.parametrize(
     ("returned_title", "accepted"),
     [

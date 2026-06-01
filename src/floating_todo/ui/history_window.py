@@ -1842,7 +1842,7 @@ class HistoryWindow(QDialog):
         if task is None or task.status != "done":
             return
         title, accepted = QInputDialog.getText(self, "修改任务名称", "新的任务名称：", text=task.title)
-        normalized = title.strip()
+        normalized = title.strip()[:100]
         if not accepted or not normalized or normalized == task.title:
             return
         self.tasks = [replace(item, title=normalized) if item.id == task_id else item for item in self.tasks]
