@@ -106,6 +106,12 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "n.priority==='P1'||n.type==='keyword'" not in html
     assert "legendNoteKeywords" not in html
     assert "keywordSourceText" in html
+    assert "if(!drag) rotY+=.0012" in html
+    assert "requestAnimationFrame(animate)" in html
+    assert "backdrop-filter" not in html
+    assert "performance.now()*.002" not in html
+    assert "pulse=1+Math.sin" not in html
+    assert "ctx.arc(p.x,p.y,r,0,Math.PI*2)" in html
 
 
 def test_history_graph_empty_state_renders_initial_panel() -> None:
