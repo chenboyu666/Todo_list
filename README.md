@@ -4,18 +4,19 @@
 
 ## 下载与运行
 
-推荐下载 Windows 便携版：
+推荐下载 Windows 版本：
 
-[下载 Todo-list-V1.0-portable-windows.zip](https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-portable-windows.zip)
+[下载 Todo-list-V1.0-windows.zip](https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.zip)
 
-下载后完整解压 ZIP，进入 `V1.0-portable` 文件夹，双击 `Todo list.exe` 即可运行。请保留 `_internal` 文件夹，不要单独移动 exe。首次启动时，程序会在 exe 同级目录自动创建 `data` 文件夹，用来保存任务、设置、历史记录、背景图片和自定义图标等数据。
+下载后完整解压 ZIP，进入 `Todo-list-V1.0-windows` 文件夹，双击 `Todo list.exe` 即可运行。请保留 `_internal` 文件夹，不要单独移动 exe。首次启动时，程序会在 exe 同级目录自动创建 `data` 文件夹，用来保存任务、设置、历史记录、背景图片和自定义图标等数据。
 
-## 本次便携版更新
+## 本次更新
 
 - 新建任务窗口打开后会自动聚焦任务名称，可直接输入内容。
 - 新建任务时可点击高、中、低优先级卡片直接切换优先级。
 - 历史记录支持修改任务名称和确认后永久删除已完成记录。
 - 优化 3D 洞察页的显示稳定性，保留缓慢自动旋转并减少面板频闪。
+- 修正 3D 洞察图颜色语义：任务节点使用青蓝色，标签节点使用金色，超时任务使用红色，避免高优先级任务和标签节点混淆。
 
 ## 主要功能
 

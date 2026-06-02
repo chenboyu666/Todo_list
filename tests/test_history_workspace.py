@@ -93,6 +93,9 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "source==='tag'" in html
     assert "keywordLabelStyle" in html
     assert "selectedNeighborhood" in html
+    assert "selected=nodes.find(n=>n.type==='task')||nodes[0]" in html
+    assert "ctx.strokeStyle='rgba(196,250,255,.88)'" in html
+    assert "keyword ? .36 : .58" in html
     assert "target=(a.type==='keyword'||b.type==='keyword')?36:30" in html
     assert "已完成任务" in html
     assert "标签" in html
@@ -104,6 +107,8 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "legendHigh" not in html
     assert "dot-ring" not in html
     assert "n.priority==='P1'||n.type==='keyword'" not in html
+    assert "task.priority==='P1'?'#f4b45f'" not in html
+    assert "color:task.late?'#ff6f91':'#32dcff'" in html
     assert "legendNoteKeywords" not in html
     assert "keywordSourceText" in html
     assert "if(!drag) rotY+=.0012" in html
