@@ -64,7 +64,7 @@ def test_build_script_safely_cleans_only_project_directories():
 def test_readme_documents_download_user_flow():
     readme = README.read_text(encoding="utf-8")
 
-    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-portable-windows.zip" in readme
+    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.zip" in readme
     assert "完整解压 ZIP" in readme
     assert "双击 `Todo list.exe`" in readme
     assert "请保留 `_internal` 文件夹" in readme

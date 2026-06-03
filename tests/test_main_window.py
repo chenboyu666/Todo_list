@@ -77,14 +77,14 @@ def make_task(
 
 
 def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
 
     window = MainWindow(MemoryStore([]))
 
     assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
     assert window.minimumWidth() >= 520
-    assert window.minimumHeight() >= 760
+    assert window.minimumHeight() == MAIN_WINDOW_MINIMUM_HEIGHT
     assert window.focus_card.minimumHeight() >= 350
     assert window.focus_deadline_panel.minimumHeight() >= 92
     assert window.focus_priority_label.minimumWidth() >= 90
@@ -98,6 +98,11 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
     assert not window.empty_state_widget.isHidden()
     assert window.empty_state_label.text() == "没有进行中的任务"
     assert window.empty_state_hint_label.text() == "点击新增任务开始"
+    assert window.empty_add_task_tile.objectName() == "emptyAddTaskTile"
+    assert window.empty_add_task_tile.text() == "+\n新增任务"
+    assert window.empty_add_task_tile.toolTip() == "新增任务"
+    assert window.empty_add_task_tile.minimumWidth() >= 320
+    assert window.empty_add_task_tile.minimumHeight() >= 118
     assert window.focus_title_label.text() == "没有进行中的任务"
     assert window.focus_meta_label.text() == "等待任务"
     assert window.focus_countdown_label.text() == "倒计时 --:--:--"
@@ -125,7 +130,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
 
 
 def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplication) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
 
     window = MainWindow(MemoryStore([]))
 
@@ -135,7 +140,7 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
     assert window.width() >= window.minimumWidth()
     assert window.height() >= window.minimumHeight()
-    assert window.minimumHeight() >= 760
+    assert window.minimumHeight() == MAIN_WINDOW_MINIMUM_HEIGHT
     assert window.focus_card.minimumHeight() >= 350
     assert window.focus_deadline_panel.minimumHeight() >= 92
     assert window.task_section_widget.minimumHeight() >= 54
@@ -523,6 +528,39 @@ def test_add_button_opens_dialog_and_persists_non_empty_task(
     window.close()
 
 
+def test_empty_state_add_tile_opens_dialog_and_persists_task(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import floating_todo.ui.main_window as main_window
+
+    task = make_task("空状态新增", task_id="empty-new-task")
+
+    class AcceptedDialog:
+        def __init__(self, parent: object, task: Task | None = None) -> None:
+            self.parent = parent
+            self.task = task
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+        def build_task(self) -> Task:
+            return task
+
+    store = MemoryStore([])
+    window = main_window.MainWindow(store)
+    monkeypatch.setattr(main_window, "TaskDialog", AcceptedDialog)
+
+    window.empty_add_task_tile.click()
+
+    assert store.saved_tasks == [task]
+    assert window.tasks == [task]
+    assert window.focus_title_label.text() == "任务名称：空状态新增"
+    assert window.empty_state_widget.isHidden()
+    assert window.task_list_layout.count() == 2
+
+    window.close()
+
+
 def test_add_task_ignores_blank_title(qapp: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
     import floating_todo.ui.main_window as main_window
 
@@ -692,7 +730,7 @@ def test_delete_task_keeps_task_when_confirmation_declines_or_task_missing(qapp:
 def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     qapp: QApplication, tmp_path
 ) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
 
     settings = AppSettings(
         always_on_top=False,
@@ -706,7 +744,7 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     assert window.geometry().x() == 33
     assert window.geometry().y() == 44
     assert window.geometry().width() == 720
-    assert window.geometry().height() == 900
+    assert window.geometry().height() == MAIN_WINDOW_MINIMUM_HEIGHT
 
     window.close()
 
@@ -760,7 +798,7 @@ def test_mouse_passthrough_is_inactive_without_topmost(qapp: QApplication) -> No
 
 
 def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
 
     settings_path = tmp_path / "settings.json"
     settings = AppSettings(lock_position=False)
@@ -770,7 +808,12 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert saved["window_geometry"] == {"x": 31, "y": 42, "width": 720, "height": 900}
+    assert saved["window_geometry"] == {
+        "x": 31,
+        "y": 42,
+        "width": 720,
+        "height": MAIN_WINDOW_MINIMUM_HEIGHT,
+    }
     assert dict(window.settings.window_geometry) == saved["window_geometry"]
 
     window.close()
@@ -779,7 +822,7 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
 def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     qapp: QApplication, tmp_path
 ) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
 
     settings_path = tmp_path / "settings.json"
     locked_geometry = {"x": 71, "y": 82, "width": 430, "height": 610}
@@ -794,7 +837,7 @@ def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     assert window.geometry().x() == locked_geometry["x"]
     assert window.geometry().y() == locked_geometry["y"]
     assert window.geometry().width() == 720
-    assert window.geometry().height() == 900
+    assert window.geometry().height() == MAIN_WINDOW_MINIMUM_HEIGHT
 
     window.close()
 

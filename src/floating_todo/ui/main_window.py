@@ -69,7 +69,7 @@ from floating_todo.view_models import (
 TASK_MIME_TYPE = "application/x-floating-todo-task-id"
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
 MAIN_WINDOW_MINIMUM_WIDTH = 720
-MAIN_WINDOW_MINIMUM_HEIGHT = 900
+MAIN_WINDOW_MINIMUM_HEIGHT = 950
 FOCUS_CARD_MINIMUM_HEIGHT = 390
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 124
 TASK_SECTION_MINIMUM_HEIGHT = 54
@@ -815,6 +815,12 @@ class MainWindow(QMainWindow):
         self.empty_state_label.setAlignment(Qt.AlignCenter)
         self.empty_state_hint_label.setAlignment(Qt.AlignCenter)
         self.empty_state_hint_label.setStyleSheet(f"color: {THEME_COLORS['border']};")
+        self.empty_add_task_tile = self._add_task_tile()
+        self.empty_add_task_tile.setObjectName("emptyAddTaskTile")
+        self.empty_add_task_tile.setMinimumHeight(_scale_px(118))
+        self.empty_add_task_tile.setMinimumWidth(_scale_px(320))
+        self.empty_add_task_tile.setStyleSheet(_add_task_tile_style("emptyAddTaskTile"))
+        empty_layout.addWidget(self.empty_add_task_tile, 0, Qt.AlignHCenter)
         empty_layout.addWidget(self.empty_state_label)
         empty_layout.addWidget(self.empty_state_hint_label)
         root_layout.addWidget(self.empty_state_widget)
@@ -1430,6 +1436,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "empty_layout"):
             self.empty_layout.setContentsMargins(0, _scale_px(12), 0, _scale_px(12))
             self.empty_layout.setSpacing(_scale_px(4))
+        if hasattr(self, "empty_add_task_tile"):
+            self.empty_add_task_tile.setMinimumHeight(_scale_px(118))
+            self.empty_add_task_tile.setMinimumWidth(_scale_px(320))
+            self.empty_add_task_tile.setStyleSheet(_add_task_tile_style("emptyAddTaskTile"))
         if hasattr(self, "task_list_layout"):
             self.task_list_layout.setHorizontalSpacing(_scale_px(10))
             self.task_list_layout.setVerticalSpacing(_scale_px(10))
@@ -2284,9 +2294,9 @@ def _task_progress_style(*, selected: bool = False) -> str:
     )
 
 
-def _add_task_tile_style() -> str:
+def _add_task_tile_style(object_name: str = "addTaskTile") -> str:
     return (
-        "QPushButton#addTaskTile {"
+        f"QPushButton#{object_name} {{"
         "color: #93A9BD;"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
         " stop:0 rgba(7, 20, 33, 168),"
@@ -2297,7 +2307,7 @@ def _add_task_tile_style() -> str:
         "font-weight: 900;"
         f"padding: {_scale_px(18)}px;"
         "}"
-        "QPushButton#addTaskTile:hover {"
+        f"QPushButton#{object_name}:hover {{"
         "color: #D7F8FF;"
         "background: rgba(14, 116, 144, 92);"
         "border: 1px dashed rgba(94, 234, 212, 170);"
