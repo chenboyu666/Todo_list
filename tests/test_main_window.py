@@ -550,6 +550,43 @@ def test_task_rows_hide_stale_cards_before_deferred_delete(qapp: QApplication) -
     window.close()
 
 
+def test_collapsed_task_cards_keep_fixed_hit_area_when_wrapping_to_second_row(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    tasks = [
+        make_task("row one focused", task_id="hit-row-1", priority="P1", deadline_delta=timedelta(minutes=30)),
+        make_task("row one second", task_id="hit-row-2", priority="P2", deadline_delta=timedelta(minutes=31)),
+        make_task("row one third", task_id="hit-row-3", priority="P2", deadline_delta=timedelta(minutes=32)),
+        make_task("row two first", task_id="hit-row-4", priority="P3", deadline_delta=timedelta(minutes=33)),
+    ]
+    window = MainWindow(MemoryStore(tasks), AppSettings(focus_task_id="hit-row-1"))
+    window.resize(760, 950)
+    window.show()
+    qapp.processEvents()
+
+    cards = sorted(
+        window.task_rows_container.findChildren(QFrame),
+        key=lambda card: (card.geometry().top(), card.geometry().left()),
+    )
+    task_cards = [card for card in cards if card.objectName().startswith("taskRow-hit-row-")]
+    row_tops = sorted({card.geometry().top() for card in task_cards})
+    first_row = [card for card in task_cards if card.geometry().top() == row_tops[0]]
+    second_row = [card for card in task_cards if card.geometry().top() == row_tops[1]]
+
+    assert len(row_tops) >= 2
+    assert first_row
+    assert second_row
+    assert all(card.minimumHeight() == card.maximumHeight() for card in task_cards)
+    assert second_row[0].geometry().top() > max(card.geometry().bottom() for card in first_row)
+
+    for button in first_row[0].findChildren(QPushButton):
+        if button.text() in {"当前", "展开"}:
+            button_bottom_in_container = button.parentWidget().mapTo(window.task_rows_container, button.geometry().bottomRight()).y()
+            assert button_bottom_in_container < second_row[0].geometry().top()
+
+    window.close()
+
+
 def test_add_button_opens_dialog_and_persists_non_empty_task(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:

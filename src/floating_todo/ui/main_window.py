@@ -1841,7 +1841,7 @@ class MainWindow(QMainWindow):
         tile.setObjectName("addTaskTile")
         tile.setToolTip("新增任务")
         tile.setCursor(Qt.PointingHandCursor)
-        tile.setMinimumHeight(_scale_px(192))
+        tile.setFixedHeight(_scale_px(214))
         tile.setMinimumWidth(_scale_px(190))
         tile.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         tile.setStyleSheet(_add_task_tile_style())
@@ -1865,7 +1865,10 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(_scale_px(228 if is_expanded else 204))
+        if is_expanded:
+            card.setMinimumHeight(_scale_px(260))
+        else:
+            card.setFixedHeight(_scale_px(214))
         card.setMinimumWidth(_scale_px(190))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
