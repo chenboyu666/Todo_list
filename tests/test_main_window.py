@@ -523,6 +523,33 @@ def test_task_card_top_chips_fit_without_overlap(qapp: QApplication) -> None:
     window.close()
 
 
+def test_task_rows_hide_stale_cards_before_deferred_delete(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    first = make_task("first task", task_id="stale-first", deadline_delta=timedelta(minutes=30))
+    second = make_task("second task", task_id="stale-second", deadline_delta=timedelta(minutes=45))
+    store = MemoryStore([first])
+    window = MainWindow(store)
+    window.show()
+    qapp.processEvents()
+
+    old_card = window.task_rows_container.findChild(QFrame, "taskRow-stale-first")
+    assert old_card is not None
+    assert old_card.isVisible()
+
+    store._tasks = [second]
+    window.refresh_data_view(reload=True)
+    qapp.processEvents()
+
+    new_card = window.task_rows_container.findChild(QFrame, "taskRow-stale-second")
+    assert new_card is not None
+    assert new_card.isVisible()
+    assert old_card.parentWidget() is None
+    assert not old_card.isVisible()
+
+    window.close()
+
+
 def test_add_button_opens_dialog_and_persists_non_empty_task(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:

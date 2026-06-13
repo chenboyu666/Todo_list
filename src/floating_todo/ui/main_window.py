@@ -1773,16 +1773,24 @@ class MainWindow(QMainWindow):
             item = self.task_list_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
         columns = self._task_grid_columns()
         self._last_task_grid_columns = columns
         for column in range(5):
             self.task_list_layout.setColumnStretch(column, 1 if column < columns else 0)
         for index, row in enumerate(rows):
-            self.task_list_layout.addWidget(self._task_row(row, focus_task_id), index // columns, index % columns)
+            card = self._task_row(row, focus_task_id)
+            self.task_list_layout.addWidget(card, index // columns, index % columns)
+            card.show()
         if rows:
             add_index = len(rows)
-            self.task_list_layout.addWidget(self._add_task_tile(), add_index // columns, add_index % columns)
+            add_tile = self._add_task_tile()
+            self.task_list_layout.addWidget(add_tile, add_index // columns, add_index % columns)
+            add_tile.show()
+        self.task_rows_container.updateGeometry()
+        self.task_list_layout.activate()
 
     def _sync_task_row_live_labels(self, rows: list[dict[str, object]], focus_task_id: str | None) -> None:
         displayed_cards = self.task_rows_container.findChildren(TaskRowCard)
@@ -1857,7 +1865,7 @@ class MainWindow(QMainWindow):
         card = TaskRowCard(task_id, self)
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
-        card.setMinimumHeight(_scale_px(228 if is_expanded else 192))
+        card.setMinimumHeight(_scale_px(228 if is_expanded else 204))
         card.setMinimumWidth(_scale_px(190))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
