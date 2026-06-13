@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import os
@@ -494,6 +495,29 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
     assert count == 3
 
     window.close()
+
+
+def test_history_export_text_protects_excel_time_columns(tmp_path) -> None:
+    from floating_todo.ui.history_window import export_history_csv
+
+    task = replace(
+        make_task("Excel 时间列", "excel-time", status="done"),
+        created_at=datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 5, 12, 9, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 5, 12, 9, 30, tzinfo=timezone.utc),
+        deadline=datetime(2026, 5, 12, 10, 0, tzinfo=timezone.utc),
+        work_elapsed_seconds=2366,
+    )
+    export_path = tmp_path / "excel-safe.csv"
+
+    export_history_csv(export_path, [task])
+
+    rows = list(csv.DictReader(export_path.read_text(encoding="utf-8-sig").splitlines()))
+    row = rows[0]
+    for field in ("实际工作时长", "截止时间", "创建时间", "更新时间", "完成时间"):
+        assert row[field].startswith("\t")
+    assert row["实际工作时长"].endswith("0:39:26")
+    assert row["截止时间"].endswith("2026-05-12 18:00:00")
 
 
 def test_history_workspace_filters_ignore_mouse_wheel_changes(qapp: QApplication) -> None:

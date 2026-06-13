@@ -1806,7 +1806,7 @@ class MainWindow(QMainWindow):
             urgency_chip = card.findChild(QLabel, "activeTaskUrgency" if is_focused else "taskUrgency")
             if urgency_chip is not None:
                 urgency_chip.setText(str(row["urgency_label"]))
-                urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
+                urgency_chip.setStyleSheet(_urgency_chip_style(urgency, compact=True))
 
             deadline = card.findChild(QLabel, "activeTaskDeadline" if is_focused else "taskDeadline")
             if deadline is not None:
@@ -1862,32 +1862,38 @@ class MainWindow(QMainWindow):
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(_scale_px(10), _scale_px(7), _scale_px(10), _scale_px(8))
+        layout.setContentsMargins(_scale_px(8), _scale_px(7), _scale_px(8), _scale_px(8))
         layout.setSpacing(_scale_px(5))
 
         top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(_scale_px(4))
         priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(11)))
+        priority.setObjectName("activeTaskPriorityChip" if is_focused else "taskPriorityChip")
         priority.setAlignment(Qt.AlignCenter)
         priority.setTextFormat(Qt.RichText)
         priority.setFixedHeight(_scale_px(30))
+        priority.setFixedWidth(48)
         priority.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        priority.setStyleSheet(_priority_chip_style(str(row["priority"])))
+        priority.setStyleSheet(_priority_chip_style(str(row["priority"]), compact=True))
         top.addWidget(priority)
         tag_name = str(row.get("tag", "未分类"))
-        tag_chip = QLabel(f"#{tag_name if len(tag_name) <= 8 else tag_name[:8] + '...'}")
+        tag_chip = QLabel(f"#{tag_name if len(tag_name) <= 4 else tag_name[:4] + '...'}")
         tag_chip.setObjectName("activeTaskTag" if is_focused else "taskTag")
         tag_chip.setAlignment(Qt.AlignCenter)
         tag_chip.setFixedHeight(_scale_px(30))
+        tag_chip.setFixedWidth(68)
         tag_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        tag_chip.setStyleSheet(_task_tag_chip_style(selected=is_focused))
+        tag_chip.setStyleSheet(_task_tag_chip_style(selected=is_focused, compact=True))
         tag_chip.setToolTip(f"任务标签：{tag_name}")
         top.addWidget(tag_chip)
         urgency_chip = QLabel(str(row["urgency_label"]))
         urgency_chip.setObjectName("activeTaskUrgency" if is_focused else "taskUrgency")
         urgency_chip.setAlignment(Qt.AlignCenter)
         urgency_chip.setFixedHeight(_scale_px(30))
+        urgency_chip.setFixedWidth(52)
         urgency_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        urgency_chip.setStyleSheet(_urgency_chip_style(urgency))
+        urgency_chip.setStyleSheet(_urgency_chip_style(urgency, compact=True))
         top.addWidget(urgency_chip)
         top.addStretch(1)
         layout.addLayout(top)
@@ -2324,12 +2330,15 @@ def _progress_value_style(*, selected: bool = False) -> str:
     )
 
 
-def _urgency_chip_style(urgency: str) -> str:
+def _urgency_chip_style(urgency: str, *, compact: bool = False) -> str:
     style = _urgency_style(urgency)
+    min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
+    padding = f"{_scale_px(3)}px {_scale_px(6)}px" if compact else f"{_scale_px(5)}px {_scale_px(10)}px"
+    font_size = _scale_px(12 if compact else 14)
     return (
-        f"font-size: {_scale_px(14)}px; font-weight: 900; "
-        f"padding: {_scale_px(5)}px {_scale_px(10)}px; border-radius: {_scale_px(8)}px; "
-        f"min-width: {_scale_px(78)}px; "
+        f"font-size: {font_size}px; font-weight: 900; "
+        f"padding: {padding}; border-radius: {_scale_px(8)}px; "
+        f"{min_width}"
         f"background: {style['chip_bg']}; color: {style['chip_text']};"
     )
 
@@ -2719,21 +2728,27 @@ def _priority_style(priority: str) -> dict[str, str]:
     return PRIORITY_STYLES.get(priority, PRIORITY_STYLES["none"])
 
 
-def _priority_chip_style(priority: str) -> str:
+def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
     style = _priority_style(priority)
+    min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
+    padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(4)}px {_scale_px(8)}px"
+    font_size = _scale_px(11 if compact else 13)
     return (
-        f"font-size: {_scale_px(13)}px; font-weight: 900; "
-        f"padding: {_scale_px(4)}px {_scale_px(8)}px; border-radius: {_scale_px(8)}px; "
-        f"min-width: {_scale_px(78)}px; "
+        f"font-size: {font_size}px; font-weight: 900; "
+        f"padding: {padding}; border-radius: {_scale_px(8)}px; "
+        f"{min_width}"
         f"background: {style['background']}; color: {style['text']};"
     )
 
 
-def _task_tag_chip_style(*, selected: bool = False) -> str:
+def _task_tag_chip_style(*, selected: bool = False, compact: bool = False) -> str:
+    min_width = "" if compact else f"min-width: {_scale_px(92)}px; "
+    padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(5)}px {_scale_px(12)}px"
+    font_size = _scale_px(12 if compact else 14)
     return (
-        f"font-size: {_scale_px(14)}px; font-weight: 900; "
-        f"padding: {_scale_px(5)}px {_scale_px(12)}px; border-radius: {_scale_px(9)}px; "
-        f"min-width: {_scale_px(92)}px; "
+        f"font-size: {font_size}px; font-weight: 900; "
+        f"padding: {padding}; border-radius: {_scale_px(9)}px; "
+        f"{min_width}"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
         f" stop:0 {'#0EA5B7' if selected else '#0E7490'},"
         f" stop:1 {'#0F766E' if selected else '#155E75'}); "

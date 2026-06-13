@@ -1940,14 +1940,16 @@ def export_history_csv(path: str | Path, tasks: list[Task]) -> None:
                     "标签": _task_tag(task),
                     "优先级": priority_text(task.priority),
                     "预计工作量分钟": task.effort_minutes,
-                    "实际工作时长": duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at)),
+                    "实际工作时长": _excel_text(
+                        duration_clock_label(work_elapsed_seconds(task, task.completed_at or task.updated_at))
+                    ),
                     "实际工作秒数": work_elapsed_seconds(task, task.completed_at or task.updated_at),
-                    "截止时间": _export_datetime(task.deadline),
+                    "截止时间": _excel_text(_export_datetime(task.deadline)),
                     "进度": f"{task.progress}%",
                     "状态": task.status,
-                    "创建时间": _export_datetime(task.created_at),
-                    "更新时间": _export_datetime(task.updated_at),
-                    "完成时间": _export_datetime(task.completed_at),
+                    "创建时间": _excel_text(_export_datetime(task.created_at)),
+                    "更新时间": _excel_text(_export_datetime(task.updated_at)),
+                    "完成时间": _excel_text(_export_datetime(task.completed_at)),
                     "任务备注": task.notes,
                     "完成体会": task.reflection,
                 }
@@ -2009,6 +2011,10 @@ def _tag_chart_color(index: int) -> str:
 
 def _export_datetime(value) -> str:
     return value.astimezone().strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+
+def _excel_text(value: str) -> str:
+    return f"\t{value}" if value else ""
 
 
 def _task_completed_date(task: Task) -> date | None:

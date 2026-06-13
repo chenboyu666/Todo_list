@@ -496,6 +496,33 @@ def test_live_refresh_keeps_focus_and_row_urgency_labels_in_sync(
     window.close()
 
 
+def test_task_card_top_chips_fit_without_overlap(qapp: QApplication) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    task = make_task("标签宽度检查", task_id="chip-fit", priority="P1", deadline_delta=timedelta(minutes=18))
+    task = replace(task, tag="健康")
+    window = MainWindow(MemoryStore([task]))
+    card = window.task_rows_container.findChild(QFrame, "taskRow-chip-fit")
+    assert card is not None
+    card.resize(card.minimumWidth(), card.height())
+    card.layout().activate()
+    qapp.processEvents()
+
+    priority = card.findChild(QLabel, "activeTaskPriorityChip") or card.findChild(QLabel, "taskPriorityChip")
+    tag = card.findChild(QLabel, "taskTag")
+    tag = tag or card.findChild(QLabel, "activeTaskTag")
+    urgency = card.findChild(QLabel, "activeTaskUrgency") or card.findChild(QLabel, "taskUrgency")
+
+    assert priority is not None
+    assert tag is not None
+    assert urgency is not None
+    assert priority.geometry().right() < tag.geometry().left()
+    assert tag.geometry().right() < urgency.geometry().left()
+    assert urgency.geometry().right() <= card.contentsRect().right()
+
+    window.close()
+
+
 def test_add_button_opens_dialog_and_persists_non_empty_task(
     qapp: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
