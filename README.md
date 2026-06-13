@@ -41,6 +41,20 @@
 5. 点击历史任务，可查看完成记录、统计图表、3D 洞察图和 CSV 导出。
 6. 点击设置，可调整提醒、外观、背景、图标、托盘和窗口行为。
 
+## 从源码打包
+
+开发者可以使用项目内置脚本生成 Windows 便携版：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
+```
+
+脚本会安装依赖并运行 PyInstaller。打包完成后，程序位于：
+
+```text
+dist\Todo list\Todo list.exe
+```
+
 ## 3D 洞察图怎么用
 
 历史窗口中的“洞察”页面会把已完成任务变成关系图：
