@@ -1869,7 +1869,7 @@ class MainWindow(QMainWindow):
             card.setMinimumHeight(_scale_px(260))
         else:
             card.setFixedHeight(_scale_px(214))
-        card.setMinimumWidth(_scale_px(190))
+        card.setMinimumWidth(_scale_px(210))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
@@ -1902,7 +1902,7 @@ class MainWindow(QMainWindow):
         urgency_chip.setObjectName("activeTaskUrgency" if is_focused else "taskUrgency")
         urgency_chip.setAlignment(Qt.AlignCenter)
         urgency_chip.setFixedHeight(_scale_px(30))
-        urgency_chip.setFixedWidth(52)
+        urgency_chip.setFixedWidth(_scale_px(74))
         urgency_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         urgency_chip.setStyleSheet(_urgency_chip_style(urgency, compact=True))
         top.addWidget(urgency_chip)

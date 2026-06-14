@@ -499,7 +499,9 @@ def test_live_refresh_keeps_focus_and_row_urgency_labels_in_sync(
 def test_task_card_top_chips_fit_without_overlap(qapp: QApplication) -> None:
     from floating_todo.ui.main_window import MainWindow
 
-    task = make_task("标签宽度检查", task_id="chip-fit", priority="P1", deadline_delta=timedelta(minutes=18))
+    now = datetime.now(timezone.utc)
+    task = make_task("标签宽度检查", task_id="chip-fit", priority="P1", deadline_delta=timedelta(minutes=28))
+    task = replace(task, deadline=now + timedelta(minutes=28), created_at=now, updated_at=now)
     task = replace(task, tag="健康")
     window = MainWindow(MemoryStore([task]))
     card = window.task_rows_container.findChild(QFrame, "taskRow-chip-fit")
@@ -518,6 +520,8 @@ def test_task_card_top_chips_fit_without_overlap(qapp: QApplication) -> None:
     assert urgency is not None
     assert priority.geometry().right() < tag.geometry().left()
     assert tag.geometry().right() < urgency.geometry().left()
+    assert urgency.text() == "半小时内"
+    assert urgency.width() >= urgency.sizeHint().width()
     assert urgency.geometry().right() <= card.contentsRect().right()
 
     window.close()
