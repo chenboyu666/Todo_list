@@ -1893,9 +1893,9 @@ class MainWindow(QMainWindow):
         card.setObjectName(f"taskRow-{task_id}")
         card.setStyleSheet(_card_style(urgency, selected=is_focused))
         if is_expanded:
-            card.setMinimumHeight(_scale_px(260))
+            card.setMinimumHeight(_scale_px(260, minimum=198))
         else:
-            card.setFixedHeight(_scale_px(214))
+            card.setFixedHeight(_scale_px(214, minimum=168))
         card.setMinimumWidth(max(_scale_px(210), 198))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
@@ -1990,19 +1990,21 @@ class MainWindow(QMainWindow):
         focus_button.setToolTip("设为当前置顶任务；之后点击其它任务的置顶即可替换")
         if is_focused:
             focus_button.setObjectName("currentTaskButton")
+        self._configure_task_row_action_button(focus_button)
         focus_button.clicked.connect(lambda checked=False, task_id=task_id: self.set_focus_task(task_id))
-        compact_row.addWidget(focus_button)
+        compact_row.addWidget(focus_button, 0, Qt.AlignVCenter)
         if is_paused:
             resume_button = QPushButton()
             self._configure_pause_resume_button(resume_button, paused=True)
             resume_button.setToolTip("继续工作计时，并设为当前进行中")
             resume_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
-            compact_row.addWidget(resume_button)
+            compact_row.addWidget(resume_button, 0, Qt.AlignVCenter)
         expand_button = QPushButton("收起" if is_expanded else "展开")
         expand_button.setObjectName("taskCollapseButton" if is_expanded else "taskExpandButton")
         expand_button.setToolTip("显示或收起详细操作")
+        self._configure_task_row_action_button(expand_button)
         expand_button.clicked.connect(lambda checked=False, task_id=task_id: self.toggle_task_details(task_id))
-        compact_row.addWidget(expand_button)
+        compact_row.addWidget(expand_button, 0, Qt.AlignVCenter)
         layout.addLayout(compact_row)
 
         if not is_expanded:
@@ -2053,6 +2055,14 @@ class MainWindow(QMainWindow):
         self.focus_resume_button.setEnabled(status == "paused")
         self.focus_complete_button.setEnabled(has_task)
         self.focus_delete_button.setEnabled(has_task)
+
+    def _configure_task_row_action_button(self, button: QPushButton) -> None:
+        button.setCursor(Qt.PointingHandCursor)
+        button.setFixedHeight(_scale_px(34, minimum=30))
+        button.setMinimumWidth(_scale_px(54, minimum=48))
+        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        button.style().unpolish(button)
+        button.style().polish(button)
 
     def _configure_pause_resume_button(self, button: QPushButton, *, paused: bool, focus: bool = False) -> None:
         if paused:
@@ -2382,7 +2392,7 @@ def _urgency_chip_style(urgency: str, *, compact: bool = False) -> str:
 
 
 def _deadline_label_style(urgency: str) -> str:
-    return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: {_scale_px(13)}px;"
+    return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: {_font_px(13, minimum=12)}px;"
 
 
 def _focus_deadline_text_style(urgency: str) -> str:
@@ -2567,10 +2577,10 @@ def _focus_meta_style() -> str:
 def _task_title_style(*, selected: bool = False) -> str:
     if selected:
         color = "#F8FBFF"
-        size = _scale_px(16)
+        size = _font_px(16, minimum=13)
     else:
         color = "#F3F7FC"
-        size = _scale_px(15)
+        size = _font_px(15, minimum=13)
     return (
         f"color: {color};"
         "background: transparent;"
@@ -2578,7 +2588,7 @@ def _task_title_style(*, selected: bool = False) -> str:
         f"padding: {_scale_px(2)}px {_scale_px(2)}px;"
         f"font-size: {size}px;"
         "font-weight: 900;"
-        f"line-height: {_scale_px(19)}px;"
+        f"line-height: {_font_px(19, minimum=16)}px;"
     )
 
 
@@ -2603,7 +2613,7 @@ def _task_timer_style(urgency: str, *, selected: bool = False, paused: bool = Fa
         "border: none;"
         f"border-radius: {_scale_px(8)}px;"
         f"padding: {_scale_px(4)}px {_scale_px(8)}px;"
-        f"font-size: {_scale_px(13)}px;"
+        f"font-size: {_font_px(13, minimum=12)}px;"
         "font-weight: 900;"
         'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
     )
@@ -2769,7 +2779,7 @@ def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
     style = _priority_style(priority)
     min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(4)}px {_scale_px(8)}px"
-    font_size = _font_px(11 if compact else 15, minimum=10 if compact else 13)
+    font_size = _font_px(11 if compact else 15, minimum=11 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(8)}px; "
@@ -2781,7 +2791,7 @@ def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
 def _task_tag_chip_style(*, selected: bool = False, compact: bool = False) -> str:
     min_width = "" if compact else f"min-width: {_scale_px(92)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(5)}px {_scale_px(12)}px"
-    font_size = _scale_px(12 if compact else 14)
+    font_size = _font_px(12 if compact else 14, minimum=11 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(9)}px; "

@@ -52,6 +52,33 @@ def make_task(title: str, task_id: str, *, status: str = "active", notes: str = 
     )
 
 
+def test_small_resolution_task_cards_keep_readable_text_and_aligned_actions(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    task = make_task("small readable task", "small-readable")
+    window = MainWindow(
+        MemoryStore([task]),
+        AppSettings(resolution_preset="small", ui_scale=0.7, focus_task_id="small-readable"),
+        tmp_path / "settings.json",
+    )
+    window.show()
+    qapp.processEvents()
+
+    title = window.task_rows_container.findChild(QLabel, "activeTaskTitle")
+    current_button = window.task_rows_container.findChild(QPushButton, "currentTaskButton")
+    expand_button = window.task_rows_container.findChild(QPushButton, "taskExpandButton")
+
+    assert title is not None
+    assert "font-size: 13px" in title.styleSheet()
+    assert current_button is not None
+    assert expand_button is not None
+    assert current_button.height() == expand_button.height()
+    assert current_button.height() >= 30
+    assert abs(current_button.geometry().center().y() - expand_button.geometry().center().y()) <= 1
+
+    window.close()
+
+
 def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, tmp_path) -> None:
     from floating_todo.ui.main_window import ClockDisplay, CornerResizeGrip, MainWindow, _scale_px
 
@@ -224,6 +251,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
         _countdown_label_style,
         _focus_info_card_style,
         _focus_time_text_style,
+        _font_px,
         _notes_style,
         _priority_chip_style,
         _scale_px,
@@ -300,7 +328,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert f"min-width: {_scale_px(92)}px" in _task_tag_chip_style(selected=True)
     assert "#0EA5B7" in _task_tag_chip_style(selected=True)
     assert "background: transparent" in _task_title_style(selected=False)
-    assert f"font-size: {_scale_px(16)}px" in _task_title_style(selected=True)
+    assert f"font-size: {_font_px(16, minimum=13)}px" in _task_title_style(selected=True)
     assert "font-weight: 500" in _notes_style(selected=False)
     assert f"font-size: {_scale_px(23)}px" in _focus_time_text_style("countdown", "normal")
     assert f"font-size: {_scale_px(18)}px" in _focus_time_text_style("timer", "normal")

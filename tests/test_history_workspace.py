@@ -513,8 +513,10 @@ def test_history_window_size_follows_parent_resolution_scale(qapp: QApplication)
     assert large_window.minimumHeight() == 900
     assert large_window.width() == 1320
     assert large_window.height() == 960
+    assert small_window.minimumWidth() >= 1040
     assert small_window.minimumWidth() < large_window.minimumWidth()
     assert small_window.minimumHeight() < large_window.minimumHeight()
+    assert small_window.width() >= 1100
     assert small_window.width() < large_window.width()
     assert small_window.height() < large_window.height()
 

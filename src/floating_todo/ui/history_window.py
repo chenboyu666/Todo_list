@@ -581,12 +581,16 @@ class HistoryWindow(QDialog):
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setWindowModality(Qt.WindowModal)
         self.setAttribute(Qt.WA_StyledBackground, True)
+        ui_scale = ui_scale_from_parent(parent)
         apply_scaled_window_size(
             self,
-            ui_scale_from_parent(parent),
+            ui_scale,
             minimum=(1180, 900),
             default=(1320, 960),
         )
+        if ui_scale < 0.85:
+            self.setMinimumSize(max(self.minimumWidth(), 1040), self.minimumHeight())
+            self.resize(max(self.width(), 1100), self.height())
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 
