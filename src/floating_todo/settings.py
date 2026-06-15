@@ -6,13 +6,35 @@ from types import MappingProxyType
 from typing import Any
 
 
-DEFAULT_GEOMETRY = {"x": 980, "y": 60, "width": 820, "height": 1040}
+LARGE_RESOLUTION_GEOMETRY = {"x": 980, "y": 60, "width": 820, "height": 1040}
+RESOLUTION_SCALE_PRESETS = {
+    "large": 1.0,
+    "medium": 0.7,
+    "small": 0.4,
+}
+DEFAULT_RESOLUTION_PRESET = "medium"
+DEFAULT_UI_SCALE = RESOLUTION_SCALE_PRESETS[DEFAULT_RESOLUTION_PRESET]
+MIN_UI_SCALE = min(RESOLUTION_SCALE_PRESETS.values())
+MAX_UI_SCALE = max(RESOLUTION_SCALE_PRESETS.values())
+
+
+def default_geometry_for_scale(scale: float) -> dict[str, int]:
+    return {
+        "x": LARGE_RESOLUTION_GEOMETRY["x"],
+        "y": LARGE_RESOLUTION_GEOMETRY["y"],
+        "width": max(1, round(LARGE_RESOLUTION_GEOMETRY["width"] * scale)),
+        "height": max(1, round(LARGE_RESOLUTION_GEOMETRY["height"] * scale)),
+    }
+
+
+def default_geometry_for_preset(preset: str) -> dict[str, int]:
+    return default_geometry_for_scale(RESOLUTION_SCALE_PRESETS.get(preset, DEFAULT_UI_SCALE))
+
+
+DEFAULT_GEOMETRY = default_geometry_for_preset(DEFAULT_RESOLUTION_PRESET)
 DEFAULT_LOW_DISTRACTION_MODE = False
 DEFAULT_NOTIFICATION_REPEAT_MINUTES = 10
 DEFAULT_BACKGROUND_OVERLAY = 0.68
-DEFAULT_UI_SCALE = 1.0
-MIN_UI_SCALE = 0.85
-MAX_UI_SCALE = 1.3
 
 
 @dataclass(frozen=True)
@@ -35,6 +57,7 @@ class AppSettings:
     background_folder_path: str = ""
     background_overlay: float = DEFAULT_BACKGROUND_OVERLAY
     icon_path: str = ""
+    resolution_preset: str = DEFAULT_RESOLUTION_PRESET
     ui_scale: float = DEFAULT_UI_SCALE
 
     def __post_init__(self) -> None:
@@ -73,10 +96,33 @@ def _coerce_float(value: Any, default: float) -> float:
         return default
 
 
+def resolution_preset_from_scale(scale: float) -> str:
+    if scale >= 0.85:
+        return "large"
+    if scale >= 0.55:
+        return "medium"
+    return "small"
+
+
+def _coerce_resolution_preset(data: dict[str, Any]) -> str:
+    raw_preset = data.get("resolution_preset")
+    if isinstance(raw_preset, str):
+        preset = raw_preset.strip().lower()
+        if preset in RESOLUTION_SCALE_PRESETS:
+            return preset
+        return DEFAULT_RESOLUTION_PRESET
+    if "ui_scale" in data:
+        scale = _coerce_float(data.get("ui_scale"), DEFAULT_UI_SCALE)
+        return resolution_preset_from_scale(scale)
+    return DEFAULT_RESOLUTION_PRESET
+
+
 def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
     if not isinstance(data, dict):
         data = {}
-    geometry = dict(DEFAULT_GEOMETRY)
+    resolution_preset = _coerce_resolution_preset(data)
+    ui_scale = RESOLUTION_SCALE_PRESETS[resolution_preset]
+    geometry = default_geometry_for_preset(resolution_preset)
     raw_geometry = data.get("window_geometry")
     if isinstance(raw_geometry, dict):
         for key in ("x", "y", "width", "height"):
@@ -84,8 +130,6 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
                 geometry[key] = _coerce_int(raw_geometry[key], DEFAULT_GEOMETRY[key])
     opacity = _coerce_float(data.get("opacity", 0.96), 0.96)
     opacity = max(0.3, min(1.0, opacity))
-    ui_scale = _coerce_float(data.get("ui_scale", DEFAULT_UI_SCALE), DEFAULT_UI_SCALE)
-    ui_scale = round(max(MIN_UI_SCALE, min(MAX_UI_SCALE, ui_scale)), 2)
     raw_focus_task_id = data.get("focus_task_id")
     raw_background_path = data.get("background_image_path", "")
     raw_background_folder_path = data.get("background_folder_path", "")
@@ -109,6 +153,7 @@ def settings_from_dict(data: dict[str, Any] | None) -> AppSettings:
         background_folder_path=str(raw_background_folder_path) if raw_background_folder_path else "",
         background_overlay=DEFAULT_BACKGROUND_OVERLAY,
         icon_path=str(raw_icon_path) if raw_icon_path else "",
+        resolution_preset=resolution_preset,
         ui_scale=ui_scale,
     )
 
@@ -142,5 +187,6 @@ def settings_to_dict(settings: AppSettings) -> dict[str, object]:
         "background_folder_path": settings.background_folder_path,
         "background_overlay": DEFAULT_BACKGROUND_OVERLAY,
         "icon_path": settings.icon_path,
+        "resolution_preset": settings.resolution_preset,
         "ui_scale": settings.ui_scale,
     }

@@ -36,9 +36,11 @@ from floating_todo.app_resources import (
 from floating_todo.settings import (
     AppSettings,
     DEFAULT_BACKGROUND_OVERLAY,
-    DEFAULT_GEOMETRY,
     DEFAULT_LOW_DISTRACTION_MODE,
     DEFAULT_NOTIFICATION_REPEAT_MINUTES,
+    RESOLUTION_SCALE_PRESETS,
+    default_geometry_for_preset,
+    resolution_preset_from_scale,
 )
 from floating_todo.theme import THEME_COLORS
 
@@ -148,13 +150,22 @@ class SettingsWindow(QDialog):
         self.opacity_value_label.setObjectName("settingsValueLabel")
         self.opacity.valueChanged.connect(lambda value: self.opacity_value_label.setText(f"{value}%"))
 
-        self.ui_scale = QSlider(Qt.Horizontal)
-        self.ui_scale.setRange(85, 130)
-        self.ui_scale.setValue(round(settings.ui_scale * 100))
-        self.ui_scale_slider = self.ui_scale
-        self.ui_scale_value_label = QLabel(f"{self.ui_scale.value()}%")
+        self.resolution_preset = QComboBox()
+        self.resolution_preset.addItem("\u5927\u5206\u8fa8\u7387\uff08100%\uff09", "large")
+        self.resolution_preset.addItem("\u4e2d\u5206\u8fa8\u7387\uff0870%\uff09", "medium")
+        self.resolution_preset.addItem("\u5c0f\u5206\u8fa8\u7387\uff0840%\uff09", "small")
+        initial_preset = settings.resolution_preset
+        if initial_preset not in RESOLUTION_SCALE_PRESETS:
+            initial_preset = resolution_preset_from_scale(settings.ui_scale)
+        initial_index = self.resolution_preset.findData(initial_preset)
+        self.resolution_preset.setCurrentIndex(max(0, initial_index))
+        self.resolution_preset_combo = self.resolution_preset
+        self.ui_scale = self.resolution_preset
+        self.ui_scale_combo = self.resolution_preset
+        self.ui_scale_value_label = QLabel("")
         self.ui_scale_value_label.setObjectName("settingsValueLabel")
-        self.ui_scale.valueChanged.connect(lambda value: self.ui_scale_value_label.setText(f"{value}%"))
+        self.resolution_preset.currentIndexChanged.connect(self._sync_resolution_scale_label)
+        self._sync_resolution_scale_label()
 
         self.lead_minutes = QSpinBox()
         self.lead_minutes.setRange(1, 240)
@@ -306,7 +317,7 @@ class SettingsWindow(QDialog):
             _settings_section(
                 "显示设置",
                 _settings_row("透明度", _inline_controls(self.opacity, self.opacity_value_label)),
-                _settings_row("界面缩放", _inline_controls(self.ui_scale, self.ui_scale_value_label)),
+                _settings_row("\u5206\u8fa8\u7387\u9002\u914d", _inline_controls(self.resolution_preset, self.ui_scale_value_label)),
             )
         )
         page.layout().addStretch(1)
@@ -523,6 +534,7 @@ class SettingsWindow(QDialog):
         self.background_folder_path.textChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(self._emit_preview)
         self.icon_path.textChanged.connect(lambda text: self._sync_resource_combo(self.icon_resource, text))
+        self.resolution_preset.currentIndexChanged.connect(self._emit_preview)
 
     def apply_background_resource(self, *args) -> None:
         value = self.background_resource.currentData()
@@ -545,6 +557,16 @@ class SettingsWindow(QDialog):
         text = self.background_folder_path.text().strip()
         if self.background_folder_display.text() != text:
             self.background_folder_display.setText(text)
+
+    def _current_resolution_preset(self) -> str:
+        preset = self.resolution_preset.currentData()
+        return str(preset) if preset in RESOLUTION_SCALE_PRESETS else "medium"
+
+    def _current_resolution_scale(self) -> float:
+        return RESOLUTION_SCALE_PRESETS[self._current_resolution_preset()]
+
+    def _sync_resolution_scale_label(self, *args) -> None:
+        self.ui_scale_value_label.setText(f"{round(self._current_resolution_scale() * 100)}%")
 
     def _sync_resource_combo(self, combo: QComboBox, value: str) -> None:
         if value and value.startswith(BUILTIN_RESOURCE_PREFIX):
@@ -575,7 +597,15 @@ class SettingsWindow(QDialog):
             preview_settings(self.build_settings())
 
     def build_settings(self) -> AppSettings:
-        geometry = DEFAULT_GEOMETRY if self._reset_window_geometry_requested else dict(self.settings.window_geometry)
+        resolution_preset = self._current_resolution_preset()
+        target_geometry = default_geometry_for_preset(resolution_preset)
+        geometry = target_geometry if self._reset_window_geometry_requested else dict(self.settings.window_geometry)
+        if resolution_preset != self.settings.resolution_preset:
+            geometry = {
+                **geometry,
+                "width": target_geometry["width"],
+                "height": target_geometry["height"],
+            }
         return replace(
             self.settings,
             always_on_top=self.always_on_top.isChecked(),
@@ -594,7 +624,8 @@ class SettingsWindow(QDialog):
             background_folder_path=self.background_folder_path.text().strip(),
             background_overlay=DEFAULT_BACKGROUND_OVERLAY,
             icon_path=self.icon_path.text().strip(),
-            ui_scale=self.ui_scale.value() / 100,
+            resolution_preset=resolution_preset,
+            ui_scale=self._current_resolution_scale(),
         )
 
 

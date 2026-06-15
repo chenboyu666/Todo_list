@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QMessageBox, QProgressBar, QPushButton
 
 from floating_todo.domain import Task
-from floating_todo.settings import AppSettings, settings_to_dict
+from floating_todo.settings import AppSettings, DEFAULT_GEOMETRY, DEFAULT_UI_SCALE, settings_to_dict
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -77,32 +77,39 @@ def make_task(
 
 
 def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
-    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
+    from floating_todo.ui.main_window import (
+        FOCUS_CARD_MINIMUM_HEIGHT,
+        FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT,
+        MAIN_WINDOW_MINIMUM_HEIGHT,
+        MAIN_WINDOW_MINIMUM_WIDTH,
+        TASK_SECTION_MINIMUM_HEIGHT,
+        MainWindow,
+    )
 
     window = MainWindow(MemoryStore([]))
 
     assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
-    assert window.minimumWidth() >= 520
-    assert window.minimumHeight() == MAIN_WINDOW_MINIMUM_HEIGHT
-    assert window.focus_card.minimumHeight() >= 350
-    assert window.focus_deadline_panel.minimumHeight() >= 92
-    assert window.focus_priority_label.minimumWidth() >= 90
-    assert window.focus_urgency_label.minimumWidth() >= 90
-    assert window.focus_meta_label.minimumWidth() >= 90
-    assert window.focus_deadline_label.minimumWidth() >= 230
-    assert window.focus_deadline_card.minimumHeight() >= 48
-    assert window.focus_countdown_card.minimumHeight() >= 48
-    assert window.focus_work_timer_card.minimumHeight() >= 48
-    assert window.task_section_widget.minimumHeight() >= 54
+    assert window.minimumWidth() == DEFAULT_GEOMETRY["width"]
+    assert window.minimumHeight() == DEFAULT_GEOMETRY["height"]
+    assert window.focus_card.minimumHeight() == round(FOCUS_CARD_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
+    assert window.focus_deadline_panel.minimumHeight() == round(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
+    assert window.focus_priority_label.minimumWidth() >= round(96 * DEFAULT_UI_SCALE)
+    assert window.focus_urgency_label.minimumWidth() >= round(96 * DEFAULT_UI_SCALE)
+    assert window.focus_meta_label.minimumWidth() >= round(96 * DEFAULT_UI_SCALE)
+    assert window.focus_deadline_label.minimumWidth() >= round(336 * DEFAULT_UI_SCALE)
+    assert window.focus_deadline_card.minimumHeight() >= round(52 * DEFAULT_UI_SCALE)
+    assert window.focus_countdown_card.minimumHeight() >= round(52 * DEFAULT_UI_SCALE)
+    assert window.focus_work_timer_card.minimumHeight() >= round(52 * DEFAULT_UI_SCALE)
+    assert window.task_section_widget.minimumHeight() == round(TASK_SECTION_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert not window.empty_state_widget.isHidden()
     assert window.empty_state_label.text() == "没有进行中的任务"
     assert window.empty_state_hint_label.text() == "点击新增任务开始"
     assert window.empty_add_task_tile.objectName() == "emptyAddTaskTile"
     assert window.empty_add_task_tile.text() == "+\n新增任务"
     assert window.empty_add_task_tile.toolTip() == "新增任务"
-    assert window.empty_add_task_tile.minimumWidth() >= 320
-    assert window.empty_add_task_tile.minimumHeight() >= 118
+    assert window.empty_add_task_tile.minimumWidth() >= round(320 * DEFAULT_UI_SCALE)
+    assert window.empty_add_task_tile.minimumHeight() >= round(118 * DEFAULT_UI_SCALE)
     assert window.focus_title_label.text() == "没有进行中的任务"
     assert window.focus_meta_label.text() == "等待任务"
     assert window.focus_countdown_label.text() == "倒计时 --:--:--"
@@ -130,7 +137,13 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
 
 
 def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplication) -> None:
-    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
+    from floating_todo.ui.main_window import (
+        FOCUS_CARD_MINIMUM_HEIGHT,
+        FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT,
+        MAIN_WINDOW_MINIMUM_HEIGHT,
+        TASK_SECTION_MINIMUM_HEIGHT,
+        MainWindow,
+    )
 
     window = MainWindow(MemoryStore([]))
 
@@ -140,10 +153,10 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
     assert window.width() >= window.minimumWidth()
     assert window.height() >= window.minimumHeight()
-    assert window.minimumHeight() == MAIN_WINDOW_MINIMUM_HEIGHT
-    assert window.focus_card.minimumHeight() >= 350
-    assert window.focus_deadline_panel.minimumHeight() >= 92
-    assert window.task_section_widget.minimumHeight() >= 54
+    assert window.minimumHeight() == DEFAULT_GEOMETRY["height"]
+    assert window.focus_card.minimumHeight() >= round(FOCUS_CARD_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
+    assert window.focus_deadline_panel.minimumHeight() >= round(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
+    assert window.task_section_widget.minimumHeight() >= round(TASK_SECTION_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert window.task_section_widget.geometry().top() > window.focus_card.geometry().bottom()
     assert window.history_button.geometry().top() >= 0
     assert window.history_button.geometry().bottom() <= window.task_section_widget.height()
@@ -159,21 +172,25 @@ def test_manual_ui_scale_application_persists_without_wheel_shortcut(qapp: QAppl
     settings_path = tmp_path / "settings.json"
     window = MainWindow(MemoryStore([]), AppSettings(), settings_path)
 
-    assert window.settings.ui_scale == 1.0
+    assert window.settings.resolution_preset == "medium"
+    assert window.settings.ui_scale == 0.7
     assert not hasattr(window, "_handle_ctrl_wheel_delta")
     assert not hasattr(window, "_wheel_filter_installed")
 
-    window.apply_ui_scale(1.05)
+    window.apply_ui_scale(0.4)
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert window.settings.ui_scale == 1.05
-    assert saved["ui_scale"] == 1.05
-    assert window.minimumWidth() >= 546
-    assert window.title_action_dock.height() >= 48
+    assert window.settings.resolution_preset == "small"
+    assert window.settings.ui_scale == 0.4
+    assert saved["resolution_preset"] == "small"
+    assert saved["ui_scale"] == 0.4
+    assert window.minimumWidth() >= 288
+    assert window.title_action_dock.height() >= 18
 
     window.apply_ui_scale(1.0)
 
+    assert window.settings.resolution_preset == "large"
     assert window.settings.ui_scale == 1.0
 
     window.close()
@@ -838,8 +855,8 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     assert window.windowOpacity() == pytest.approx(0.58, abs=0.01)
     assert window.geometry().x() == 33
     assert window.geometry().y() == 44
-    assert window.geometry().width() == 720
-    assert window.geometry().height() == MAIN_WINDOW_MINIMUM_HEIGHT
+    assert window.geometry().width() == DEFAULT_GEOMETRY["width"]
+    assert window.geometry().height() == DEFAULT_GEOMETRY["height"]
 
     window.close()
 
@@ -906,8 +923,8 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
     assert saved["window_geometry"] == {
         "x": 31,
         "y": 42,
-        "width": 720,
-        "height": MAIN_WINDOW_MINIMUM_HEIGHT,
+        "width": DEFAULT_GEOMETRY["width"],
+        "height": DEFAULT_GEOMETRY["height"],
     }
     assert dict(window.settings.window_geometry) == saved["window_geometry"]
 
@@ -931,8 +948,8 @@ def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     assert dict(window.settings.window_geometry) == locked_geometry
     assert window.geometry().x() == locked_geometry["x"]
     assert window.geometry().y() == locked_geometry["y"]
-    assert window.geometry().width() == 720
-    assert window.geometry().height() == MAIN_WINDOW_MINIMUM_HEIGHT
+    assert window.geometry().width() == DEFAULT_GEOMETRY["width"]
+    assert window.geometry().height() == DEFAULT_GEOMETRY["height"]
 
     window.close()
 

@@ -7,7 +7,7 @@ from pathlib import Path
 def test_package_imports():
     import floating_todo
 
-    assert floating_todo.__version__ == "1.0.0"
+    assert floating_todo.__version__ == "1.1.0"
 
 
 def test_main_window_import_defers_history_webengine_modules():

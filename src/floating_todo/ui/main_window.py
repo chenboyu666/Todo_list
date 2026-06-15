@@ -37,7 +37,9 @@ from floating_todo.settings import (
     MAX_UI_SCALE,
     MIN_UI_SCALE,
     DEFAULT_NOTIFICATION_REPEAT_MINUTES,
+    default_geometry_for_scale,
     remove_deprecated_setting_features,
+    resolution_preset_from_scale,
     settings_to_dict,
 )
 from floating_todo.store import save_json_object
@@ -100,6 +102,14 @@ def _set_current_ui_scale(scale: float) -> None:
 
 def _scale_px(value: int | float, *, minimum: int = 1) -> int:
     return max(minimum, int(round(float(value) * _CURRENT_UI_SCALE)))
+
+
+def _minimum_window_size_for_scale(scale: float) -> QSize:
+    geometry = default_geometry_for_scale(scale)
+    return QSize(
+        max(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), geometry["width"]),
+        max(_scale_px(MAIN_WINDOW_MINIMUM_HEIGHT), geometry["height"]),
+    )
 
 
 def _apply_svg_icon(label: QLabel, icon_name: str, size: int) -> None:
@@ -539,7 +549,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.apply_window_behavior_settings()
         self.apply_icon_settings()
-        self.setMinimumSize(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), _scale_px(MAIN_WINDOW_MINIMUM_HEIGHT))
+        self.setMinimumSize(_minimum_window_size_for_scale(self.settings.ui_scale))
         self.apply_saved_geometry()
 
         self.clock_label = ClockDisplay()
@@ -1340,10 +1350,14 @@ class MainWindow(QMainWindow):
         scale = _clamp_ui_scale(scale)
         _set_current_ui_scale(scale)
         if self.settings.ui_scale != scale:
-            self.settings = replace(self.settings, ui_scale=scale)
+            self.settings = replace(
+                self.settings,
+                resolution_preset=resolution_preset_from_scale(scale),
+                ui_scale=scale,
+            )
             if persist:
                 self._save_settings()
-        self.setMinimumSize(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), _scale_px(MAIN_WINDOW_MINIMUM_HEIGHT))
+        self.setMinimumSize(_minimum_window_size_for_scale(scale))
         if self.width() < self.minimumWidth() or self.height() < self.minimumHeight():
             self.resize(max(self.width(), self.minimumWidth()), max(self.height(), self.minimumHeight()))
 
@@ -1482,6 +1496,10 @@ class MainWindow(QMainWindow):
 
         if updated_settings.mouse_passthrough and not previous_settings.mouse_passthrough:
             self.show_mouse_passthrough_notice()
+        resolution_changed = (
+            updated_settings.resolution_preset != previous_settings.resolution_preset
+            or updated_settings.ui_scale != previous_settings.ui_scale
+        )
         self.settings = updated_settings
         self._save_settings()
         self._restoring_geometry = True
@@ -1492,6 +1510,8 @@ class MainWindow(QMainWindow):
             self.apply_ui_scale(self.settings.ui_scale, persist=False, refresh=True)
             self.apply_low_distraction_settings()
             if self.settings.lock_position:
+                self.apply_saved_geometry()
+            elif resolution_changed:
                 self.apply_saved_geometry()
             else:
                 self.setGeometry(previous_geometry)
@@ -1869,7 +1889,7 @@ class MainWindow(QMainWindow):
             card.setMinimumHeight(_scale_px(260))
         else:
             card.setFixedHeight(_scale_px(214))
-        card.setMinimumWidth(_scale_px(210))
+        card.setMinimumWidth(max(_scale_px(210), 198))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_soft_shadow(card, blur=32 if is_focused else 22, y_offset=9, alpha=130 if is_focused else 80)
         layout = QVBoxLayout(card)
@@ -1878,7 +1898,7 @@ class MainWindow(QMainWindow):
 
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(_scale_px(4))
+        top.setSpacing(max(_scale_px(4), 4))
         priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(11)))
         priority.setObjectName("activeTaskPriorityChip" if is_focused else "taskPriorityChip")
         priority.setAlignment(Qt.AlignCenter)

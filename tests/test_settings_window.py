@@ -49,6 +49,8 @@ def test_settings_window_initializes_controls_from_settings(qapp: QApplication) 
     assert dialog.opacity_slider.minimum() == 30
     assert dialog.opacity_slider.maximum() == 100
     assert dialog.opacity_slider.value() == 72
+    assert dialog.resolution_preset_combo.currentData() == "medium"
+    assert dialog.ui_scale_value_label.text() == "70%"
     assert dialog.lead_minutes_spinbox.minimum() == 1
     assert dialog.lead_minutes_spinbox.maximum() == 240
     assert dialog.lead_minutes_spinbox.value() == 45
@@ -152,6 +154,39 @@ def test_build_settings_returns_updated_copy_preserving_other_fields(qapp: QAppl
     assert updated.theme == "custom"
 
     dialog.close()
+
+
+def test_settings_window_builds_resolution_preset(qapp: QApplication) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    dialog = SettingsWindow(AppSettings(resolution_preset="large", ui_scale=1.0))
+    dialog.resolution_preset_combo.setCurrentIndex(dialog.resolution_preset_combo.findData("small"))
+
+    updated = dialog.build_settings()
+
+    assert updated.resolution_preset == "small"
+    assert updated.ui_scale == 0.4
+
+    dialog.close()
+
+
+def test_settings_window_previews_resolution_preset(qapp: QApplication) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    parent = QMainWindow()
+    previews: list[AppSettings] = []
+    parent.preview_settings = lambda settings: previews.append(settings)
+    dialog = SettingsWindow(AppSettings(resolution_preset="medium", ui_scale=0.7), parent)
+
+    dialog.resolution_preset_combo.setCurrentIndex(dialog.resolution_preset_combo.findData("large"))
+
+    assert previews
+    assert previews[-1].resolution_preset == "large"
+    assert previews[-1].ui_scale == 1.0
+    assert dialog.ui_scale_value_label.text() == "100%"
+
+    dialog.close()
+    parent.close()
 
 
 def test_mouse_passthrough_requires_topmost_setting(qapp: QApplication) -> None:

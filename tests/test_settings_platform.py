@@ -5,7 +5,14 @@ import pytest
 
 from floating_todo import platform_windows
 from floating_todo.platform_windows import set_launch_on_startup
-from floating_todo.settings import AppSettings, settings_from_dict, settings_to_dict
+from floating_todo.settings import (
+    AppSettings,
+    DEFAULT_GEOMETRY,
+    DEFAULT_RESOLUTION_PRESET,
+    RESOLUTION_SCALE_PRESETS,
+    settings_from_dict,
+    settings_to_dict,
+)
 
 
 class FakeWinreg:
@@ -42,6 +49,7 @@ def test_settings_round_trip_with_defaults():
     settings = settings_from_dict(
         {
             "opacity": 0.5,
+            "resolution_preset": "large",
             "ui_scale": 1.2,
             "window_geometry": {"x": 10, "y": 20, "width": 410, "height": 620},
             "background_random_enabled": True,
@@ -51,7 +59,8 @@ def test_settings_round_trip_with_defaults():
     )
 
     assert settings.opacity == 0.5
-    assert settings.ui_scale == 1.2
+    assert settings.resolution_preset == "large"
+    assert settings.ui_scale == 1.0
     assert settings.close_to_tray is True
     assert settings.mouse_passthrough is False
     assert settings.icon_path == r"C:\Icons\todo.ico"
@@ -62,7 +71,8 @@ def test_settings_round_trip_with_defaults():
     assert settings_to_dict(settings)["icon_path"] == r"C:\Icons\todo.ico"
     assert settings_to_dict(settings)["background_random_enabled"] is True
     assert settings_to_dict(settings)["background_folder_path"] == r"C:\Wallpapers"
-    assert settings_to_dict(settings)["ui_scale"] == 1.2
+    assert settings_to_dict(settings)["resolution_preset"] == "large"
+    assert settings_to_dict(settings)["ui_scale"] == 1.0
 
 
 def test_opacity_is_clamped():
@@ -70,10 +80,32 @@ def test_opacity_is_clamped():
     assert settings_from_dict({"opacity": 0.1}).opacity == 0.3
 
 
-def test_ui_scale_is_clamped():
-    assert settings_from_dict({"ui_scale": 2}).ui_scale == 1.3
-    assert settings_from_dict({"ui_scale": 0.1}).ui_scale == 0.85
-    assert settings_from_dict({"ui_scale": "bad"}).ui_scale == 1.0
+def test_resolution_preset_defaults_to_medium():
+    settings = settings_from_dict({})
+
+    assert settings.resolution_preset == DEFAULT_RESOLUTION_PRESET == "medium"
+    assert settings.ui_scale == RESOLUTION_SCALE_PRESETS["medium"] == 0.7
+
+
+def test_resolution_presets_map_to_fixed_scales():
+    assert settings_from_dict({"resolution_preset": "large"}).ui_scale == 1.0
+    assert settings_from_dict({"resolution_preset": "medium"}).ui_scale == 0.7
+    assert settings_from_dict({"resolution_preset": "small"}).ui_scale == 0.4
+
+
+def test_invalid_resolution_preset_falls_back_to_medium():
+    settings = settings_from_dict({"resolution_preset": "bad", "ui_scale": 1.0})
+
+    assert settings.resolution_preset == "medium"
+    assert settings.ui_scale == 0.7
+
+
+def test_legacy_ui_scale_is_migrated_to_nearest_resolution_preset():
+    assert settings_from_dict({"ui_scale": 2}).resolution_preset == "large"
+    assert settings_from_dict({"ui_scale": 2}).ui_scale == 1.0
+    assert settings_from_dict({"ui_scale": 0.7}).resolution_preset == "medium"
+    assert settings_from_dict({"ui_scale": 0.1}).resolution_preset == "small"
+    assert settings_from_dict({"ui_scale": "bad"}).resolution_preset == "medium"
 
 
 def test_window_geometry_cannot_be_mutated_directly():
@@ -98,7 +130,7 @@ def test_malformed_settings_fall_back_without_raising():
     assert settings.opacity == 0.96
     assert settings.notification_lead_minutes == 15
     assert settings.notification_repeat_minutes == 10
-    assert dict(settings.window_geometry) == {"x": 980, "y": 30, "width": 820, "height": 1040}
+    assert dict(settings.window_geometry) == {**DEFAULT_GEOMETRY, "y": 30}
     assert settings_from_dict({"opacity": None}).opacity == 0.96
 
 

@@ -53,7 +53,7 @@ def make_task(title: str, task_id: str, *, status: str = "active", notes: str = 
 
 
 def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import ClockDisplay, CornerResizeGrip, MainWindow
+    from floating_todo.ui.main_window import ClockDisplay, CornerResizeGrip, MainWindow, _scale_px
 
     tasks = [make_task("普通任务", "task-1"), make_task("拖入进行中", "task-2")]
     window = MainWindow(MemoryStore(tasks), AppSettings(), tmp_path / "settings.json")
@@ -66,10 +66,10 @@ def test_window_is_frameless_and_focus_task_can_be_selected(qapp: QApplication, 
     assert hasattr(window.clock_label, "_draw_clock_sweep")
     assert not hasattr(window.clock_label, "_draw_clock_stars")
     assert window.width() >= 540
-    assert window.title_action_dock.height() == 46
-    assert window.settings_button.height() == 38
-    assert window.minimize_button.height() == 38
-    assert window.close_button.height() == 38
+    assert window.title_action_dock.height() == _scale_px(46)
+    assert window.settings_button.height() == _scale_px(38)
+    assert window.minimize_button.height() == _scale_px(38)
+    assert window.close_button.height() == _scale_px(38)
     window.resize(560, 680)
     window.show()
     qapp.processEvents()
@@ -203,6 +203,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
         _focus_time_text_style,
         _notes_style,
         _priority_chip_style,
+        _scale_px,
         _task_tag_chip_style,
         _task_title_style,
     )
@@ -269,22 +270,22 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert window.focus_complete_button.isEnabled()
     assert window.focus_delete_button.isEnabled()
     assert _countdown_display("00:00:01", True) == "00:00:01"
-    assert "font-size: 20px" in _countdown_label_style("normal", pulse=True)
+    assert f"font-size: {_scale_px(20)}px" in _countdown_label_style("normal", pulse=True)
     assert "#0A2740" in _countdown_label_style("normal", pulse=False)
     assert "#9A3B18" in _countdown_label_style("critical", pulse=False)
     assert "#5A2D12" in _priority_chip_style("P1")
-    assert "min-width: 92px" in _task_tag_chip_style(selected=True)
+    assert f"min-width: {_scale_px(92)}px" in _task_tag_chip_style(selected=True)
     assert "#0EA5B7" in _task_tag_chip_style(selected=True)
     assert "background: transparent" in _task_title_style(selected=False)
-    assert "font-size: 16px" in _task_title_style(selected=True)
+    assert f"font-size: {_scale_px(16)}px" in _task_title_style(selected=True)
     assert "font-weight: 500" in _notes_style(selected=False)
-    assert "font-size: 23px" in _focus_time_text_style("countdown", "normal")
-    assert "font-size: 18px" in _focus_time_text_style("timer", "normal")
+    assert f"font-size: {_scale_px(23)}px" in _focus_time_text_style("countdown", "normal")
+    assert f"font-size: {_scale_px(18)}px" in _focus_time_text_style("timer", "normal")
     assert "#06364A" in _focus_info_card_style("countdown", "normal")
     assert "#0B2B3B" in _focus_info_card_style("timer", "normal")
     assert "高" in window.focus_priority_label.text()
     assert "<img" in window.focus_priority_label.text()
-    assert "font-size: 25px" in window.focus_title_label.styleSheet()
+    assert f"font-size: {_scale_px(25)}px" in window.focus_title_label.styleSheet()
     assert ("focusCountdownLabel", 170) not in tick_animations
     qapp.processEvents()
     window.focus_countdown_label.setText("00:00:00")
@@ -301,12 +302,12 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert current_buttons[0].objectName() == "currentTaskButton"
     task_titles = window.task_rows_container.findChildren(QLabel, "activeTaskTitle")
     assert task_titles
-    assert task_titles[0].minimumHeight() >= 38
+    assert task_titles[0].minimumHeight() >= _scale_px(38)
     assert task_titles[0].toolTip() == "临近任务"
     deadlines = window.task_rows_container.findChildren(QLabel, "activeTaskDeadline")
     assert deadlines
     assert deadlines[0].wordWrap()
-    assert deadlines[0].minimumHeight() >= 28
+    assert deadlines[0].minimumHeight() >= _scale_px(28)
     timers = window.task_rows_container.findChildren(QLabel, "activeTaskTimer")
     assert timers
     assert timers[0].text().startswith("计时 ")

@@ -57,17 +57,18 @@ def test_build_script_safely_cleans_only_project_directories():
     assert "Remove-Item -LiteralPath $resolvedTarget" in script
     assert "-Recurse" in script
     assert "-Force" in script
-    assert "Remove-ProjectDirectory -RelativePath \"build\"" in script
-    assert "Remove-ProjectDirectory -RelativePath \"dist\"" in script
+    assert 'Remove-ProjectDirectory -RelativePath "build"' in script
+    assert 'Remove-ProjectDirectory -RelativePath "dist"' in script
 
 
 def test_readme_documents_download_user_flow():
     readme = README.read_text(encoding="utf-8")
 
-    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.0/Todo-list-V1.0-windows.zip" in readme
+    assert "https://github.com/chenboyu666/Todo_list/releases/download/v1.1/Todo-list-V1.1-windows.zip" in readme
     assert "完整解压 ZIP" in readme
     assert "双击 `Todo list.exe`" in readme
     assert "请保留 `_internal` 文件夹" in readme
+    assert "分辨率适配" in readme
     assert "3D 洞察图" in readme
     assert "CSV 导出" in readme
     assert "data\\" in readme
@@ -87,7 +88,7 @@ def test_readme_documents_download_user_flow():
 def test_readme_describes_portable_data_folder():
     readme = README.read_text(encoding="utf-8")
 
-    assert "便携文件夹" in readme
+    assert "便携版文件夹" in readme
     assert "_internal" in readme
     assert "程序会在 exe 同级目录创建" in readme
     assert "移动程序时，请整体移动便携文件夹" in readme
