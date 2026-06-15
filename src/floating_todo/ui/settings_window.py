@@ -152,8 +152,7 @@ class SettingsWindow(QDialog):
 
         self.resolution_preset = QComboBox()
         self.resolution_preset.addItem("\u5927\u5206\u8fa8\u7387\uff08100%\uff09", "large")
-        self.resolution_preset.addItem("\u4e2d\u5206\u8fa8\u7387\uff0870%\uff09", "medium")
-        self.resolution_preset.addItem("\u5c0f\u5206\u8fa8\u7387\uff0840%\uff09", "small")
+        self.resolution_preset.addItem("\u5c0f\u5206\u8fa8\u7387\uff0870%\uff09", "small")
         initial_preset = settings.resolution_preset
         if initial_preset not in RESOLUTION_SCALE_PRESETS:
             initial_preset = resolution_preset_from_scale(settings.ui_scale)

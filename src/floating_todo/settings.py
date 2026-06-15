@@ -9,10 +9,9 @@ from typing import Any
 LARGE_RESOLUTION_GEOMETRY = {"x": 980, "y": 60, "width": 820, "height": 1040}
 RESOLUTION_SCALE_PRESETS = {
     "large": 1.0,
-    "medium": 0.7,
-    "small": 0.4,
+    "small": 0.7,
 }
-DEFAULT_RESOLUTION_PRESET = "medium"
+DEFAULT_RESOLUTION_PRESET = "small"
 DEFAULT_UI_SCALE = RESOLUTION_SCALE_PRESETS[DEFAULT_RESOLUTION_PRESET]
 MIN_UI_SCALE = min(RESOLUTION_SCALE_PRESETS.values())
 MAX_UI_SCALE = max(RESOLUTION_SCALE_PRESETS.values())
@@ -99,8 +98,6 @@ def _coerce_float(value: Any, default: float) -> float:
 def resolution_preset_from_scale(scale: float) -> str:
     if scale >= 0.85:
         return "large"
-    if scale >= 0.55:
-        return "medium"
     return "small"
 
 
@@ -110,6 +107,8 @@ def _coerce_resolution_preset(data: dict[str, Any]) -> str:
         preset = raw_preset.strip().lower()
         if preset in RESOLUTION_SCALE_PRESETS:
             return preset
+        if preset == "medium":
+            return "small"
         return DEFAULT_RESOLUTION_PRESET
     if "ui_scale" in data:
         scale = _coerce_float(data.get("ui_scale"), DEFAULT_UI_SCALE)

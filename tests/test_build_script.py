@@ -68,7 +68,7 @@ def test_readme_documents_download_user_flow():
     assert "完整解压 ZIP" in readme
     assert "双击 `Todo list.exe`" in readme
     assert "请保留 `_internal` 文件夹" in readme
-    assert "分辨率适配" in readme
+    assert "两档分辨率适配" in readme
     assert "3D 洞察图" in readme
     assert "CSV 导出" in readme
     assert "data\\" in readme

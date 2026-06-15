@@ -82,6 +82,7 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
         FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT,
         MAIN_WINDOW_MINIMUM_HEIGHT,
         MAIN_WINDOW_MINIMUM_WIDTH,
+        SMALL_RESOLUTION_MINIMUM_HEIGHT,
         TASK_SECTION_MINIMUM_HEIGHT,
         MainWindow,
     )
@@ -90,8 +91,10 @@ def test_main_window_constructs_with_empty_state(qapp: QApplication) -> None:
 
     assert window.windowTitle() == "Todo list"
     assert window.windowFlags() & Qt.WindowStaysOnTopHint
-    assert window.minimumWidth() == DEFAULT_GEOMETRY["width"]
-    assert window.minimumHeight() == DEFAULT_GEOMETRY["height"]
+    assert window.minimumWidth() == round(MAIN_WINDOW_MINIMUM_WIDTH * DEFAULT_UI_SCALE)
+    assert window.minimumHeight() == SMALL_RESOLUTION_MINIMUM_HEIGHT
+    assert window.minimumWidth() < DEFAULT_GEOMETRY["width"]
+    assert window.minimumHeight() < DEFAULT_GEOMETRY["height"]
     assert window.focus_card.minimumHeight() == round(FOCUS_CARD_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert window.focus_deadline_panel.minimumHeight() == round(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert window.focus_priority_label.minimumWidth() >= round(96 * DEFAULT_UI_SCALE)
@@ -141,6 +144,7 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
         FOCUS_CARD_MINIMUM_HEIGHT,
         FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT,
         MAIN_WINDOW_MINIMUM_HEIGHT,
+        SMALL_RESOLUTION_MINIMUM_HEIGHT,
         TASK_SECTION_MINIMUM_HEIGHT,
         MainWindow,
     )
@@ -153,7 +157,7 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
     assert window.width() >= window.minimumWidth()
     assert window.height() >= window.minimumHeight()
-    assert window.minimumHeight() == DEFAULT_GEOMETRY["height"]
+    assert window.minimumHeight() == SMALL_RESOLUTION_MINIMUM_HEIGHT
     assert window.focus_card.minimumHeight() >= round(FOCUS_CARD_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert window.focus_deadline_panel.minimumHeight() >= round(FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
     assert window.task_section_widget.minimumHeight() >= round(TASK_SECTION_MINIMUM_HEIGHT * DEFAULT_UI_SCALE)
@@ -167,31 +171,34 @@ def test_main_window_rejects_too_small_geometry_to_prevent_overlap(qapp: QApplic
 
 
 def test_manual_ui_scale_application_persists_without_wheel_shortcut(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, SMALL_RESOLUTION_MINIMUM_HEIGHT, MainWindow
 
     settings_path = tmp_path / "settings.json"
     window = MainWindow(MemoryStore([]), AppSettings(), settings_path)
 
-    assert window.settings.resolution_preset == "medium"
+    assert window.settings.resolution_preset == "small"
     assert window.settings.ui_scale == 0.7
     assert not hasattr(window, "_handle_ctrl_wheel_delta")
     assert not hasattr(window, "_wheel_filter_installed")
 
-    window.apply_ui_scale(0.4)
+    window.apply_ui_scale(1.0)
     qapp.processEvents()
 
     saved = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert window.settings.resolution_preset == "small"
-    assert window.settings.ui_scale == 0.4
-    assert saved["resolution_preset"] == "small"
-    assert saved["ui_scale"] == 0.4
-    assert window.minimumWidth() >= 288
-    assert window.title_action_dock.height() >= 18
-
-    window.apply_ui_scale(1.0)
-
     assert window.settings.resolution_preset == "large"
     assert window.settings.ui_scale == 1.0
+    assert saved["resolution_preset"] == "large"
+    assert saved["ui_scale"] == 1.0
+    assert window.minimumWidth() == 720
+    assert window.minimumHeight() == MAIN_WINDOW_MINIMUM_HEIGHT
+    assert window.minimumWidth() < 820
+    assert window.minimumHeight() < 1040
+    assert window.title_action_dock.height() >= 46
+
+    window.apply_ui_scale(0.7)
+
+    assert window.settings.resolution_preset == "small"
+    assert window.settings.ui_scale == 0.7
 
     window.close()
 
@@ -842,7 +849,7 @@ def test_delete_task_keeps_task_when_confirmation_declines_or_task_missing(qapp:
 def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     qapp: QApplication, tmp_path
 ) -> None:
-    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, SMALL_RESOLUTION_MINIMUM_HEIGHT, MainWindow
 
     settings = AppSettings(
         always_on_top=False,
@@ -855,8 +862,8 @@ def test_main_window_applies_initial_window_behavior_and_geometry_settings(
     assert window.windowOpacity() == pytest.approx(0.58, abs=0.01)
     assert window.geometry().x() == 33
     assert window.geometry().y() == 44
-    assert window.geometry().width() == DEFAULT_GEOMETRY["width"]
-    assert window.geometry().height() == DEFAULT_GEOMETRY["height"]
+    assert window.geometry().width() == round(720 * DEFAULT_UI_SCALE)
+    assert window.geometry().height() == SMALL_RESOLUTION_MINIMUM_HEIGHT
 
     window.close()
 
@@ -910,7 +917,7 @@ def test_mouse_passthrough_is_inactive_without_topmost(qapp: QApplication) -> No
 
 
 def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication, tmp_path) -> None:
-    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, SMALL_RESOLUTION_MINIMUM_HEIGHT, MainWindow
 
     settings_path = tmp_path / "settings.json"
     settings = AppSettings(lock_position=False)
@@ -923,8 +930,8 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
     assert saved["window_geometry"] == {
         "x": 31,
         "y": 42,
-        "width": DEFAULT_GEOMETRY["width"],
-        "height": DEFAULT_GEOMETRY["height"],
+        "width": round(720 * DEFAULT_UI_SCALE),
+        "height": SMALL_RESOLUTION_MINIMUM_HEIGHT,
     }
     assert dict(window.settings.window_geometry) == saved["window_geometry"]
 
@@ -934,7 +941,7 @@ def test_geometry_changes_are_saved_when_position_is_unlocked(qapp: QApplication
 def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     qapp: QApplication, tmp_path
 ) -> None:
-    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, MainWindow
+    from floating_todo.ui.main_window import MAIN_WINDOW_MINIMUM_HEIGHT, SMALL_RESOLUTION_MINIMUM_HEIGHT, MainWindow
 
     settings_path = tmp_path / "settings.json"
     locked_geometry = {"x": 71, "y": 82, "width": 430, "height": 610}
@@ -948,8 +955,8 @@ def test_geometry_changes_are_not_saved_and_locked_geometry_is_restored(
     assert dict(window.settings.window_geometry) == locked_geometry
     assert window.geometry().x() == locked_geometry["x"]
     assert window.geometry().y() == locked_geometry["y"]
-    assert window.geometry().width() == DEFAULT_GEOMETRY["width"]
-    assert window.geometry().height() == DEFAULT_GEOMETRY["height"]
+    assert window.geometry().width() == round(720 * DEFAULT_UI_SCALE)
+    assert window.geometry().height() == SMALL_RESOLUTION_MINIMUM_HEIGHT
 
     window.close()
 

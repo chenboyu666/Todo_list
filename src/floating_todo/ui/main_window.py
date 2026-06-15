@@ -37,7 +37,6 @@ from floating_todo.settings import (
     MAX_UI_SCALE,
     MIN_UI_SCALE,
     DEFAULT_NOTIFICATION_REPEAT_MINUTES,
-    default_geometry_for_scale,
     remove_deprecated_setting_features,
     resolution_preset_from_scale,
     settings_to_dict,
@@ -72,6 +71,7 @@ TASK_MIME_TYPE = "application/x-floating-todo-task-id"
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
 MAIN_WINDOW_MINIMUM_WIDTH = 720
 MAIN_WINDOW_MINIMUM_HEIGHT = 950
+SMALL_RESOLUTION_MINIMUM_HEIGHT = 690
 FOCUS_CARD_MINIMUM_HEIGHT = 390
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 124
 TASK_SECTION_MINIMUM_HEIGHT = 54
@@ -105,10 +105,13 @@ def _scale_px(value: int | float, *, minimum: int = 1) -> int:
 
 
 def _minimum_window_size_for_scale(scale: float) -> QSize:
-    geometry = default_geometry_for_scale(scale)
+    clamped = _clamp_ui_scale(scale)
+    minimum_height = round(MAIN_WINDOW_MINIMUM_HEIGHT * clamped)
+    if clamped < 0.85:
+        minimum_height = max(minimum_height, SMALL_RESOLUTION_MINIMUM_HEIGHT)
     return QSize(
-        max(_scale_px(MAIN_WINDOW_MINIMUM_WIDTH), geometry["width"]),
-        max(_scale_px(MAIN_WINDOW_MINIMUM_HEIGHT), geometry["height"]),
+        max(1, round(MAIN_WINDOW_MINIMUM_WIDTH * clamped)),
+        max(1, minimum_height),
     )
 
 

@@ -80,32 +80,39 @@ def test_opacity_is_clamped():
     assert settings_from_dict({"opacity": 0.1}).opacity == 0.3
 
 
-def test_resolution_preset_defaults_to_medium():
+def test_resolution_preset_defaults_to_small():
     settings = settings_from_dict({})
 
-    assert settings.resolution_preset == DEFAULT_RESOLUTION_PRESET == "medium"
-    assert settings.ui_scale == RESOLUTION_SCALE_PRESETS["medium"] == 0.7
+    assert settings.resolution_preset == DEFAULT_RESOLUTION_PRESET == "small"
+    assert settings.ui_scale == RESOLUTION_SCALE_PRESETS["small"] == 0.7
 
 
-def test_resolution_presets_map_to_fixed_scales():
+def test_resolution_presets_map_to_two_fixed_scales():
+    assert set(RESOLUTION_SCALE_PRESETS) == {"large", "small"}
     assert settings_from_dict({"resolution_preset": "large"}).ui_scale == 1.0
-    assert settings_from_dict({"resolution_preset": "medium"}).ui_scale == 0.7
-    assert settings_from_dict({"resolution_preset": "small"}).ui_scale == 0.4
+    assert settings_from_dict({"resolution_preset": "small"}).ui_scale == 0.7
 
 
-def test_invalid_resolution_preset_falls_back_to_medium():
+def test_invalid_resolution_preset_falls_back_to_small():
     settings = settings_from_dict({"resolution_preset": "bad", "ui_scale": 1.0})
 
-    assert settings.resolution_preset == "medium"
+    assert settings.resolution_preset == "small"
     assert settings.ui_scale == 0.7
 
 
 def test_legacy_ui_scale_is_migrated_to_nearest_resolution_preset():
     assert settings_from_dict({"ui_scale": 2}).resolution_preset == "large"
     assert settings_from_dict({"ui_scale": 2}).ui_scale == 1.0
-    assert settings_from_dict({"ui_scale": 0.7}).resolution_preset == "medium"
+    assert settings_from_dict({"ui_scale": 0.7}).resolution_preset == "small"
     assert settings_from_dict({"ui_scale": 0.1}).resolution_preset == "small"
-    assert settings_from_dict({"ui_scale": "bad"}).resolution_preset == "medium"
+    assert settings_from_dict({"ui_scale": "bad"}).resolution_preset == "small"
+
+
+def test_legacy_medium_resolution_preset_is_migrated_to_small():
+    settings = settings_from_dict({"resolution_preset": "medium"})
+
+    assert settings.resolution_preset == "small"
+    assert settings.ui_scale == 0.7
 
 
 def test_window_geometry_cannot_be_mutated_directly():
