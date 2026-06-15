@@ -43,6 +43,7 @@ from floating_todo.settings import (
     resolution_preset_from_scale,
 )
 from floating_todo.theme import THEME_COLORS
+from floating_todo.ui.window_scaling import apply_scaled_window_size, ui_scale_from_settings
 
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
 
@@ -109,8 +110,12 @@ class SettingsWindow(QDialog):
         self._preview_ready = False
         self._reset_window_geometry_requested = False
         self.sidebar_buttons: list[QPushButton] = []
-        self.setMinimumSize(980, 820)
-        self.resize(1100, 900)
+        apply_scaled_window_size(
+            self,
+            ui_scale_from_settings(settings),
+            minimum=(980, 820),
+            default=(1100, 900),
+        )
         self.setStyleSheet(_settings_window_style())
 
         self.data_dir = self._resolve_data_dir()
@@ -559,7 +564,7 @@ class SettingsWindow(QDialog):
 
     def _current_resolution_preset(self) -> str:
         preset = self.resolution_preset.currentData()
-        return str(preset) if preset in RESOLUTION_SCALE_PRESETS else "medium"
+        return str(preset) if preset in RESOLUTION_SCALE_PRESETS else "small"
 
     def _current_resolution_scale(self) -> float:
         return RESOLUTION_SCALE_PRESETS[self._current_resolution_preset()]

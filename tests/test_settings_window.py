@@ -173,6 +173,25 @@ def test_settings_window_builds_resolution_preset(qapp: QApplication) -> None:
     dialog.close()
 
 
+def test_settings_window_size_follows_resolution_scale(qapp: QApplication) -> None:
+    from floating_todo.ui.settings_window import SettingsWindow
+
+    large_dialog = SettingsWindow(AppSettings(resolution_preset="large", ui_scale=1.0))
+    small_dialog = SettingsWindow(AppSettings(resolution_preset="small", ui_scale=0.7))
+
+    assert large_dialog.minimumWidth() == 980
+    assert large_dialog.minimumHeight() == 820
+    assert large_dialog.width() == 1100
+    assert large_dialog.height() == 900
+    assert small_dialog.minimumWidth() < large_dialog.minimumWidth()
+    assert small_dialog.minimumHeight() < large_dialog.minimumHeight()
+    assert small_dialog.width() < large_dialog.width()
+    assert small_dialog.height() < large_dialog.height()
+
+    large_dialog.close()
+    small_dialog.close()
+
+
 def test_settings_window_previews_resolution_preset(qapp: QApplication) -> None:
     from floating_todo.ui.settings_window import SettingsWindow
 

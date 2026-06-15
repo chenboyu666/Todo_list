@@ -11,6 +11,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QAbstractSpinBox, QLabel, QMainWindow, QSpinBox, QToolButton
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
+from floating_todo.settings import AppSettings
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -221,6 +222,32 @@ def test_dialog_accepts_parent_as_first_argument_for_new_task(qapp: QApplication
 
     dialog.close()
     parent.close()
+
+
+def test_task_dialog_size_follows_parent_resolution_scale(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    large_parent = QMainWindow()
+    large_parent.settings = AppSettings(resolution_preset="large", ui_scale=1.0)
+    large_dialog = TaskDialog(large_parent)
+
+    small_parent = QMainWindow()
+    small_parent.settings = AppSettings(resolution_preset="small", ui_scale=0.7)
+    small_dialog = TaskDialog(small_parent)
+
+    assert large_dialog.minimumWidth() == 900
+    assert large_dialog.minimumHeight() == 860
+    assert large_dialog.width() == 980
+    assert large_dialog.height() == 1040
+    assert small_dialog.minimumWidth() < large_dialog.minimumWidth()
+    assert small_dialog.minimumHeight() < large_dialog.minimumHeight()
+    assert small_dialog.width() < large_dialog.width()
+    assert small_dialog.height() < large_dialog.height()
+
+    large_dialog.close()
+    large_parent.close()
+    small_dialog.close()
+    small_parent.close()
 
 
 def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication) -> None:

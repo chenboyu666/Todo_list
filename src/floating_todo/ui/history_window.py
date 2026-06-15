@@ -39,6 +39,7 @@ from floating_todo.ui.history_graph import build_history_graph_payload, render_h
 from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import animate_content_swap, apply_soft_shadow, prepare_window_entrance
+from floating_todo.ui.window_scaling import apply_scaled_window_size, ui_scale_from_parent
 from floating_todo.view_models import (
     PRIORITY_ORDER,
     duration_clock_label,
@@ -580,8 +581,12 @@ class HistoryWindow(QDialog):
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setWindowModality(Qt.WindowModal)
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setMinimumSize(1180, 900)
-        self.resize(1320, 960)
+        apply_scaled_window_size(
+            self,
+            ui_scale_from_parent(parent),
+            minimum=(1180, 900),
+            default=(1320, 960),
+        )
         self.setStyleSheet(_history_window_style())
         self.setSizeGripEnabled(True)
 

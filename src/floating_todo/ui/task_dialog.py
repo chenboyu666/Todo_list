@@ -26,6 +26,7 @@ from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, DEFAULT_TASK_TAG, T
 from floating_todo.ui.date_controls import NoWheelComboBox, NoWheelDateEdit, NoWheelSpinBox, apply_dark_calendar_popup
 from floating_todo.ui.dialog_chrome import DialogTitleBar
 from floating_todo.ui.effects import apply_soft_shadow
+from floating_todo.ui.window_scaling import apply_scaled_window_size, ui_scale_from_parent
 from floating_todo.view_models import PRIORITY_ORDER, priority_from_display, priority_text
 
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
@@ -111,8 +112,12 @@ class TaskDialog(QDialog):
         self.setWindowTitle("编辑任务" if task else "新增任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setMinimumSize(900, 860)
-        self.resize(980, 1040)
+        apply_scaled_window_size(
+            self,
+            ui_scale_from_parent(parent),
+            minimum=(900, 860),
+            default=(980, 1040),
+        )
 
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("请输入任务名称")

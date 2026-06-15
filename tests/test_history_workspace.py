@@ -12,6 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QProgressBar, QWidget
 
 from floating_todo.domain import Task
+from floating_todo.settings import AppSettings
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -495,6 +496,32 @@ def test_history_workspace_filters_export_and_no_progress(qapp: QApplication, tm
     assert count == 3
 
     window.close()
+
+
+def test_history_window_size_follows_parent_resolution_scale(qapp: QApplication) -> None:
+    from floating_todo.ui.history_window import HistoryWindow
+
+    large_parent = QWidget()
+    large_parent.settings = AppSettings(resolution_preset="large", ui_scale=1.0)
+    large_window = HistoryWindow([], MemoryStore([]), large_parent)
+
+    small_parent = QWidget()
+    small_parent.settings = AppSettings(resolution_preset="small", ui_scale=0.7)
+    small_window = HistoryWindow([], MemoryStore([]), small_parent)
+
+    assert large_window.minimumWidth() == 1180
+    assert large_window.minimumHeight() == 900
+    assert large_window.width() == 1320
+    assert large_window.height() == 960
+    assert small_window.minimumWidth() < large_window.minimumWidth()
+    assert small_window.minimumHeight() < large_window.minimumHeight()
+    assert small_window.width() < large_window.width()
+    assert small_window.height() < large_window.height()
+
+    large_window.close()
+    large_parent.close()
+    small_window.close()
+    small_parent.close()
 
 
 def test_history_export_text_protects_excel_time_columns(tmp_path) -> None:
