@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QDate, QDateTime, QPoint, QPointF, Qt, QTimeZone
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QAbstractSpinBox, QLabel, QMainWindow, QSpinBox, QToolButton
+from PySide6.QtWidgets import QApplication, QAbstractSpinBox, QFrame, QLabel, QMainWindow, QSpinBox, QToolButton
 
 from floating_todo.domain import DEFAULT_NOTIFICATION_STATE, Task
 from floating_todo.settings import AppSettings
@@ -248,6 +248,29 @@ def test_task_dialog_size_follows_parent_resolution_scale(qapp: QApplication) ->
     large_parent.close()
     small_dialog.close()
     small_parent.close()
+
+
+def test_small_resolution_task_dialog_stacks_effort_and_deadline_sections(qapp: QApplication) -> None:
+    from floating_todo.ui.task_dialog import TaskDialog
+
+    parent = QMainWindow()
+    parent.settings = AppSettings(resolution_preset="small", ui_scale=0.7)
+    dialog = TaskDialog(parent)
+    dialog.show()
+    qapp.processEvents()
+
+    effort_section = dialog.findChild(QFrame, "taskSectionEffort")
+    deadline_section = dialog.findChild(QFrame, "taskSectionDeadline")
+
+    assert effort_section is not None
+    assert deadline_section is not None
+    assert deadline_section.geometry().top() > effort_section.geometry().bottom()
+    assert dialog.deadline_date_input.width() >= 206
+    assert dialog.deadline_hour_input.width() >= 86
+    assert dialog.deadline_minute_input.width() >= 86
+
+    dialog.close()
+    parent.close()
 
 
 def test_edit_dialog_preserves_identity_and_lifecycle_fields(qapp: QApplication) -> None:

@@ -71,7 +71,7 @@ TASK_MIME_TYPE = "application/x-floating-todo-task-id"
 UI_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "ui"
 MAIN_WINDOW_MINIMUM_WIDTH = 720
 MAIN_WINDOW_MINIMUM_HEIGHT = 950
-SMALL_RESOLUTION_MINIMUM_HEIGHT = 690
+SMALL_RESOLUTION_MINIMUM_HEIGHT = 720
 FOCUS_CARD_MINIMUM_HEIGHT = 390
 FOCUS_DEADLINE_PANEL_MINIMUM_HEIGHT = 124
 TASK_SECTION_MINIMUM_HEIGHT = 54
@@ -102,6 +102,10 @@ def _set_current_ui_scale(scale: float) -> None:
 
 def _scale_px(value: int | float, *, minimum: int = 1) -> int:
     return max(minimum, int(round(float(value) * _CURRENT_UI_SCALE)))
+
+
+def _font_px(value: int | float, *, minimum: int = 11) -> int:
+    return _scale_px(value, minimum=minimum)
 
 
 def _minimum_window_size_for_scale(scale: float) -> QSize:
@@ -885,13 +889,13 @@ class MainWindow(QMainWindow):
         caption_label = QLabel(caption)
         caption_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         caption_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        caption_label.setStyleSheet(f"color: #AFC3D8; font-size: {_scale_px(12)}px; font-weight: 800;")
+        caption_label.setStyleSheet(f"color: #AFC3D8; font-size: {_font_px(13, minimum=12)}px; font-weight: 800;")
         value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        value_label.setStyleSheet(f"font-size: {_scale_px(24)}px; font-weight: 900; color: #F8FBFF;")
+        value_label.setStyleSheet(f"font-size: {_font_px(26, minimum=20)}px; font-weight: 900; color: #F8FBFF;")
         footer_label = QLabel(_summary_footer(tone))
         footer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        footer_label.setStyleSheet(f"color: #8EA2B7; font-size: {_scale_px(11)}px; font-weight: 800;")
+        footer_label.setStyleSheet(f"color: #8EA2B7; font-size: {_font_px(12, minimum=11)}px; font-weight: 800;")
         text_stack.addWidget(caption_label)
         text_stack.addWidget(value_label)
         text_stack.addWidget(footer_label)
@@ -1385,9 +1389,9 @@ class MainWindow(QMainWindow):
                     self.soon_count_label,
                     self.overdue_count_label,
                 ):
-                    label.setStyleSheet(f"font-size: {_scale_px(21)}px; font-weight: 900; color: #F8FBFF;")
+                    label.setStyleSheet(f"font-size: {_font_px(26, minimum=20)}px; font-weight: 900; color: #F8FBFF;")
                 else:
-                    label.setStyleSheet(f"color: #AFC3D8; font-size: {_scale_px(12)}px; font-weight: 800;")
+                    label.setStyleSheet(f"color: #AFC3D8; font-size: {_font_px(13, minimum=12)}px; font-weight: 800;")
         if hasattr(self, "focus_card"):
             self.focus_card.setMinimumHeight(_scale_px(FOCUS_CARD_MINIMUM_HEIGHT))
         if hasattr(self, "focus_layout"):
@@ -2368,7 +2372,7 @@ def _urgency_chip_style(urgency: str, *, compact: bool = False) -> str:
     style = _urgency_style(urgency)
     min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(6)}px" if compact else f"{_scale_px(5)}px {_scale_px(10)}px"
-    font_size = _scale_px(12 if compact else 14)
+    font_size = _font_px(12 if compact else 16, minimum=11 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(8)}px; "
@@ -2509,7 +2513,6 @@ def _focus_title_style() -> str:
 
 
 def _focus_status_style(*, compact: bool = False) -> str:
-    min_width = "56px" if compact else "72px"
     return (
         "color: #BAE6FD;"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
@@ -2517,7 +2520,7 @@ def _focus_status_style(*, compact: bool = False) -> str:
         " stop:1 #0F4C5C);"
         "border: none;"
         f"border-radius: {_scale_px(8)}px;"
-        f"font-size: {_scale_px(14)}px;"
+        f"font-size: {_font_px(16 if not compact else 14, minimum=13)}px;"
         "font-weight: 900;"
         f"padding: {_scale_px(5)}px {_scale_px(10)}px;"
         f"min-width: {_scale_px(56 if compact else 72)}px;"
@@ -2549,7 +2552,7 @@ def _focus_deadline_panel_style() -> str:
 
 def _focus_meta_style() -> str:
     return (
-        f"font-size: {_scale_px(14)}px;"
+        f"font-size: {_font_px(16, minimum=13)}px;"
         "font-weight: 900;"
         "color: #D9FBE8;"
         "background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
@@ -2766,7 +2769,7 @@ def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
     style = _priority_style(priority)
     min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(4)}px {_scale_px(8)}px"
-    font_size = _scale_px(11 if compact else 13)
+    font_size = _font_px(11 if compact else 15, minimum=10 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(8)}px; "

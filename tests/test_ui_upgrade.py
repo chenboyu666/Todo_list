@@ -126,6 +126,29 @@ def test_main_surface_renders_progress_status_without_manual_controls(qapp: QApp
     window.close()
 
 
+def test_resolution_presets_keep_key_dashboard_text_readable(qapp: QApplication, tmp_path) -> None:
+    from floating_todo.ui.main_window import MainWindow
+
+    small_window = MainWindow(
+        MemoryStore([]),
+        AppSettings(resolution_preset="small", ui_scale=0.7),
+        tmp_path / "small-settings.json",
+    )
+    large_window = MainWindow(
+        MemoryStore([]),
+        AppSettings(resolution_preset="large", ui_scale=1.0),
+        tmp_path / "large-settings.json",
+    )
+
+    assert "font-size: 20px" in small_window.today_completion_label.styleSheet()
+    assert "font-size: 13px" in small_window.focus_title_prefix.styleSheet()
+    assert "font-size: 26px" in large_window.today_completion_label.styleSheet()
+    assert "font-size: 16px" in large_window.focus_title_prefix.styleSheet()
+
+    small_window.close()
+    large_window.close()
+
+
 def test_progress_slider_drags_from_any_track_position(qapp: QApplication) -> None:
     slider = NoWheelSlider(Qt.Horizontal)
     slider.setRange(0, 100)

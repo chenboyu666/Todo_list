@@ -108,13 +108,14 @@ class TaskDialog(QDialog):
     def __init__(self, parent=None, task: Task | None = None) -> None:
         super().__init__(parent)
         self.task = task
+        self._ui_scale = ui_scale_from_parent(parent)
         self._deadline_changed = False
         self.setWindowTitle("编辑任务" if task else "新增任务")
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setAttribute(Qt.WA_StyledBackground, True)
         apply_scaled_window_size(
             self,
-            ui_scale_from_parent(parent),
+            self._ui_scale,
             minimum=(900, 860),
             default=(980, 1040),
         )
@@ -385,11 +386,15 @@ class TaskDialog(QDialog):
         deadline_hint.setWordWrap(True)
         deadline_section.layout().addWidget(deadline_hint)
 
-        meta_row = QHBoxLayout()
+        meta_row = QVBoxLayout() if self._ui_scale < 0.85 else QHBoxLayout()
         meta_row.setContentsMargins(0, 0, 0, 0)
         meta_row.setSpacing(12)
-        meta_row.addWidget(effort_section, 5)
-        meta_row.addWidget(deadline_section, 7)
+        if self._ui_scale < 0.85:
+            meta_row.addWidget(effort_section)
+            meta_row.addWidget(deadline_section)
+        else:
+            meta_row.addWidget(effort_section, 5)
+            meta_row.addWidget(deadline_section, 7)
         panel_layout.addLayout(meta_row)
 
         notes_section = _section_card("备注", "task-note.svg", "taskSectionNotes")
