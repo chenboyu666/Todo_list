@@ -65,16 +65,56 @@ def test_small_resolution_task_cards_keep_readable_text_and_aligned_actions(qapp
     qapp.processEvents()
 
     title = window.task_rows_container.findChild(QLabel, "activeTaskTitle")
+    priority = window.task_rows_container.findChild(QLabel, "activeTaskPriorityChip")
+    tag = window.task_rows_container.findChild(QLabel, "activeTaskTag")
+    urgency = window.task_rows_container.findChild(QLabel, "activeTaskUrgency")
+    deadline = window.task_rows_container.findChild(QLabel, "activeTaskDeadline")
+    timer = window.task_rows_container.findChild(QLabel, "activeTaskTimer")
     current_button = window.task_rows_container.findChild(QPushButton, "currentTaskButton")
     expand_button = window.task_rows_container.findChild(QPushButton, "taskExpandButton")
 
     assert title is not None
-    assert "font-size: 13px" in title.styleSheet()
+    assert priority is not None
+    assert tag is not None
+    assert urgency is not None
+    assert deadline is not None
+    assert timer is not None
+    assert "font-size: 14px" in title.styleSheet()
+    assert "font-size: 12px" in priority.styleSheet()
+    assert "font-size: 12px" in tag.styleSheet()
+    assert "font-size: 12px" in urgency.styleSheet()
+    assert "font-size: 13px" in deadline.styleSheet()
+    assert "font-size: 13px" in timer.styleSheet()
     assert current_button is not None
     assert expand_button is not None
     assert current_button.height() == expand_button.height()
     assert current_button.height() >= 30
     assert abs(current_button.geometry().center().y() - expand_button.geometry().center().y()) <= 1
+
+    expand_button.click()
+    qapp.processEvents()
+
+    pause_button = window.task_rows_container.findChild(QPushButton, "pauseTaskButton")
+    edit_button = next(
+        button
+        for button in window.task_rows_container.findChildren(QPushButton)
+        if button.text() == "编辑"
+    )
+    complete_button = next(
+        button
+        for button in window.task_rows_container.findChildren(QPushButton)
+        if button.text() == "完成"
+    )
+    delete_button = next(
+        button
+        for button in window.task_rows_container.findChildren(QPushButton)
+        if button.text() == "删除"
+    )
+    assert pause_button is not None
+    assert pause_button.height() == edit_button.height() == complete_button.height() == delete_button.height()
+    assert abs(pause_button.geometry().center().y() - edit_button.geometry().center().y()) <= 1
+    assert abs(pause_button.geometry().center().y() - complete_button.geometry().center().y()) <= 1
+    assert abs(pause_button.geometry().center().y() - delete_button.geometry().center().y()) <= 1
 
     window.close()
 
@@ -328,7 +368,7 @@ def test_task_rows_show_deadline_date_urgency_and_focus_button(
     assert f"min-width: {_scale_px(92)}px" in _task_tag_chip_style(selected=True)
     assert "#0EA5B7" in _task_tag_chip_style(selected=True)
     assert "background: transparent" in _task_title_style(selected=False)
-    assert f"font-size: {_font_px(16, minimum=13)}px" in _task_title_style(selected=True)
+    assert f"font-size: {_font_px(16, minimum=14)}px" in _task_title_style(selected=True)
     assert "font-weight: 500" in _notes_style(selected=False)
     assert f"font-size: {_scale_px(23)}px" in _focus_time_text_style("countdown", "normal")
     assert f"font-size: {_scale_px(18)}px" in _focus_time_text_style("timer", "normal")

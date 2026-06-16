@@ -980,8 +980,10 @@ class HistoryWindow(QDialog):
 
         webview = QWebEngineView()
         webview.setObjectName("historyGraphWebView")
+        webview.setContextMenuPolicy(Qt.NoContextMenu)
         webview.setMinimumHeight(520)
         webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        webview.setStyleSheet("QWebEngineView#historyGraphWebView { background: #071421; }")
         webview.page().setBackgroundColor(QColor("#071421"))
         self._history_graph_channel = QWebChannel(webview.page())
         self._history_graph_channel.registerObject("historyBridge", self._history_graph_bridge)

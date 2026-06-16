@@ -96,7 +96,7 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "keywordLabelStyle" in html
     assert "selectedNeighborhood" in html
     assert "selected=nodes.find(n=>n.type==='task')||nodes[0]" in html
-    assert "ctx.strokeStyle='rgba(196,250,255,.88)'" in html
+    assert "ctx.strokeStyle=alpha<1?'rgba(196,250,255,.25)':'rgba(196,250,255,.88)'" in html
     assert "keyword ? .36 : .58" in html
     assert "target=(a.type==='keyword'||b.type==='keyword')?36:30" in html
     assert "已完成任务" in html
@@ -119,6 +119,141 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "performance.now()*.002" not in html
     assert "pulse=1+Math.sin" not in html
     assert "ctx.arc(p.x,p.y,r,0,Math.PI*2)" in html
+
+
+def test_history_graph_payload_clusters_many_tasks_under_tag_by_theme() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload
+
+    tasks = [
+        make_task("release package build", "release-1", status="done", tag="work"),
+        make_task("release smoke check", "release-2", status="done", tag="work"),
+        make_task("release notes polish", "release-3", status="done", tag="work"),
+        make_task("study pyside graph", "study-1", status="done", tag="work"),
+        make_task("study pyside layout", "study-2", status="done", tag="work"),
+        make_task("random one off", "other-1", status="done", tag="work"),
+    ]
+
+    payload = build_history_graph_payload(tasks)
+
+    clusters = {cluster["name"]: cluster for cluster in payload["clusters"]}
+    assert {"release", "study", "其它任务"} <= set(clusters)
+    assert clusters["release"]["tag"] == "work"
+    assert clusters["release"]["count"] == 3
+    assert clusters["release"]["taskIds"] == ["release-1", "release-2", "release-3"]
+    assert clusters["release"]["representativeIds"] == ["release-1", "release-2", "release-3"]
+    assert clusters["study"]["taskIds"] == ["study-1", "study-2"]
+    assert clusters["其它任务"]["taskIds"] == ["other-1"]
+    assert all(len(cluster["representativeIds"]) <= 3 for cluster in payload["clusters"])
+    assert any(link["kind"] == "tag-cluster" and link["target"] == clusters["release"]["id"] for link in payload["clusterLinks"])
+    assert any(link["kind"] == "cluster-task" and link["source"] == clusters["release"]["id"] for link in payload["clusterLinks"])
+
+
+def test_history_graph_payload_limits_clusters_and_representatives() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload
+
+    tasks = [
+        make_task(f"theme{index} shared task alpha", f"theme-{index}-a", status="done", tag="work")
+        for index in range(8)
+    ] + [
+        make_task(f"theme{index} shared task beta", f"theme-{index}-b", status="done", tag="work")
+        for index in range(8)
+    ]
+
+    payload = build_history_graph_payload(tasks)
+    work_clusters = [cluster for cluster in payload["clusters"] if cluster["tag"] == "work"]
+
+    assert len(work_clusters) <= 6
+    assert all(len(cluster["representativeIds"]) <= 3 for cluster in work_clusters)
+
+
+def test_history_graph_payload_tag_summaries_show_recent_tasks_and_hidden_count() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload
+
+    base = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
+    tasks = [
+        replace(
+            make_task(f"work task {index}", f"work-{index}", status="done", tag="work"),
+            completed_at=base - timedelta(days=index),
+            updated_at=base - timedelta(days=index),
+        )
+        for index in range(10)
+    ]
+
+    payload = build_history_graph_payload(tasks)
+    work = next(summary for summary in payload["tagSummaries"] if summary["tag"] == "work")
+
+    assert work["count"] == 10
+    assert work["recentTaskIds"] == [f"work-{index}" for index in range(8)]
+    assert work["hiddenTaskIds"] == ["work-8", "work-9"]
+    assert work["hiddenCount"] == 2
+    assert work["hiddenNodeId"] == "more-work"
+    assert all(node["completedAt"] for node in payload["tasks"])
+    assert any(node["id"] == "more-work" and node["type"] == "more" and node["count"] == 2 for node in payload["overviewNodes"])
+    assert any(link["kind"] == "tag-task" and link["source"] == "k-work" and link["target"] == "work-0" for link in payload["tagTaskLinks"])
+    assert any(link["kind"] == "tag-more" and link["source"] == "k-work" and link["target"] == "more-work" for link in payload["tagTaskLinks"])
+
+
+def test_history_graph_html_contains_cluster_focus_controls() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
+
+    tasks = [
+        make_task("release package build", "release-1", status="done", tag="work"),
+        make_task("release smoke check", "release-2", status="done", tag="work"),
+        make_task("study pyside graph", "study-1", status="done", tag="work"),
+    ]
+    payload = build_history_graph_payload(tasks)
+    html = render_history_graph_html(payload)
+
+    assert "const clusters = GRAPH_PAYLOAD.clusters || []" in html
+    assert "const clusterLinks = GRAPH_PAYLOAD.clusterLinks || []" in html
+    assert "expandToggle" in html
+    assert "展开全部" in html
+    assert "收起" in html
+    assert "contextTitle" in html
+    assert "showExpandedTasks" in html
+    assert "focusAlpha" in html
+    assert "clusterMap.get(n.clusterId)?.tag===selected.word" in html
+    assert "type==='cluster'" in html
+    assert "historyBridge.openNotes" in html
+    assert "historyBridge.editTag" in html
+    assert "historyBridge.exportHistory" in html
+
+
+def test_history_graph_html_contains_two_layer_controls() -> None:
+    from floating_todo.ui.history_graph import build_history_graph_payload, render_history_graph_html
+
+    tasks = [
+        make_task(f"work task {index}", f"work-{index}", status="done", tag="work")
+        for index in range(10)
+    ]
+    html = render_history_graph_html(build_history_graph_payload(tasks))
+
+    assert "let graphLayer = 'overview'" in html
+    assert "function enterTagLayer" in html
+    assert "function returnToOverview" in html
+    assert "addEventListener('keydown'" in html
+    assert 'button id="backButton"' in html
+    assert "auxiliaryMoreNode" in html
+    assert "panX" in html
+    assert "panY" in html
+    assert "e.button===1" in html
+    assert "dblclick" in html
+    assert "selected=nodes.find(n=>n.type==='keyword')" in html
+    assert "p.node.type!=='more'" in html
+    assert "shortcutHint" in html
+    assert "Esc 返回" in html
+    assert "双击标签进入" in html
+    assert "addEventListener('contextmenu'" in html
+    assert "showLabel=graphLayer==='overview'||keyword||more||active||graphLayer==='tag'" in html
+    assert "if(graphLayer==='overview'&&n.type==='keyword') return 1" in html
+    assert "const TAG_OVERVIEW_RADIUS=Math.min(218,150+tagKeywords.length*8)" in html
+    assert "const OVERVIEW_TASK_DISTANCE_BASE=36" in html
+    assert "function overviewTagTarget" in html
+    assert "function overviewChildTarget" in html
+    assert "applyOverviewAnchorForces()" in html
+    assert "historyBridge.openNotes" in html
+    assert "historyBridge.editTag" in html
+    assert "historyBridge.exportHistory" in html
 
 
 def test_history_graph_empty_state_renders_initial_panel() -> None:
@@ -162,6 +297,7 @@ def test_history_graph_webview_is_created_only_after_opening_analysis(qapp: QApp
 
     assert window.history_graph_webview is not None
     assert window.history_graph_webview.objectName() == "historyGraphWebView"
+    assert window.history_graph_webview.contextMenuPolicy() == Qt.NoContextMenu
     assert "Todo list · 任务关系图" in window._analysis_graph_html
 
     window.close()

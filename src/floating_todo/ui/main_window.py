@@ -1906,7 +1906,7 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(max(_scale_px(4), 4))
-        priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(11)))
+        priority = QLabel(_priority_inline_markup(str(row["priority"]), size=_scale_px(12, minimum=12)))
         priority.setObjectName("activeTaskPriorityChip" if is_focused else "taskPriorityChip")
         priority.setAlignment(Qt.AlignCenter)
         priority.setTextFormat(Qt.RichText)
@@ -1929,7 +1929,7 @@ class MainWindow(QMainWindow):
         urgency_chip.setObjectName("activeTaskUrgency" if is_focused else "taskUrgency")
         urgency_chip.setAlignment(Qt.AlignCenter)
         urgency_chip.setFixedHeight(_scale_px(30))
-        urgency_chip.setFixedWidth(_scale_px(74))
+        urgency_chip.setFixedWidth(max(_scale_px(74), 60))
         urgency_chip.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         urgency_chip.setStyleSheet(_urgency_chip_style(urgency, compact=True))
         top.addWidget(urgency_chip)
@@ -2028,19 +2028,22 @@ class MainWindow(QMainWindow):
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.resume_task(task_id, make_focus=True))
         else:
             pause_button.clicked.connect(lambda checked=False, task_id=task_id: self.pause_task(task_id))
-        detail_row.addWidget(pause_button)
+        detail_row.addWidget(pause_button, 0, Qt.AlignVCenter)
         edit_button = QPushButton("编辑")
         edit_button.setToolTip("编辑任务")
+        self._configure_task_detail_action_button(edit_button)
         edit_button.clicked.connect(lambda checked=False, task_id=task_id: self.edit_task(task_id))
-        detail_row.addWidget(edit_button)
+        detail_row.addWidget(edit_button, 0, Qt.AlignVCenter)
         complete_button = QPushButton("完成")
         complete_button.setToolTip("标记任务完成")
+        self._configure_task_detail_action_button(complete_button)
         complete_button.clicked.connect(lambda checked=False, task_id=task_id: self.complete_task(task_id))
-        detail_row.addWidget(complete_button)
+        detail_row.addWidget(complete_button, 0, Qt.AlignVCenter)
         delete_button = QPushButton("删除")
         delete_button.setToolTip("删除任务")
+        self._configure_task_detail_action_button(delete_button)
         delete_button.clicked.connect(lambda checked=False, task_id=task_id: self.delete_task(task_id))
-        detail_row.addWidget(delete_button)
+        detail_row.addWidget(delete_button, 0, Qt.AlignVCenter)
         layout.addLayout(detail_row)
         return card
 
@@ -2064,6 +2067,14 @@ class MainWindow(QMainWindow):
         button.style().unpolish(button)
         button.style().polish(button)
 
+    def _configure_task_detail_action_button(self, button: QPushButton) -> None:
+        button.setCursor(Qt.PointingHandCursor)
+        button.setFixedHeight(_scale_px(36, minimum=34))
+        button.setMinimumWidth(_scale_px(58, minimum=54))
+        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        button.style().unpolish(button)
+        button.style().polish(button)
+
     def _configure_pause_resume_button(self, button: QPushButton, *, paused: bool, focus: bool = False) -> None:
         if paused:
             button.setText("▶")
@@ -2081,7 +2092,7 @@ class MainWindow(QMainWindow):
             button.setMinimumWidth(_scale_px(96))
             button.setMaximumWidth(16777215)
         else:
-            button.setFixedSize(_scale_px(44), _scale_px(36))
+            button.setFixedSize(_scale_px(46, minimum=44), _scale_px(36, minimum=34))
         button.style().unpolish(button)
         button.style().polish(button)
 
@@ -2382,7 +2393,7 @@ def _urgency_chip_style(urgency: str, *, compact: bool = False) -> str:
     style = _urgency_style(urgency)
     min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(6)}px" if compact else f"{_scale_px(5)}px {_scale_px(10)}px"
-    font_size = _font_px(12 if compact else 16, minimum=11 if compact else 13)
+    font_size = _font_px(12 if compact else 16, minimum=12 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(8)}px; "
@@ -2392,7 +2403,7 @@ def _urgency_chip_style(urgency: str, *, compact: bool = False) -> str:
 
 
 def _deadline_label_style(urgency: str) -> str:
-    return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: {_font_px(13, minimum=12)}px;"
+    return f"color: {_countdown_style(urgency)['accent']}; font-weight: 800; font-size: {_font_px(13, minimum=13)}px;"
 
 
 def _focus_deadline_text_style(urgency: str) -> str:
@@ -2577,10 +2588,10 @@ def _focus_meta_style() -> str:
 def _task_title_style(*, selected: bool = False) -> str:
     if selected:
         color = "#F8FBFF"
-        size = _font_px(16, minimum=13)
+        size = _font_px(16, minimum=14)
     else:
         color = "#F3F7FC"
-        size = _font_px(15, minimum=13)
+        size = _font_px(15, minimum=14)
     return (
         f"color: {color};"
         "background: transparent;"
@@ -2588,7 +2599,7 @@ def _task_title_style(*, selected: bool = False) -> str:
         f"padding: {_scale_px(2)}px {_scale_px(2)}px;"
         f"font-size: {size}px;"
         "font-weight: 900;"
-        f"line-height: {_font_px(19, minimum=16)}px;"
+        f"line-height: {_font_px(19, minimum=17)}px;"
     )
 
 
@@ -2613,7 +2624,7 @@ def _task_timer_style(urgency: str, *, selected: bool = False, paused: bool = Fa
         "border: none;"
         f"border-radius: {_scale_px(8)}px;"
         f"padding: {_scale_px(4)}px {_scale_px(8)}px;"
-        f"font-size: {_font_px(13, minimum=12)}px;"
+        f"font-size: {_font_px(13, minimum=13)}px;"
         "font-weight: 900;"
         'font-family: "Cascadia Mono", "JetBrains Mono", "Alibaba PuHuiTi 3.0", "Microsoft YaHei UI";'
     )
@@ -2779,7 +2790,7 @@ def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
     style = _priority_style(priority)
     min_width = "" if compact else f"min-width: {_scale_px(78)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(4)}px {_scale_px(8)}px"
-    font_size = _font_px(11 if compact else 15, minimum=11 if compact else 13)
+    font_size = _font_px(11 if compact else 15, minimum=12 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(8)}px; "
@@ -2791,7 +2802,7 @@ def _priority_chip_style(priority: str, *, compact: bool = False) -> str:
 def _task_tag_chip_style(*, selected: bool = False, compact: bool = False) -> str:
     min_width = "" if compact else f"min-width: {_scale_px(92)}px; "
     padding = f"{_scale_px(3)}px {_scale_px(5)}px" if compact else f"{_scale_px(5)}px {_scale_px(12)}px"
-    font_size = _font_px(12 if compact else 14, minimum=11 if compact else 13)
+    font_size = _font_px(12 if compact else 14, minimum=12 if compact else 13)
     return (
         f"font-size: {font_size}px; font-weight: 900; "
         f"padding: {padding}; border-radius: {_scale_px(9)}px; "
