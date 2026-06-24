@@ -95,10 +95,11 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "source==='tag'" in html
     assert "keywordLabelStyle" in html
     assert "selectedNeighborhood" in html
-    assert "selected=nodes.find(n=>n.type==='task')||nodes[0]" in html
-    assert "ctx.strokeStyle=alpha<1?'rgba(196,250,255,.25)':'rgba(196,250,255,.88)'" in html
-    assert "keyword ? .36 : .58" in html
-    assert "target=(a.type==='keyword'||b.type==='keyword')?36:30" in html
+    assert "selected=nodes.find(n=>n.type==='task')||nodes[0]" not in html
+    assert "selected=null" in html
+    assert "ctx.strokeStyle=alpha<1?'rgba(196,250,255,.18)':'rgba(196,250,255,.78)'" in html
+    assert "keyword ? .36 : .46" in html
+    assert "target=(a.type==='keyword'||b.type==='keyword')?36:30" not in html
     assert "已完成任务" in html
     assert "标签" in html
     assert "高频主题词" in html
@@ -113,7 +114,10 @@ def test_history_graph_payload_extracts_keyword_relationships() -> None:
     assert "color:task.late?'#ff6f91':'#32dcff'" in html
     assert "legendNoteKeywords" not in html
     assert "keywordSourceText" in html
-    assert "if(!drag) rotY+=.0012" in html
+    assert "if(!drag) rotY+=.0012" not in html
+    assert "const scanX=((frameTick%420)/420)*width" not in html
+    assert "function scheduleFrame" in html
+    assert "function panCanvasByWheel" in html
     assert "requestAnimationFrame(animate)" in html
     assert "backdrop-filter" not in html
     assert "performance.now()*.002" not in html
@@ -238,16 +242,20 @@ def test_history_graph_html_contains_two_layer_controls() -> None:
     assert "panY" in html
     assert "e.button===1" in html
     assert "dblclick" in html
-    assert "selected=nodes.find(n=>n.type==='keyword')" in html
+    assert "selected=nodes.find(n=>n.type==='keyword')" not in html
+    assert "selected=null" in html
     assert "p.node.type!=='more'" in html
     assert "shortcutHint" in html
     assert "Esc 返回" in html
     assert "双击标签进入" in html
     assert "addEventListener('contextmenu'" in html
-    assert "showLabel=graphLayer==='overview'||keyword||more||active||graphLayer==='tag'" in html
+    assert "showLabel=keyword||more||active||graphLayer==='tag'" in html
     assert "if(graphLayer==='overview'&&n.type==='keyword') return 1" in html
-    assert "const TAG_OVERVIEW_RADIUS=Math.min(218,150+tagKeywords.length*8)" in html
-    assert "const OVERVIEW_TASK_DISTANCE_BASE=36" in html
+    assert "const TAG_OVERVIEW_RADIUS=Math.min(250,170+tagKeywords.length*10)" in html
+    assert "const OVERVIEW_TASK_DISTANCE_BASE=72" in html
+    assert "const OVERVIEW_TASK_DISTANCE_STEP=20" in html
+    assert "if(e.ctrlKey)" in html
+    assert "panCanvasByWheel(e)" in html
     assert "function overviewTagTarget" in html
     assert "function overviewChildTarget" in html
     assert "applyOverviewAnchorForces()" in html
